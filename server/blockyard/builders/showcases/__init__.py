@@ -1,4 +1,23 @@
-from blockyard.builders.showcases.gothic_cathedral import SHOWCASE as GOTHIC_CATHEDRAL
-from blockyard.builders.showcases.steampunk_manor import SHOWCASE as STEAMPUNK_MANOR
+from blockyard.builders.scripted import Showcase
 
-SHOWCASES = [STEAMPUNK_MANOR, GOTHIC_CATHEDRAL]
+SHOWCASES = [
+    Showcase(
+        key="steampunk-manor",
+        name="Overgrown Steampunk Manor",
+        label="Showcase: steampunk manor",
+        intro=(
+            "Scripted showcase: an overgrown steampunk manor with a steep copper roof, timber-framed plaster and "
+            "smoking chimneys."
+        ),
+    ),
+    Showcase(
+        key="gothic-cathedral",
+        name="Gothic Cathedral",
+        label="Showcase: gothic cathedral",
+        intro=(
+            "Scripted showcase: a dark gothic cathedral with flying buttresses, rose windows, gargoyles and "
+            "two openwork stone spires, built one step at a time."
+        ),
+        height=96,
+    ),
+]

@@ -4,9 +4,15 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Minecraft structures designed in code, step by step, by Holo and by script." />
-    <link rel="icon" type="image/png" href="/favicon.png" />
+    <link rel="icon" type="image/png" href="/logo.png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <title>Blockyard · H Company</title>
+    <script>
+      {
+        const theme = localStorage.getItem("blockyard-theme");
+        if (theme === "light" || theme === "dark") document.documentElement.dataset.theme = theme;
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>

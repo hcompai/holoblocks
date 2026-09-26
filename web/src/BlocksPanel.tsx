@@ -45,7 +45,7 @@ export function BlocksPanel({ world, palette }: Props) {
     <div className="parts">
       <div className="parts-head">
         <b>{total.toLocaleString()} blocks</b>
-        <span className="muted">{counts.length} block types, ground not counted</span>
+        <span className="muted">{counts.length} block types</span>
       </div>
       <table>
         <thead>

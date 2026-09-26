@@ -1,4 +1,4 @@
-import { api, type BuildSummary } from "./api";
+import { api, GALLERY, type BuildSummary } from "./api";
 
 interface Props {
   builds: BuildSummary[];
@@ -9,7 +9,11 @@ export function Gallery({ builds, onOpen }: Props) {
   return (
     <div className="gallery">
       <h2>Library</h2>
-      <p className="muted">Open a build to replay it step by step, or describe a new one in the chat.</p>
+      <p className="muted">
+        {GALLERY
+          ? "Open a build to replay it step by step."
+          : "Open a build to replay it step by step, or describe a new one in the chat."}
+      </p>
       {builds.length ? (
         <div className="gallery-grid">
           {builds.map((b) => (

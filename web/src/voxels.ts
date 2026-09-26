@@ -68,10 +68,10 @@ export class VoxelWorld {
     }
   }
 
-  /** Block counts by name above the ground layer. */
+  /** Block counts by name. */
   counts(): Map<string, number> {
     const out = new Map<string, number>();
-    for (let i = this.at(0, 1, 0); i < this.ids.length; i++) {
+    for (let i = 0; i < this.ids.length; i++) {
       const id = this.ids[i];
       if (!id) continue;
       const name = this.states[id].name;
@@ -80,11 +80,11 @@ export class VoxelWorld {
     return out;
   }
 
-  /** Bounding box of everything above the ground layer, or null. */
+  /** Bounding box of every block, or null. */
   bounds(): THREE.Box3 | null {
     const lo = [this.width, this.height, this.depth];
     const hi = [-1, -1, -1];
-    for (let y = 1; y < this.height; y++)
+    for (let y = 0; y < this.height; y++)
       for (let z = 0; z < this.depth; z++)
         for (let x = 0; x < this.width; x++) {
           if (!this.ids[this.at(x, y, z)]) continue;

@@ -1,7 +1,8 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import type { Box, Palette } from "./api";
+import type { Box, Palette, RenderRequest } from "./api";
 import { type Atlas, buildAtlas } from "./atlas";
+import type { Theme } from "./theme";
 import { buildMeshes, makeMaterials, type Materials, VoxelWorld } from "./voxels";
 
 export type View = "iso" | "isoBack" | "front" | "top";
@@ -27,17 +28,43 @@ export interface Site {
   boxes: Box[];
 }
 
-/** Three.js scene showing a build's blocks up to a step, remeshed whenever either changes. */
-const SKY = { zenith: 0x0d1018, horizon: 0x2c3247, ground: 0x0a0b10 };
+/** Share of the frame's height and width the build may fill. */
+const FRAME_FILL = 0.9;
+const FOCUS_BACKGROUND = "#141414";
 
-function skyDome(): THREE.Mesh {
+function corners(box: THREE.Box3): number[] {
+  const points: number[] = [];
+  for (const x of [box.min.x, box.max.x])
+    for (const y of [box.min.y, box.max.y]) for (const z of [box.min.z, box.max.z]) points.push(x, y, z);
+  return points;
+}
+
+/** Planes that keep only what lies inside `box`, faces on its walls included. */
+function clippingPlanes(box: THREE.Box3): THREE.Plane[] {
+  const e = 0.01;
+  return [
+    new THREE.Plane(new THREE.Vector3(1, 0, 0), -box.min.x + e),
+    new THREE.Plane(new THREE.Vector3(-1, 0, 0), box.max.x + e),
+    new THREE.Plane(new THREE.Vector3(0, 1, 0), -box.min.y + e),
+    new THREE.Plane(new THREE.Vector3(0, -1, 0), box.max.y + e),
+    new THREE.Plane(new THREE.Vector3(0, 0, 1), -box.min.z + e),
+    new THREE.Plane(new THREE.Vector3(0, 0, -1), box.max.z + e),
+  ];
+}
+
+const SKIES: Record<Theme, { zenith: number; horizon: number; ground: number }> = {
+  light: { zenith: 0xc9d0dd, horizon: 0xf4f5f8, ground: 0xe4e7ee },
+  dark: { zenith: 0x0a0a0a, horizon: 0x262626, ground: 0x070707 },
+};
+
+function skyDome(): THREE.Mesh<THREE.SphereGeometry, THREE.ShaderMaterial> {
   const material = new THREE.ShaderMaterial({
     side: THREE.BackSide,
     depthWrite: false,
     uniforms: {
-      zenith: { value: new THREE.Color(SKY.zenith) },
-      horizon: { value: new THREE.Color(SKY.horizon) },
-      ground: { value: new THREE.Color(SKY.ground) },
+      zenith: { value: new THREE.Color() },
+      horizon: { value: new THREE.Color() },
+      ground: { value: new THREE.Color() },
     },
     vertexShader: `
       varying vec3 vDir;
@@ -67,9 +94,13 @@ const LIGHTS: [number, number, number, number, number][] = [
   [10, 7, 10, 0.3, 0xffffff],
 ];
 
+/** Three.js scene showing a build's blocks up to a step, remeshed whenever either changes. */
 export class BlockScene {
   private renderer: THREE.WebGLRenderer;
   private scene = new THREE.Scene();
+  private dome = skyDome();
+  private fog = new THREE.Fog(0, 140, 420);
+  private theme: Theme = "dark";
   private camera = new THREE.PerspectiveCamera(35, 1, 0.1, 5000);
   private controls: OrbitControls;
   private meshes: THREE.Group | null = null;
@@ -94,11 +125,12 @@ export class BlockScene {
     private container: HTMLElement,
     palette: Promise<Palette>,
   ) {
-    this.renderer = new THREE.WebGLRenderer({ antialias: true });
+    this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     container.appendChild(this.renderer.domElement);
-    this.scene.add(skyDome());
-    this.scene.fog = new THREE.Fog(SKY.horizon, 140, 420);
+    this.scene.add(this.dome);
+    this.scene.fog = this.fog;
+    this.paintSky(this.theme);
     this.scene.add(new THREE.AmbientLight(0xffffff, 0.8));
     this.scene.add(new THREE.HemisphereLight(0xdfe8ff, 0x8a7a66, 0.6));
     this.renderer.shadowMap.enabled = true;
@@ -213,20 +245,61 @@ export class BlockScene {
     this.controls.autoRotate = spin;
   }
 
-  /** Point the camera along `view` so the build (or the empty site) fills the frame. */
-  frameView(view: View, width: number, depth: number) {
-    let box = this.world?.bounds() ?? null;
-    if (!box) box = new THREE.Box3(new THREE.Vector3(width * 0.25, 0, depth * 0.25), new THREE.Vector3(width * 0.75, 12, depth * 0.75));
-    const size = box.getSize(new THREE.Vector3());
-    const pad = Math.max(2, Math.max(size.x, size.z) * 0.08);
-    box.expandByScalar(pad);
+  setTheme(theme: Theme) {
+    this.theme = theme;
+    this.paintSky(theme);
+  }
+
+  private paintSky(theme: Theme) {
+    const sky = SKIES[theme];
+    const { uniforms } = this.dome.material;
+    uniforms.zenith.value.set(sky.zenith);
+    uniforms.horizon.value.set(sky.horizon);
+    uniforms.ground.value.set(sky.ground);
+    this.fog.color.set(sky.horizon);
+    this.dirty = true;
+  }
+
+  /** Point the camera along `view` so `focus`, else the build (or the empty site), fills the frame. */
+  frameView(view: View | THREE.Vector3, width: number, depth: number, focus?: THREE.Box3) {
+    const box =
+      focus ??
+      this.world?.bounds() ??
+      new THREE.Box3(
+        new THREE.Vector3(width * 0.25, 0, depth * 0.25),
+        new THREE.Vector3(width * 0.75, 12, depth * 0.75),
+      );
     const center = box.getCenter(new THREE.Vector3());
-    const radius = box.getSize(new THREE.Vector3()).length() / 2;
-    const halfFov = THREE.MathUtils.degToRad(this.camera.fov / 2);
-    const fitHeight = radius / Math.tan(halfFov);
-    const fitWidth = radius / (Math.tan(halfFov) * this.camera.aspect);
-    const distance = Math.max(fitHeight, fitWidth) * 0.7;
-    this.camera.position.copy(center).addScaledVector(VIEW_DIRECTIONS[view], distance);
+    const direction = view instanceof THREE.Vector3 ? view : VIEW_DIRECTIONS[view];
+    const basis = new THREE.Matrix4().lookAt(direction, new THREE.Vector3(), this.camera.up);
+    const right = new THREE.Vector3().setFromMatrixColumn(basis, 0);
+    const up = new THREE.Vector3().setFromMatrixColumn(basis, 1);
+    const tanV = Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2)) * FRAME_FILL;
+    const tanH = tanV * this.camera.aspect;
+    const outline = focus ? [corners(focus)] : this.outline(box);
+    const p = new THREE.Vector3();
+    const each = (visit: (p: THREE.Vector3) => void) => {
+      for (const positions of outline)
+        for (let i = 0; i < positions.length; i += 3) visit(p.fromArray(positions, i).sub(center));
+    };
+    const fit = () => {
+      let distance = 0;
+      each((p) => {
+        const ahead = p.dot(direction);
+        distance = Math.max(distance, ahead + Math.abs(p.dot(up)) / tanV, ahead + Math.abs(p.dot(right)) / tanH);
+      });
+      return distance;
+    };
+    let distance = fit();
+    const seen = new THREE.Box2();
+    each((p) => {
+      const away = distance - p.dot(direction);
+      seen.expandByPoint(new THREE.Vector2(p.dot(right) / (away * tanH), p.dot(up) / (away * tanV)));
+    });
+    const middle = seen.getCenter(new THREE.Vector2());
+    center.addScaledVector(right, middle.x * distance * tanH).addScaledVector(up, middle.y * distance * tanV);
+    distance = fit();
+    this.camera.position.copy(center).addScaledVector(direction, distance);
     this.camera.near = Math.max(0.1, distance / 100);
     this.camera.far = distance * 100;
     this.camera.updateProjectionMatrix();
@@ -235,8 +308,22 @@ export class BlockScene {
     this.dirty = true;
   }
 
-  /** Square renders of the whole model into a 2D canvas, leaving the user's camera and timeline untouched. */
-  private async offscreen(size: number, tiles: { view: View; x: number; y: number; label?: string }[], columns = 1) {
+  /** Vertex positions the frame must hold: the meshed blocks, or the corners of `box` before anything is meshed. */
+  private outline(box: THREE.Box3): ArrayLike<number>[] {
+    const arrays: ArrayLike<number>[] = [];
+    this.meshes?.traverse((o) => o instanceof THREE.Mesh && arrays.push(o.geometry.attributes.position.array));
+    return arrays.length ? arrays : [corners(box)];
+  }
+
+  /** Square renders of the model, or only the blocks inside `focus`, into a 2D canvas over `sky`, or transparent; the user's view is left untouched. */
+  private async offscreen(
+    size: number,
+    tiles: { view: View | THREE.Vector3; x: number; y: number; label?: string }[],
+    sky: Theme | null,
+    columns = 1,
+    focus?: THREE.Box3,
+    zoom = 1,
+  ) {
     await this.ready;
     const { position, near, far } = this.camera;
     const saved = { position: position.clone(), target: this.controls.target.clone(), near, far, step: this.step };
@@ -250,14 +337,23 @@ export class BlockScene {
       this.step = Infinity;
       this.remesh();
     }
+    if (sky) this.paintSky(sky);
+    this.dome.visible = !!sky && !focus;
+    this.scene.fog = sky && !focus ? this.fog : null;
+    this.renderer.clippingPlanes = focus ? clippingPlanes(focus) : [];
     this.renderer.setPixelRatio(1);
     this.renderer.setSize(size * 2, size * 2, false);
     this.camera.aspect = 1;
+    this.camera.zoom = zoom;
     const width = this.site?.width ?? 64;
     const depth = this.site?.depth ?? 64;
     for (const tile of tiles) {
-      this.frameView(tile.view, width, depth);
+      this.frameView(tile.view, width, depth, focus);
       this.renderer.render(this.scene, this.camera);
+      if (focus) {
+        ctx.fillStyle = FOCUS_BACKGROUND;
+        ctx.fillRect(tile.x, tile.y, size, size);
+      }
       ctx.drawImage(this.renderer.domElement, tile.x, tile.y, size, size);
       if (tile.label) {
         ctx.font = "600 15px system-ui, sans-serif";
@@ -272,9 +368,13 @@ export class BlockScene {
       this.step = saved.step;
       this.remesh();
     }
+    this.dome.visible = true;
+    this.scene.fog = this.fog;
+    this.renderer.clippingPlanes = [];
+    this.paintSky(this.theme);
     this.renderer.setPixelRatio(pixelRatio);
     this.resize();
-    Object.assign(this.camera, { near: saved.near, far: saved.far });
+    Object.assign(this.camera, { near: saved.near, far: saved.far, zoom: 1 });
     this.camera.position.copy(saved.position);
     this.camera.updateProjectionMatrix();
     this.controls.target.copy(saved.target);
@@ -284,12 +384,22 @@ export class BlockScene {
   }
 
   thumbnail(size = 320): Promise<Blob | null> {
-    return this.offscreen(size, [{ view: "iso", x: 0, y: 0 }]);
+    return this.offscreen(size, [{ view: "iso", x: 0, y: 0 }], null);
   }
 
-  /** The four labelled views a builder looks at to check its work. */
-  sheet(size = 448): Promise<Blob | null> {
-    const tiles = SHEET.map((s, i) => ({ view: s.view, label: s.label, x: (i % 2) * size, y: Math.floor(i / 2) * size }));
-    return this.offscreen(size, tiles, 2);
+  /** What a builder asked to see: the four labelled views, or one large view from its angle and pitch, of the model or only of the blocks in its box. */
+  look({ box, angle, pitch, zoom }: RenderRequest, size = 448): Promise<Blob | null> {
+    const focus = box
+      ? new THREE.Box3(new THREE.Vector3(box[0], box[1], box[2]), new THREE.Vector3(box[3] + 1, box[4] + 1, box[5] + 1))
+      : undefined;
+    if (angle === null) {
+      const tiles = SHEET.map((s, i) => ({ view: s.view, label: s.label, x: (i % 2) * size, y: Math.floor(i / 2) * size }));
+      return this.offscreen(size, tiles, "dark", 2, focus, zoom);
+    }
+    const around = THREE.MathUtils.degToRad(angle);
+    const up = THREE.MathUtils.degToRad(Math.min(pitch, 89.9));
+    const view = new THREE.Vector3(Math.sin(around) * Math.cos(up), Math.sin(up), Math.cos(around) * Math.cos(up));
+    const label = `${angle}° around, ${pitch}° up${zoom === 1 ? "" : `, ${zoom}× zoom`}`;
+    return this.offscreen(size * 2, [{ view, label, x: 0, y: 0 }], "dark", 1, focus, zoom);
   }
 }

@@ -1,12 +1,12 @@
 import { DownloadSimpleIcon } from "@phosphor-icons/react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { api, type BuildSummary } from "./api";
+import { api, GALLERY, type BuildSummary } from "./api";
 import { BlocksPanel } from "./BlocksPanel";
 import { ChatPanel } from "./ChatPanel";
 import { CodePanel } from "./CodePanel";
 import { Gallery } from "./Gallery";
-import { HLogo } from "./HLogo";
 import { LibraryPanel } from "./LibraryPanel";
+import { ThemeToggle } from "./ThemeToggle";
 import { Timeline } from "./Timeline";
 import { useBuild } from "./useBuild";
 import { type Framing, ViewControls, Viewer } from "./Viewer";
@@ -22,7 +22,7 @@ export default function App() {
   const [buildId, setBuildId] = useState<string | null>(initialBuildId);
   const { build, thinking, renderRequest } = useBuild(buildId);
   const [builds, setBuilds] = useState<BuildSummary[]>([]);
-  const [left, setLeft] = useState<"chat" | "library">("chat");
+  const [left, setLeft] = useState<"chat" | "library">(GALLERY ? "library" : "chat");
   const [center, setCenter] = useState<"model" | "blocks" | "code">("model");
   const [step, setStep] = useState(Infinity);
   const [following, setFollowing] = useState(true);
@@ -94,8 +94,7 @@ export default function App() {
     <div className="app">
       <header>
         <button className="brand" onClick={() => open(null)}>
-          <HLogo />
-          <span className="brand-divider" />
+          <img className="brand-logo" src="/logo.png" alt="" />
           Blockyard
         </button>
         {build && (
@@ -106,7 +105,12 @@ export default function App() {
             <span className="chip">
               {build.width}×{build.depth} site
             </span>
-            <span className="spacer" />
+          </>
+        )}
+        <span className="spacer" />
+        <ThemeToggle />
+        {build && (
+          <>
             <a className="button primary" href={api.downloadUrl(build.id)} download={`${build.name}.schem`}>
               <DownloadSimpleIcon size={16} weight="bold" />
               Download .schem
@@ -136,7 +140,7 @@ export default function App() {
             activeId={buildId}
             onOpen={(id) => {
               open(id);
-              setLeft("chat");
+              if (!GALLERY) setLeft("chat");
             }}
           />
         )}

@@ -1,38 +1,36 @@
 import asyncio
 import gzip
+import json
 
 import pytest
 
-from blockyard import blocks
+from blockyard import blocks, gallery, script
 from blockyard.builders.scripted import ScriptedBuilder
 from blockyard.builders.showcases import SHOWCASES
-from blockyard.model import Build
+from blockyard.model import Box, Build
 from blockyard.session import Session, Store
 from blockyard.workbench import Workbench
 
 
 @pytest.fixture
-def bench(tmp_path):
+def bench(tmp_path, monkeypatch):
     session = Session(Build(width=16, depth=16, height=16), Store(tmp_path))
-    bench = Workbench(session)
-    asyncio.run(bench.ensure_ground())
-    return bench
+    monkeypatch.setattr(session, "render", lambda **_: asyncio.sleep(0))
+    return Workbench(session)
 
 
-def test_a_step_places_blocks_and_explains_every_skip(bench):
-    result = asyncio.run(
-        bench.run(
-            "Hut",
-            """
-            fill(2, 1, 2, 6, 4, 6, "oak_planks", "walls");
-            set(4, 1, 6, "oak_door[facing=south]");
-            set(4, 1, 2, "nope");
-            set(4, 1, 3, "oak_stairs[facing=up]");
-            set(40, 1, 3, "stone");
-            fill(0, 1, 0, 20, 1, 0, "stone");
-            """,
-        )
-    )
+HUT = """
+fill(2, 1, 2, 6, 4, 6, "oak_planks", "walls")
+set(4, 1, 6, "oak_door[facing=south]")
+set(4, 1, 2, "nope")
+set(4, 1, 3, "oak_stairs[facing=up]")
+set(40, 1, 3, "stone")
+fill(0, 1, 0, 20, 1, 0, "stone")
+"""
+
+
+def test_a_script_places_blocks_and_explains_every_skip(bench):
+    result = asyncio.run(bench.run_script(HUT))
     world = bench.world()
     assert world.get(2, 3, 4) == "oak_planks"
     assert world.get(4, 1, 6) == "oak_door[facing=south,half=lower]"
@@ -42,23 +40,44 @@ def test_a_step_places_blocks_and_explains_every_skip(bench):
     assert "unknown block 'nope'" in result.text
     assert "facing must be one of" in result.text
     assert "entirely outside" in result.text
-    assert "clipped" in result.text
-    assert bench.build.steps[1].code.strip().startswith("fill(2, 1, 2")
+    assert "cut at the site edge, blocks at x > 15 dropped" in result.text
+    assert bench.build.steps[0].code.strip().startswith("fill(2, 1, 2")
 
 
-def test_later_steps_overwrite_and_undo_reveals_earlier_ones(bench):
-    asyncio.run(bench.run("Base", 'fill(0, 1, 0, 3, 1, 3, "stone")'))
-    asyncio.run(bench.run("Cover", 'fill(0, 1, 0, 3, 1, 3, "oak_planks")'))
-    assert bench.world().get(1, 1, 1) == "oak_planks"
-    asyncio.run(bench.undo(2))
-    assert bench.world().get(1, 1, 1) == "stone"
-    assert bench.build.steps[2].title == "Cover (undone)"
+def test_later_steps_overwrite_earlier_ones(bench):
+    asyncio.run(
+        bench.run_script('step("Base")\nfill(0, 1, 0, 3, 1, 3, "stone")\nstep("Cover")\nset(1, 1, 1, "oak_planks")')
+    )
+    assert bench.world().get(1, 1, 1) == "oak_planks" and bench.world().get(0, 1, 0) == "stone"
 
 
-def test_script_errors_place_nothing(bench):
-    result = asyncio.run(bench.run("Broken", 'fill(0, 1, 0, 3, 1, 3, "stone"); throw new Error("boom")'))
-    assert "boom" in result.text
-    assert len(bench.build.steps) == 1
+LAND = """
+import random
+step("Land")
+fill(0, 0, 0, 9, 2, 9, "70%grass_block,30%moss_block")
+print(get(3, 2, 3) in ("grass_block", "moss_block"), get(3, 3, 3))
+replace(0, 0, 0, 9, 9, 9, "moss_block", "gravel")
+overlay(0, 0, 0, 9, 9, 9, "50%air,50%poppy")
+step("Rocks")
+for x in range(10):
+    set(x, 5, 0, random.choice(["stone", "andesite", "diorite", "granite"]))
+"""
+
+
+def test_worldedit_calls_read_what_the_script_placed_and_every_run_builds_the_same_model():
+    first = script.run(LAND)
+    assert first == script.run(LAND) and first["printed"] == "True air\n"
+    world = {}
+    for op in first["steps"][0]["ops"]:
+        for y in range(op["y0"], op["y1"] + 1):
+            world[op["x0"], y, op["z0"]] = op["block"]
+    blocks_ = set(world.values())
+    assert blocks_ == {"grass_block", "gravel", "poppy"}
+    poppies = [key for key, block in world.items() if block == "poppy"]
+    assert {y for _, y, _ in poppies} == {3} and 20 < len(poppies) < 80
+
+    reshuffled = script.run(LAND.replace("fill(0, 0, 0", "random.random(); fill(0, 0, 0"))
+    assert reshuffled["steps"][1] == first["steps"][1]
 
 
 def test_block_states_are_validated():
@@ -69,15 +88,32 @@ def test_block_states_are_validated():
 
 
 @pytest.mark.parametrize("showcase", SHOWCASES, ids=lambda s: s.key)
-def test_showcases_place_every_block_and_export(tmp_path, showcase):
+def test_showcases_replay_their_script_step_by_step_told_by_its_comments(tmp_path, showcase):
     session = Session(Build(), Store(tmp_path))
     asyncio.run(ScriptedBuilder(showcase, delay=0).run(session, showcase.name))
-    skipped = [
-        m.text for m in session.build.messages if m.role == "tool" and ("Skipped" in m.text or "failed" in m.text)
-    ]
-    assert not skipped, skipped
-    assert session.build.name == showcase.name
+    steps, messages = session.build.steps, session.build.messages
+    problems = [m.text for m in messages if m.role == "tool" and "\n" in m.text]
+    assert not problems, problems
+    told = [m.text for m in messages if m.role == "assistant"][1:-1]
+    assert len(steps) == len(told) > 1 and session.build.name == showcase.name
+    for step, text in zip(steps, told, strict=True):
+        assert step.code.startswith(f"# {text[:40]}") and not step.code.splitlines()[-1].startswith("#")
     world = Workbench(session).world()
     schem = gzip.decompress(world.schematic())
     assert schem.startswith(b"\x0a\x00\x09Schematic")
     assert all(f"minecraft:{block}".encode() in schem for block in world.counts())
+
+
+def test_gallery_exports_the_latest_showcase_runs_with_everything_the_viewer_reads(tmp_path):
+    store = Store(tmp_path / "data")
+    key = SHOWCASES[0].key
+    stone = Box(x0=0, y0=0, z0=0, x1=1, y1=1, z1=1, block="stone", step=0)
+    old, new = Build(builder=key, status="done", created=1), Build(builder=key, status="done", created=2, boxes=[stone])
+    for build in (old, new, Build(builder="holo", status="done", created=3)):
+        store.save(build)
+    assert gallery.showcase_ids(store) == [new.id]
+    out = gallery.export(store, [new.id], tmp_path / "site")
+    assert [b["id"] for b in json.loads((out / "builds.json").read_text())] == [new.id]
+    assert Build.model_validate_json((out / "builds" / f"{new.id}.json").read_text()).boxes == [stone]
+    assert gzip.decompress((out / "builds" / f"{new.id}.schem").read_bytes()).startswith(b"\x0a\x00\x09Schematic")
+    assert "stone" in json.loads((out / "blocks.json").read_text())

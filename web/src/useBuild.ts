@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, type Build, type BuildEvent } from "./api";
+import { api, GALLERY, type Build, type BuildEvent, type RenderRequest } from "./api";
 
 const THINKING_CHARS = 1500;
 
@@ -16,11 +16,11 @@ function apply(build: Build, event: BuildEvent): Build {
     case "step":
       if (event.step.index < build.steps.length) return build;
       return { ...build, steps: [...build.steps, event.step], boxes: [...build.boxes, ...event.boxes] };
-    case "undo":
+    case "rewind":
       return {
         ...build,
-        boxes: build.boxes.filter((b) => b.step !== event.index),
-        steps: build.steps.map((s) => (s.index === event.index ? { ...s, title: event.title } : s)),
+        steps: build.steps.slice(0, event.steps),
+        boxes: build.boxes.filter((b) => b.step < event.steps),
       };
     case "thinking":
     case "render":
@@ -33,20 +33,27 @@ export interface LiveBuild {
   /** The tail of the builder's current reasoning, streamed live. */
   thinking: string;
   /** The latest render the builder asked a viewer for. */
-  renderRequest: string | null;
+  renderRequest: RenderRequest | null;
 }
 
 /** The open build, kept live by its event stream; events that arrive before the first fetch are replayed on it. */
 export function useBuild(id: string | null): LiveBuild {
   const [build, setBuild] = useState<Build | null>(null);
   const [thinking, setThinking] = useState("");
-  const [renderRequest, setRenderRequest] = useState<string | null>(null);
+  const [renderRequest, setRenderRequest] = useState<RenderRequest | null>(null);
 
   useEffect(() => {
     setBuild(null);
     setThinking("");
     setRenderRequest(null);
     if (!id) return;
+    if (GALLERY) {
+      let active = true;
+      api.build(id).then((fetched) => active && setBuild(fetched), console.error);
+      return () => {
+        active = false;
+      };
+    }
     let pending: BuildEvent[] | null = [];
     let current: Build | null = null;
     const source = api.events(id);
@@ -57,7 +64,7 @@ export function useBuild(id: string | null): LiveBuild {
         return;
       }
       if (event.type === "render") {
-        setRenderRequest(event.request);
+        setRenderRequest(event);
         return;
       }
       if (pending) pending.push(event);

@@ -17,6 +17,8 @@ dev = [
 
 [project.scripts]
 blockyard = "blockyard.app:main"
+blockyard-gallery = "blockyard.gallery:main"
+blocks = "blockyard.client:main"
 
 [build-system]
 requires = ["hatchling"]
@@ -27,3 +29,6 @@ packages = ["blockyard"]
 
 [tool.ruff]
 line-length = 120
+
+[tool.ruff.lint.per-file-ignores]
+"blockyard/builders/showcases/*-*.py" = ["F821", "N999"]

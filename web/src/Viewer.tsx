@@ -1,7 +1,8 @@
 import { ArrowsClockwiseIcon } from "@phosphor-icons/react";
 import { useEffect, useRef } from "react";
-import { api, type Build, type Palette } from "./api";
+import { api, GALLERY, type Build, type Palette, type RenderRequest } from "./api";
 import { BlockScene, type View } from "./scene";
+import { useTheme } from "./theme";
 import type { VoxelWorld } from "./voxels";
 
 const VIEWS: { id: View; label: string }[] = [
@@ -46,7 +47,7 @@ interface Props {
   spin: boolean;
   /** Whether the library already has a thumbnail for this build; undefined until the library loads. */
   hasThumbnail: boolean | undefined;
-  renderRequest: string | null;
+  renderRequest: RenderRequest | null;
   palette: Promise<Palette>;
   onWorld: (world: VoxelWorld | null) => void;
 }
@@ -60,6 +61,7 @@ export function Viewer({ build, step, framing, spin, hasThumbnail, renderRequest
   const answered = useRef(new Set<string>());
   const width = build?.width ?? 64;
   const depth = build?.depth ?? 64;
+  const theme = useTheme();
 
   useEffect(() => {
     const s = new BlockScene(container.current!, palette);
@@ -90,7 +92,7 @@ export function Viewer({ build, step, framing, spin, hasThumbnail, renderRequest
 
   useEffect(() => {
     const s = scene.current;
-    if (!s || !build || build.status !== "done" || hasThumbnail === undefined) return;
+    if (GALLERY || !s || !build || build.status !== "done" || hasThumbnail === undefined) return;
     if (step < build.steps.length - 1 || thumbnailed.current.has(build.id)) return;
     if (hasThumbnail && !sawBuilding.current.has(build.id)) return;
     thumbnailed.current.add(build.id);
@@ -102,12 +104,14 @@ export function Viewer({ build, step, framing, spin, hasThumbnail, renderRequest
 
   useEffect(() => {
     const s = scene.current;
-    if (!s || !build || !renderRequest || answered.current.has(renderRequest)) return;
-    answered.current.add(renderRequest);
-    s.sheet().then((png) => png && api.putRender(build.id, renderRequest, png));
+    if (!s || !build || !renderRequest || answered.current.has(renderRequest.request)) return;
+    answered.current.add(renderRequest.request);
+    s.look(renderRequest).then((png) => png && api.putRender(build.id, renderRequest.request, png));
   }, [renderRequest, build?.id, build?.boxes]);
 
   useEffect(() => scene.current?.setSpin(spin), [spin]);
+
+  useEffect(() => scene.current?.setTheme(theme), [theme]);
 
   useEffect(() => {
     const s = scene.current;

@@ -12,7 +12,7 @@ export function CodePanel({ build, step, onStep }: Props) {
     <div className="code">
       <div className="parts-head">
         <b>{steps.length} scripted steps</b>
-        <span className="muted">Each step is JavaScript that places blocks with fill and set</span>
+        <span className="muted">Each step is Python that places blocks with fill and set</span>
       </div>
       {steps.map((s) => (
         <section key={s.index} className={s.index === step ? "active" : ""} onClick={() => onStep(s.index)}>

@@ -5,12 +5,33 @@ from __future__ import annotations
 import asyncio
 import os
 import uuid
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Protocol
 
 from blockyard.model import Box, Build, Message, Step
 
 DATA = Path(os.environ.get("BLOCKYARD_DATA", Path(__file__).resolve().parents[2] / "data"))
+SIDES = ("front", "front-right", "right", "back-right", "back", "back-left", "left", "front-left")
+
+
+@dataclass(frozen=True)
+class View:
+    """Where a render looks from: the four views when `angle` is None, else one view from that angle and pitch."""
+
+    angle: float | None = None
+    pitch: float = 30
+    zoom: float = 1
+
+    def caption(self) -> str:
+        zoom = f", zoom {self.zoom:g}x" if self.zoom != 1 else ""
+        if self.angle is None:
+            return f"3/4 front-right, 3/4 back-left, front, and top (back at the top){zoom}."
+        side = SIDES[round(self.angle / 45) % 8]
+        return f"one view from {self.angle:g} degrees around ({side}), {self.pitch:g} degrees up{zoom}."
+
+
+FOUR_VIEWS = View()
 
 
 class Store:
@@ -31,11 +52,11 @@ class Store:
     def images(self) -> Path:
         return self.root.parent / "images"
 
-    def save_image(self, data: bytes, mime: str) -> str:
-        """Keep an image shown in the chat; returns its URL."""
-        name = f"{uuid.uuid4().hex[:12]}.{mime.split('/')[-1].replace('jpeg', 'jpg')}"
+    def save_image(self, png: bytes) -> str:
+        """Keep a render shown in the chat; returns its URL."""
+        name = f"{uuid.uuid4().hex[:12]}.png"
         self.images.mkdir(parents=True, exist_ok=True)
-        (self.images / name).write_bytes(data)
+        (self.images / name).write_bytes(png)
         return f"/api/images/{name}"
 
     def load(self, build_id: str) -> Build | None:
@@ -54,6 +75,7 @@ class Session:
         self.subscribers: set[asyncio.Queue[dict]] = set()
         self.task: asyncio.Task | None = None
         self.renders: dict[str, asyncio.Future[bytes]] = {}
+        self.lock = asyncio.Lock()
 
     def subscribe(self) -> asyncio.Queue[dict]:
         queue: asyncio.Queue[dict] = asyncio.Queue()
@@ -68,14 +90,14 @@ class Session:
         for queue in self.subscribers:
             queue.put_nowait(event)
 
-    async def say(self, text: str, role: str = "assistant", images: list[str] | None = None) -> None:
-        message = Message(role=role, text=text, images=images or [])  # type: ignore[arg-type]
+    async def say(self, text: str, role: str = "assistant", image: str = "") -> None:
+        message = Message(role=role, text=text, image=image)  # type: ignore[arg-type]
         self.build.messages.append(message)
         self._publish({"type": "message", "message": message.model_dump()})
 
-    async def step(self, title: str, boxes: list[Box], code: str = "") -> Step:
+    async def step(self, title: str, boxes: list[Box], code: str = "", key: str | None = None) -> Step:
         """Add boxes as one step of the build; they overwrite whatever earlier steps put there."""
-        step = Step(index=len(self.build.steps), title=title, code=code)
+        step = Step(index=len(self.build.steps), title=title, code=code, key=key)
         placed = [b.model_copy(update={"step": step.index}) for b in boxes]
         self.build.steps.append(step)
         self.build.boxes += placed
@@ -83,27 +105,24 @@ class Session:
         await asyncio.sleep(0)
         return step
 
-    async def undo(self, index: int) -> int:
-        """Drop a step's boxes, so earlier steps show through again; returns how many boxes went."""
-        before = len(self.build.boxes)
-        self.build.boxes = [b for b in self.build.boxes if b.step != index]
-        if index < len(self.build.steps):
-            self.build.steps[index].title += " (undone)"
-        self._publish({"type": "undo", "index": index, "title": self.build.steps[index].title})
-        return before - len(self.build.boxes)
+    async def rewind(self, steps: int) -> None:
+        """Keep only the first `steps` steps and their boxes."""
+        self.build.steps = self.build.steps[:steps]
+        self.build.boxes = [b for b in self.build.boxes if b.step < steps]
+        self._publish({"type": "rewind", "steps": steps})
 
     def think(self, text: str, reset: bool = False) -> None:
         """Stream the builder's live reasoning; ephemeral, never persisted."""
         for queue in self.subscribers:
             queue.put_nowait({"type": "thinking", "text": text, "reset": reset})
 
-    async def render(self, timeout: float = 30) -> bytes | None:
-        """Ask an open viewer to render the model; None when no viewer answers in time."""
+    async def render(self, timeout: float = 30, box: list[int] | None = None, view: View = FOUR_VIEWS) -> bytes | None:
+        """Ask an open viewer to render the model, or `box` (x0, y0, z0, x1, y1, z1) of it; None when none answers."""
         request = uuid.uuid4().hex[:8]
         future: asyncio.Future[bytes] = asyncio.get_running_loop().create_future()
         self.renders[request] = future
         for queue in self.subscribers:
-            queue.put_nowait({"type": "render", "request": request})
+            queue.put_nowait({"type": "render", "request": request, "box": box} | asdict(view))
         try:
             return await asyncio.wait_for(future, timeout)
         except TimeoutError:

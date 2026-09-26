@@ -1,70 +1,82 @@
-# Blockyard
+<h1 align="center">
+  <img src="web/public/logo.png" alt="" width="64" align="absmiddle" hspace="8" />
+  Blockyard
+</h1>
 
-Watch an agent design Minecraft structures in code, step by step, in the browser. The Minecraft twin of
-[Brickyard](https://github.com/hcompai/brickyard).
+<p align="center">Watch Holo build Minecraft models in code, step by step.<br />The Minecraft twin of <a href="https://github.com/hcompai/brickyard">Brickyard</a>.</p>
 
-![Holo castle](docs/holo-castle.png)
-![Steampunk manor showcase](docs/steampunk-manor.png)
-![Gothic cathedral showcase](docs/gothic-cathedral.png)
+![Blockyard showing the gothic cathedral](docs/blockyard.jpg)
 
-Each step is a small JavaScript program (`fill`, `set`, `clear`) the builder writes; the site is re-meshed in the
-browser after every step, the agent asks the open viewer for renders with `look`, and the finished build downloads
-as a WorldEdit `.schem`.
+- **Chat** to describe a build; Holo, a sagent agent, writes a Python build script, and every run rebuilds the model, streams the new steps and shows Holo the render.
+- **Every block is checked** against a ~400-block palette and clipped to the 64x64x64 site.
+- **Replay** the steps, read each step's code, browse the blocks, download a WorldEdit `.schem`.
 
-```
-web (Vite + React + three.js)                            server (FastAPI + Node sandbox)
-┌ header: name · blocks · steps · Download .schem ┐      ┌ Build = boxes per step (+ the step's code) + chat
-│ Chat | Library  │ Model | Code | Blocks         │◀─SSE─┤ Session streams steps, undo, messages, renders
-│                 │ voxel mesher, Faithful atlas  │      │ Workbench: runs a step's JS in node:vm -> boxes
-│                 │ timeline ▶ 1× 2× 4×           │─PUT─▶│ /renders/<id>  (look answered by the open tab)
-└─────────────────┴───────────────────────────────┘      └ /download.schem (Sponge v2, WorldEdit/FAWE)
-```
+Gallery for the H team: [blockyard-h-company.vercel.app](https://blockyard-h-company.vercel.app) (Vercel login).
 
 ## Run
 
 ```bash
 cd server && uv sync && cd ..
 cd web && npm install && npm run build && cd ..
-server/.venv/bin/blockyard                          # http://127.0.0.1:8000
+server/.venv/bin/blockyard                    # http://127.0.0.1:8000
 ```
 
-Needs Node 20+ (the step sandbox and the web build). Frontend hot reload: `cd web && npm run dev`
-(http://127.0.0.1:5173, proxies `/api` to the server).
+Needs Node 20+. Hot reload: `cd web && npm run dev` (http://127.0.0.1:5173).
 
-Holo needs a key: `HOLO_API_KEY=... server/.venv/bin/blockyard` (`HAI_API_KEY` also works). Optional: `HOLO_MODEL`,
-`HOLO_BASE_URL`, `BLOCKYARD_PORT`, `BLOCKYARD_DATA`.
-
-## How a build works
-
-A build is a 64x64x64 site with a grass floor at y=0. Builders add steps through a `Workbench`; a step is JavaScript
-run in a `node:vm` sandbox with a 3 s budget:
-
-```js
-fill(8, 1, 8, 55, 6, 55, "stone_bricks", "walls");        // modes: solid (default), hollow, walls
-for (let i = 8; i <= 55; i += 2) set(i, 7, 8, "stone_bricks");
-set(31, 1, 56, "oak_door[facing=south]");                 // doors place both halves
-fill(24, 13, 24, 39, 13, 39, "spruce_stairs[facing=north]");
-```
-
-The sandbox only collects boxes; the server validates block ids and states against `blocks.json`, clips to the site
-and stores the boxes with the step. Later boxes overwrite earlier ones, so the viewer (and the `.schem`) resolve a
-build by replaying steps in order, and scrubbing the timeline is just replaying fewer of them. Undoing a step drops
-its boxes.
-
-| Builder | What it does |
+| Variable | Default |
 | --- | --- |
-| `holo` | Holo (`holo4-27b`) in a tool loop: `build` (a titled JS step), `undo_step`, `look` (4-view render from the open viewer), `find_blocks`, `find_reference` (Wikipedia photos), `set_name`. Reasoning streams live into the chat. |
-| showcases | Scripted builds (`server/blockyard/builders/showcases/`): an overgrown steampunk manor and a gothic cathedral. No model needed; it seeds the library. |
+| `HAI_ROOT` | unset: only the scripted showcases can build |
+| `HAI_API_KEY`, `HAI_BASE_URL` | for Holo: your key, and `https://api.hcompany.ai/v1/models` |
+| `HOLO_MODEL` | `holo4-27b` |
+| `BLOCKYARD_PORT` | `8000`, on 127.0.0.1 only (no auth) |
+| `BLOCKYARD_DATA` | `./data` |
 
-## Blocks and rendering
+## Holo, for now
 
-`server/blockyard/blocks.json` is the palette (~400 blocks): textures per face, shape (`cube`, `stairs`, `slab`,
-`log`, `fence`, `wall`, `pane`, `cross`, `torch`, `lantern`, `carpet`, `door`), tints and transparency. The web fetches
-it, composes a texture atlas from `web/public/textures`, and meshes the site with face culling and ambient occlusion.
-Fences, walls and panes connect to their neighbours; stairs, slabs, logs and doors read their block state.
+Live building runs on your machine only. The Vercel site is a read-only gallery of finished builds.
 
-Regenerate the palette and texture sheet from a Faithful 32x pack with `uv run scripts/palette.py <pack>/assets/minecraft/textures/block`.
-Textures are from [Faithful](https://faithfulpack.net/) (see `web/public/textures/LICENSE.txt`).
+```
+browser tab  <── steps, renders ──>  blockyard server  ── starts ──>  sagent (hai venv), agent/holo.py
+(viewer)                              (FastAPI, :8000)                  │ edits build.py in data/workspaces/<build>
+                                            ▲                           │ shell: blocks run / look / reference
+                                            └────── HTTP tools API ─────┘
+```
+
+- Holo is a sagent Forest agent with the managed sandbox tools (`shell`, `write_file`, `search_replace`, ...). It writes `build.py` in plain Python: `step`, `fill`, `set`, `clear` to place blocks, WorldEdit-style patterns (`"70%stone_bricks,30%andesite"`) anywhere a block goes, and `get`, `replace`, `overlay` to read and rework what is placed, with its own functions for roofs, towers, trees and land; `random` is seeded per step, so every run builds the same model. It runs `blocks run`, which rebuilds the model on the server from the first changed step and prints the problems by line. `blocks look` renders the four views or one view from any angle and zoom; `blocks reference` saves Wikipedia photos in the workspace. Images reach Holo through `@@attach PATH` lines, which the shell tool swaps for the image in the same result.
+- Renders come from the open browser tab, so keep the build open while Holo works.
+- sagent comes from a local hai checkout: set `HAI_ROOT` to it, with its venv synced (`cd hai && uv sync`).
+
+```bash
+export HAI_ROOT=~/code/hai HAI_BASE_URL=https://api.hcompany.ai/v1/models
+export HAI_API_KEY=$(grep '^HAI_API_KEY=' $HAI_ROOT/.env | cut -d= -f2- | tr -d '"')
+server/.venv/bin/blockyard
+```
+
+| To change | Edit |
+| --- | --- |
+| model, reasoning effort, step and time budget, tools | `agent/holo.yaml` |
+| how Holo builds: principles, workflow, when to stop | `agent/holo.j2` |
+| the build script API, parts, blocks, recipes | `server/blockyard/guide.py`, `server/blockyard/script.py` |
+
+Each request leaves `data/workspaces/<build>/runs/<time>.log` (what Holo did, as the terminal shows it) and `<time>.jsonl` (the full trajectory, reasoning included). Try the tools by hand from a workspace: `BLOCKYARD_BUILD=<build> ../../../server/.venv/bin/blocks run`.
+
+## Showcases and gallery
+
+The steampunk manor and the gothic cathedral are build scripts in `server/blockyard/builders/showcases`, on the same
+calls as Holo's, each step told by the comment above it. Holo gets a copy of both, with their renders, to learn
+from. To replay one, pick it in the builder menu under a new chat and send any prompt.
+
+```bash
+scripts/deploy-gallery.sh --preview           # or --prod; ships the latest run of each showcase
+```
+
+Open each showcase once in the app to refresh its thumbnail before deploying.
+
+## Blocks
+
+Textures are from [Faithful](https://faithfulpack.net/) (see `web/public/textures/LICENSE.txt`). Regenerate the
+palette and texture sheet from a Faithful 32x pack with
+`uv run scripts/palette.py <pack>/assets/minecraft/textures/block`.
 
 ## Tests
 

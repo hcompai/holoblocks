@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+import base64
+import inspect
 import json
 import os
-from contextlib import suppress
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager, suppress
 from pathlib import Path
+from typing import Literal
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.gzip import GZipMiddleware
@@ -34,9 +38,37 @@ class Say(BaseModel):
     text: str
 
 
+class AgentSay(BaseModel):
+    text: str
+    role: Literal["assistant", "thinking"] = "assistant"
+
+
 store = Store()
 sessions: dict[str, Session] = {}
-app = FastAPI(title="Blockyard")
+TOOLS = {
+    "run": Workbench.run_script,
+    "look": Workbench.look,
+    "find": Workbench.find_blocks,
+    "reference": Workbench.find_reference,
+    "name": Workbench.rename,
+}
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    """Builds left building by a server that died are done; on shutdown, every running build stops with the server."""
+    for build in store.all():
+        if build.status == "building":
+            build.status = "done"
+            store.save(build)
+    yield
+    running = [s.task for s in sessions.values() if s.task and not s.task.done()]
+    for task in running:
+        task.cancel()
+    await asyncio.gather(*running, return_exceptions=True)
+
+
+app = FastAPI(title="Blockyard", lifespan=lifespan)
 app.add_middleware(GZipMiddleware, minimum_size=1024)
 
 
@@ -142,6 +174,40 @@ async def events(build_id: str) -> StreamingResponse:
             session.unsubscribe(queue)
 
     return StreamingResponse(stream(), media_type="text/event-stream", headers={"Cache-Control": "no-store"})
+
+
+@app.post("/api/builds/{build_id}/tools/{tool}")
+async def call_tool(build_id: str, tool: str, args: dict[str, str]) -> dict:
+    """Run a workbench tool for an agent working outside the server, like Holo through the blocks CLI."""
+    if tool not in TOOLS:
+        raise HTTPException(404, f"unknown tool {tool}; available: {list(TOOLS)}")
+    try:
+        inspect.signature(TOOLS[tool]).bind(None, **args)
+    except TypeError as e:
+        raise HTTPException(400, f"{tool}: {e}") from e
+    session = session_for(build_id)
+    async with session.lock:
+        result = await TOOLS[tool](Workbench(session), **args)
+    return {
+        "text": result.text,
+        "problems": result.problems,
+        "caption": result.caption,
+        "images": [
+            {"mime": p.mime, "data": base64.b64encode(p.data).decode(), "title": p.title, "url": p.url}
+            for p in result.images
+        ],
+    }
+
+
+@app.post("/api/builds/{build_id}/say")
+async def agent_say(build_id: str, body: AgentSay) -> dict:
+    """Show a message or the live reasoning of an agent working outside the server."""
+    session = session_for(build_id)
+    if body.role == "thinking":
+        session.think(body.text, reset=True)
+    else:
+        await session.say(body.text)
+    return {"ok": True}
 
 
 @app.put("/api/builds/{build_id}/thumbnail.png")

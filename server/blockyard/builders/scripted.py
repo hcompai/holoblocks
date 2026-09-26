@@ -1,12 +1,15 @@
-"""Scripted builders: a showcase is a fixed list of titled JavaScript steps, replayed with a short pause."""
+"""Scripted builders: a showcase is a build script replayed one step at a time, told by the comment above each step."""
 
 from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
+from pathlib import Path
 
 from blockyard.session import Session
-from blockyard.workbench import Workbench
+from blockyard.workbench import Workbench, execute
+
+SCRIPTS = Path(__file__).with_name("showcases")
 
 
 @dataclass(frozen=True)
@@ -15,9 +18,11 @@ class Showcase:
     name: str
     label: str
     intro: str
-    steps: list[tuple[str, str, str]]
-    ground: bool = True
     height: int = 64
+
+    @property
+    def path(self) -> Path:
+        return SCRIPTS / f"{self.key}.py"
 
 
 class ScriptedBuilder:
@@ -29,18 +34,34 @@ class ScriptedBuilder:
 
     async def run(self, session: Session, request: str) -> None:
         bench = Workbench(session)
-        if len(session.build.steps) > 1:
+        if session.build.steps:
             await session.say("This showcase is scripted and already built; start a new build to see it again.")
             return
-        session.build.height = self.showcase.height
+        build = session.build
+        build.height = self.showcase.height
+        code = self.showcase.path.read_text()
+        out = await execute(code, (build.width, build.height, build.depth))
+        if "error" in out:
+            raise RuntimeError(f"The {self.showcase.name} script stopped: {out['error']}")
+        session.build.script = code
         await session.rename(self.showcase.name)
         await session.say(self.showcase.intro)
-        if self.showcase.ground:
-            await bench.ensure_ground()
-        for title, message, code in self.showcase.steps:
-            await session.say(message)
-            result = await bench.run(title, code)
-            if result.note:
-                await session.say(result.text, role="tool")
+        source, steps = code.splitlines(), out["steps"]
+        world = await asyncio.to_thread(bench.world)
+        for n, step in enumerate(steps):
+            await session.say(_told(source, step["line"]))
+            problems = await bench.place(world, source, steps, n)
+            summary = await asyncio.to_thread(bench.summary)
+            await session.say("\n".join([f"Step {n + 1} '{step['title']}'. {summary}", *problems]), role="tool")
             await asyncio.sleep(self.delay)
         await session.say(f"Done: {bench.summary()}")
+
+
+def _told(source: list[str], line: int) -> str:
+    """The comment lines right above script line `line`, as one sentence."""
+    above = []
+    for text in reversed(source[: line - 1]):
+        if not text.startswith("#"):
+            break
+        above.append(text.lstrip("# "))
+    return " ".join(reversed(above))

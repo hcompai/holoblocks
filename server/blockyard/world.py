@@ -8,7 +8,7 @@ import struct
 from array import array
 from collections import Counter
 
-from blockyard.model import Box
+from blockyard.model import Box, Build
 
 AIR = 0
 
@@ -20,6 +20,13 @@ class World:
         self.index = {"air": AIR}
         self.cells = array("H", bytes(2 * width * height * depth))
 
+    @classmethod
+    def of(cls, build: Build) -> World:
+        """The grid holding every box of `build`."""
+        world = cls(build.width, build.height, build.depth)
+        world.apply(build.boxes)
+        return world
+
     def _id(self, block: str) -> int:
         if block not in self.index:
             self.index[block] = len(self.palette)
@@ -29,35 +36,39 @@ class World:
     def _offset(self, x: int, y: int, z: int) -> int:
         return (y * self.depth + z) * self.width + x
 
-    def apply(self, boxes: list[Box]) -> None:
+    def apply(self, boxes: list[Box]) -> int:
+        """Write the boxes in order; returns how many cells changed block."""
+        changed = 0
         for b in boxes:
             x0, x1 = max(b.x0, 0), min(b.x1, self.width - 1)
             y0, y1 = max(b.y0, 0), min(b.y1, self.height - 1)
             z0, z1 = max(b.z0, 0), min(b.z1, self.depth - 1)
             if x0 > x1 or y0 > y1 or z0 > z1:
                 continue
-            row = array("H", [self._id(b.block)] * (x1 - x0 + 1))
+            block = self._id(b.block)
+            row = array("H", [block] * (x1 - x0 + 1))
             for y in range(y0, y1 + 1):
                 for z in range(z0, z1 + 1):
                     start = self._offset(x0, y, z)
+                    changed += len(row) - self.cells[start : start + len(row)].count(block)
                     self.cells[start : start + len(row)] = row
+        return changed
 
     def get(self, x: int, y: int, z: int) -> str:
         if not (0 <= x < self.width and 0 <= y < self.height and 0 <= z < self.depth):
             return "air"
         return self.palette[self.cells[self._offset(x, y, z)]]
 
-    def counts(self, min_y: int = 0) -> Counter[str]:
-        raw = Counter(self.cells[self._offset(0, min_y, 0) :])
+    def counts(self) -> Counter[str]:
+        raw = Counter(self.cells)
         raw.pop(AIR, None)
         return Counter({self.palette[i]: n for i, n in raw.items()})
 
-    def bounds(self, min_y: int = 0) -> tuple[tuple[int, int, int], tuple[int, int, int]] | None:
-        """Extents of the non-air blocks at or above min_y, or None when there are none."""
+    def bounds(self) -> tuple[tuple[int, int, int], tuple[int, int, int]] | None:
+        """Extents of the non-air blocks, or None when there are none."""
         lo, hi = [self.width, self.height, self.depth], [-1, -1, -1]
         w, d = self.width, self.depth
-        first = self._offset(0, min_y, 0)
-        for offset, cell in enumerate(self.cells[first:], first):
+        for offset, cell in enumerate(self.cells):
             if cell == AIR:
                 continue
             x, rest = offset % w, offset // w

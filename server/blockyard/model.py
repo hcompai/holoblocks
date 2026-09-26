@@ -30,12 +30,14 @@ class Step(BaseModel):
     index: int
     title: str
     code: str = ""
+    key: str | None = None
+    """Digest of the script step that made it, empty if that step had problems; None when no script made it."""
 
 
 class Message(BaseModel):
     role: Literal["user", "assistant", "system", "tool"]
     text: str
-    images: list[str] = []
+    image: str = ""
     at: float = Field(default_factory=time.time)
 
 
@@ -52,6 +54,7 @@ class Build(BaseModel):
     boxes: list[Box] = []
     steps: list[Step] = []
     messages: list[Message] = []
+    script: str = ""
 
     def summary(self) -> dict:
         return {

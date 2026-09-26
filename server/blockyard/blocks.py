@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import difflib
 import json
 import re
 from dataclasses import dataclass, field
@@ -51,7 +52,9 @@ def parse(text: str) -> BlockState:
         raise ValueError(f"'{text}' is not a block id like stone_bricks or oak_stairs[facing=north]")
     name, props = m.group(1), {}
     if name != "air" and name not in palette():
-        raise ValueError(f"unknown block '{name}'; use find_blocks")
+        close = difflib.get_close_matches(name, palette(), n=3, cutoff=0.7)
+        hint = f"did you mean {' or '.join(close)}?" if close else "use find_blocks"
+        raise ValueError(f"unknown block '{name}'; {hint}")
     allowed = STATE_KEYS.get(shape(name), {}) if name != "air" else {}
     for pair in filter(None, (m.group(2) or "").split(",")):
         key, _, value = pair.partition("=")
