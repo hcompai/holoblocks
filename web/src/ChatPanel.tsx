@@ -1,5 +1,6 @@
+import { ArrowUpIcon, StopIcon } from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
-import { api, type Build } from "./api";
+import { api, type Build, type BuilderInfo } from "./api";
 
 const SUGGESTIONS = [
   "A medieval castle with a keep, four towers and a gatehouse",
@@ -8,8 +9,6 @@ const SUGGESTIONS = [
   "A lighthouse on a rocky shore",
   "A gothic cathedral",
 ];
-
-const BUILDER_LABELS: Record<string, string> = { holo: "Holo", demo: "Scripted demo" };
 
 interface Props {
   build: Build | null;
@@ -21,8 +20,9 @@ interface Props {
 export function ChatPanel({ build, thinking, onCreate, onSay }: Props) {
   const [text, setText] = useState("");
   const [mode, setMode] = useState<"change" | "new">("change");
-  const [builders, setBuilders] = useState<string[]>([]);
+  const [builders, setBuilders] = useState<BuilderInfo[]>([]);
   const [builder, setBuilder] = useState("");
+  const pickable = builders.filter((b) => !b.showcase);
   const log = useRef<HTMLDivElement>(null);
   const thought = useRef<HTMLDivElement>(null);
   const busy = build?.status === "building";
@@ -31,7 +31,7 @@ export function ChatPanel({ build, thinking, onCreate, onSay }: Props) {
   useEffect(() => {
     api.builders().then((list) => {
       setBuilders(list);
-      setBuilder((b) => b || list[0] || "");
+      setBuilder((b) => b || (list.find((x) => !x.showcase) ?? list[0])?.name || "");
     });
   }, []);
 
@@ -52,7 +52,7 @@ export function ChatPanel({ build, thinking, onCreate, onSay }: Props) {
     setMode("change");
   };
 
-  const who = BUILDER_LABELS[build?.builder ?? builder] ?? build?.builder ?? "Builder";
+  const who = builders.find((b) => b.name === (build?.builder ?? builder))?.label ?? build?.builder ?? "Builder";
 
   return (
     <div className="chat">
@@ -112,11 +112,11 @@ export function ChatPanel({ build, thinking, onCreate, onSay }: Props) {
               </button>
             </>
           )}
-          {target === "new" && builders.length > 1 && (
+          {target === "new" && pickable.length > 1 && (
             <select className="builder-select" value={builder} onChange={(e) => setBuilder(e.target.value)}>
-              {builders.map((b) => (
-                <option key={b} value={b}>
-                  {BUILDER_LABELS[b] ?? b}
+              {pickable.map((b) => (
+                <option key={b.name} value={b.name}>
+                  {b.label}
                 </option>
               ))}
             </select>
@@ -135,11 +135,13 @@ export function ChatPanel({ build, thinking, onCreate, onSay }: Props) {
         />
         {busy && build && target === "change" ? (
           <button className="send stop" onClick={() => api.stop(build.id)}>
+            <StopIcon size={14} weight="fill" />
             Stop
           </button>
         ) : (
           <button className="send" disabled={!text.trim()} onClick={() => send()}>
-            Send →
+            Send
+            <ArrowUpIcon size={14} weight="bold" />
           </button>
         )}
       </div>

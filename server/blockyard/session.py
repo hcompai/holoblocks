@@ -131,5 +131,6 @@ class Builder(Protocol):
     """Anything that turns a request into steps: the scripted demo, or an agent."""
 
     name: str
+    label: str
 
     async def run(self, session: Session, request: str) -> None: ...

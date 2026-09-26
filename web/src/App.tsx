@@ -1,12 +1,15 @@
+import { DownloadSimpleIcon } from "@phosphor-icons/react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, type BuildSummary } from "./api";
 import { BlocksPanel } from "./BlocksPanel";
 import { ChatPanel } from "./ChatPanel";
 import { CodePanel } from "./CodePanel";
+import { Gallery } from "./Gallery";
+import { HLogo } from "./HLogo";
 import { LibraryPanel } from "./LibraryPanel";
 import { Timeline } from "./Timeline";
 import { useBuild } from "./useBuild";
-import { Viewer } from "./Viewer";
+import { type Framing, ViewControls, Viewer } from "./Viewer";
 import type { VoxelWorld } from "./voxels";
 
 const STEP_MS = 900;
@@ -27,6 +30,8 @@ export default function App() {
   const [speed, setSpeed] = useState(1);
   const [world, setWorld] = useState<VoxelWorld | null>(null);
   const [blockCount, setBlockCount] = useState(0);
+  const [framing, setFraming] = useState<Framing>({ view: "iso" });
+  const [spin, setSpin] = useState(false);
   const palette = useMemo(() => api.palette(), []);
   const last = (build?.steps.length ?? 0) - 1;
 
@@ -82,15 +87,17 @@ export default function App() {
     setBlockCount(n);
   }, []);
 
-  const visibleStep = Math.min(step, last);
+  const visibleStep = following ? last : Math.min(step, last);
+  const summary = builds.find((b) => b.id === buildId);
 
   return (
     <div className="app">
       <header>
-        <div className="brand" onClick={() => open(null)}>
-          <span className="logo" />
+        <button className="brand" onClick={() => open(null)}>
+          <HLogo />
+          <span className="brand-divider" />
           Blockyard
-        </div>
+        </button>
         {build && (
           <>
             <span className="title">{build.name}</span>
@@ -100,8 +107,9 @@ export default function App() {
               {build.width}×{build.depth} site
             </span>
             <span className="spacer" />
-            <a className="button primary" href={api.downloadUrl(build.id)}>
-              ⤓ Download .schem
+            <a className="button primary" href={api.downloadUrl(build.id)} download={`${build.name}.schem`}>
+              <DownloadSimpleIcon size={16} weight="bold" />
+              Download .schem
             </a>
           </>
         )}
@@ -134,44 +142,59 @@ export default function App() {
         )}
       </aside>
       <main>
-        <div className="tabs center-tabs">
-          <button className={center === "model" ? "active" : ""} onClick={() => setCenter("model")}>
-            Model
-          </button>
-          <button className={center === "code" ? "active" : ""} disabled={!build} onClick={() => setCenter("code")}>
-            Code
-          </button>
-          <button className={center === "blocks" ? "active" : ""} disabled={!build} onClick={() => setCenter("blocks")}>
-            Blocks
-          </button>
-        </div>
-        <div className="stage">
-          <div className={center === "model" ? "pane" : "pane hidden"}>
-            <Viewer build={build} step={visibleStep} renderRequest={renderRequest} palette={palette} onWorld={onWorld} />
+        {!buildId && <Gallery builds={builds} onOpen={open} />}
+        <div className={buildId ? "workspace" : "workspace hidden"}>
+          <div className="stage-head">
+            <div className="tabs">
+              <button className={center === "model" ? "active" : ""} onClick={() => setCenter("model")}>
+                Model
+              </button>
+              <button className={center === "code" ? "active" : ""} disabled={!build} onClick={() => setCenter("code")}>
+                Code
+              </button>
+              <button className={center === "blocks" ? "active" : ""} disabled={!build} onClick={() => setCenter("blocks")}>
+                Blocks
+              </button>
+            </div>
+            {center === "model" && <ViewControls framing={framing} spin={spin} onFrame={setFraming} onSpin={setSpin} />}
           </div>
-          {center === "blocks" && build && (
-            <div className="pane">
-              <BlocksPanel world={world} palette={palette} />
+          <div className="stage">
+            <div className={center === "model" ? "pane" : "pane hidden"}>
+              <Viewer
+                build={build}
+                step={visibleStep}
+                framing={framing}
+                spin={spin}
+                hasThumbnail={summary && !!summary.thumbnail}
+                renderRequest={renderRequest}
+                palette={palette}
+                onWorld={onWorld}
+              />
             </div>
-          )}
-          {center === "code" && build && (
-            <div className="pane">
-              <CodePanel build={build} step={visibleStep} onStep={scrub} />
-            </div>
-          )}
+            {center === "blocks" && build && (
+              <div className="pane">
+                <BlocksPanel world={world} palette={palette} />
+              </div>
+            )}
+            {center === "code" && build && (
+              <div className="pane">
+                <CodePanel build={build} step={visibleStep} onStep={scrub} />
+              </div>
+            )}
+          </div>
+          <Timeline
+            build={build}
+            step={visibleStep}
+            playing={playing}
+            speed={speed}
+            onStep={scrub}
+            onPlay={(p) => {
+              setFollowing(false);
+              setPlaying(p);
+            }}
+            onSpeed={setSpeed}
+          />
         </div>
-        <Timeline
-          build={build}
-          step={visibleStep}
-          playing={playing}
-          speed={speed}
-          onStep={scrub}
-          onPlay={(p) => {
-            setFollowing(false);
-            setPlaying(p);
-          }}
-          onSpeed={setSpeed}
-        />
       </main>
     </div>
   );

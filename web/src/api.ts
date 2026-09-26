@@ -1,3 +1,10 @@
+export interface BuilderInfo {
+  name: string;
+  label: string;
+  /** Replays a scripted build and ignores the prompt. */
+  showcase: boolean;
+}
+
 export interface Box {
   x0: number;
   y0: number;
@@ -50,7 +57,7 @@ export type Tex = string | [string, string] | [string, string, string];
 
 export interface BlockInfo {
   tex: Tex | { top?: Tex; bottom?: Tex; side?: Tex };
-  shape?: "cube" | "stairs" | "slab" | "log" | "fence" | "wall" | "pane" | "cross" | "torch" | "lantern" | "carpet" | "door";
+  shape?: "cube" | "stairs" | "slab" | "log" | "fence" | "wall" | "pane" | "cross" | "torch" | "lantern" | "carpet" | "door" | "trapdoor" | "rod";
   tags?: string;
   transparent?: boolean;
   cutout?: boolean;
@@ -58,6 +65,13 @@ export interface BlockInfo {
 }
 
 export type Palette = Record<string, BlockInfo>;
+
+/** Every texture's first frame packed row by row into one image. */
+export interface TextureSheet {
+  tile: number;
+  columns: number;
+  names: string[];
+}
 
 export type BuildEvent =
   | { type: "hello"; build: BuildSummary }
@@ -74,13 +88,15 @@ async function json<T>(response: Promise<Response>): Promise<T> {
   return r.json() as Promise<T>;
 }
 
+let sheet: Promise<TextureSheet> | null = null;
+
 const post = (url: string, body: unknown) =>
   fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
 
 export const api = {
   builds: () => json<BuildSummary[]>(fetch("/api/builds")),
   build: (id: string) => json<Build>(fetch(`/api/builds/${id}`)),
-  builders: () => json<string[]>(fetch("/api/builders")),
+  builders: () => json<BuilderInfo[]>(fetch("/api/builders")),
   palette: () => json<Palette>(fetch("/api/blocks")),
   create: (prompt: string, builder: string) => json<BuildSummary>(post("/api/builds", { prompt, builder })),
   say: (id: string, text: string) => json<BuildSummary>(post(`/api/builds/${id}/messages`, { text })),
@@ -91,5 +107,6 @@ export const api = {
   putThumbnail: (id: string, png: Blob) => fetch(`/api/builds/${id}/thumbnail.png`, { method: "PUT", body: png }),
   thumbnailUrl: (id: string) => `/api/builds/${id}/thumbnail.png`,
   downloadUrl: (id: string) => `/api/builds/${id}/download.schem`,
-  textureUrl: (name: string) => `/textures/${name}.png`,
+  textureSheet: () => (sheet ??= json<TextureSheet>(fetch("/textures/sheet.json"))),
+  textureSheetUrl: "/textures/sheet.png",
 };

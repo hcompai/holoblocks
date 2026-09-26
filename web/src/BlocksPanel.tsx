@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import type { Palette, Tex } from "./api";
+import { api, type Palette, type Tex, type TextureSheet } from "./api";
+import { sheetOrigin } from "./atlas";
 import type { VoxelWorld } from "./voxels";
 
 interface Props {
@@ -7,15 +8,34 @@ interface Props {
   palette: Promise<Palette>;
 }
 
+const SWATCH = 16;
+
 const swatchTex = (tex: Palette[string]["tex"]): Tex =>
   typeof tex === "string" || Array.isArray(tex) ? tex : (tex.side ?? tex.top ?? tex.bottom ?? "");
 
 const texName = (tex: Tex) => (typeof tex === "string" ? tex : tex[0]);
 
+function Swatch({ sheet, name }: { sheet: TextureSheet; name: string }) {
+  const scale = SWATCH / sheet.tile;
+  const [x, y] = sheetOrigin(sheet, name);
+  return (
+    <span
+      className="swatch"
+      style={{
+        backgroundImage: `url(${api.textureSheetUrl})`,
+        backgroundPosition: `${-x * scale}px ${-y * scale}px`,
+        backgroundSize: `${sheet.columns * SWATCH}px auto`,
+      }}
+    />
+  );
+}
+
 export function BlocksPanel({ world, palette }: Props) {
   const [blocks, setBlocks] = useState<Palette>({});
+  const [sheet, setSheet] = useState<TextureSheet | null>(null);
   useEffect(() => {
     palette.then(setBlocks);
+    api.textureSheet().then(setSheet);
   }, [palette]);
 
   const counts = world ? [...world.counts().entries()].sort((a, b) => b[1] - a[1]) : [];
@@ -43,7 +63,7 @@ export function BlocksPanel({ world, palette }: Props) {
               <tr key={name}>
                 <td className="qty">{n.toLocaleString()}×</td>
                 <td>
-                  {tex && <img className="swatch" src={`/textures/${tex}.png`} alt="" />}
+                  {tex && sheet && <Swatch sheet={sheet} name={tex} />}
                   {name.replaceAll("_", " ")}
                 </td>
                 <td className="muted">{name}</td>

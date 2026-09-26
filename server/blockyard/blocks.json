@@ -45,8 +45,8 @@
 },
 "acacia_trapdoor": {
 "cutout": true,
-"shape": "carpet",
-"tags": "acacia wood hatch thin",
+"shape": "trapdoor",
+"tags": "acacia wood hatch plate thin",
 "tex": "acacia_trapdoor"
 },
 "allium": {
@@ -78,6 +78,14 @@
 "tags": "gray rock low fence parapet",
 "tex": "andesite"
 },
+"anvil": {
+"tags": "iron workshop",
+"tex": {
+"bottom": "anvil",
+"side": "anvil",
+"top": "anvil_top"
+}
+},
 "azalea_leaves": {
 "cutout": true,
 "tags": "tree green foliage",
@@ -107,6 +115,22 @@
 "shape": "stairs",
 "tags": "bamboo wood roof",
 "tex": "bamboo_planks"
+},
+"barrel": {
+"tags": "wood storage cask",
+"tex": {
+"bottom": "barrel_bottom",
+"side": "barrel_side",
+"top": "barrel_top"
+}
+},
+"basalt": {
+"shape": "log",
+"tags": "dark gray column pillar",
+"tex": {
+"side": "basalt_side",
+"top": "basalt_top"
+}
 },
 "birch_door": {
 "cutout": true,
@@ -160,8 +184,8 @@
 },
 "birch_trapdoor": {
 "cutout": true,
-"shape": "carpet",
-"tags": "birch wood hatch thin",
+"shape": "trapdoor",
+"tags": "birch wood hatch plate thin",
 "tex": "birch_trapdoor"
 },
 "black_carpet": {
@@ -210,6 +234,14 @@
 "shape": "wall",
 "tags": "black rock low fence parapet",
 "tex": "blackstone"
+},
+"blast_furnace": {
+"tags": "metal oven fire machine boiler",
+"tex": {
+"bottom": "blast_furnace_top",
+"side": "blast_furnace_front_on",
+"top": "blast_furnace_top"
+}
 },
 "blue_carpet": {
 "shape": "carpet",
@@ -323,6 +355,22 @@
 "tags": "white rock",
 "tex": "calcite"
 },
+"cartography_table": {
+"tags": "workshop maps",
+"tex": {
+"bottom": "dark_oak_planks",
+"side": "cartography_table_side1",
+"top": "cartography_table_top"
+}
+},
+"cauldron": {
+"tags": "iron pot",
+"tex": {
+"bottom": "cauldron_bottom",
+"side": "cauldron_side",
+"top": "cauldron_top"
+}
+},
 "cherry_door": {
 "cutout": true,
 "shape": "door",
@@ -366,9 +414,17 @@
 },
 "cherry_trapdoor": {
 "cutout": true,
-"shape": "carpet",
-"tags": "cherry wood hatch thin",
+"shape": "trapdoor",
+"tags": "cherry wood hatch plate thin",
 "tex": "cherry_trapdoor"
+},
+"chiseled_copper": {
+"tags": "orange metal ornament",
+"tex": "chiseled_copper"
+},
+"chiseled_polished_blackstone": {
+"tags": "black ornament",
+"tex": "chiseled_polished_blackstone"
 },
 "chiseled_quartz_block": {
 "tags": "white ornament marble",
@@ -389,6 +445,20 @@
 "chiseled_stone_bricks": {
 "tags": "gray brick ornament",
 "tex": "chiseled_stone_bricks"
+},
+"chiseled_tuff": {
+"tags": "gray ornament",
+"tex": {
+"side": "chiseled_tuff",
+"top": "chiseled_tuff_top"
+}
+},
+"chiseled_tuff_bricks": {
+"tags": "gray brick ornament",
+"tex": {
+"side": "chiseled_tuff_bricks",
+"top": "chiseled_tuff_bricks_top"
+}
 },
 "clay": {
 "tags": "gray",
@@ -446,15 +516,71 @@
 "tags": "white spider ruin",
 "tex": "cobweb"
 },
+"copper_bars": {
+"cutout": true,
+"shape": "pane",
+"tags": "orange metal thin railing",
+"tex": "copper_bars"
+},
 "copper_block": {
 "tags": "orange metal",
 "tex": "copper_block"
+},
+"copper_bulb": {
+"tags": "orange metal light lamp glow",
+"tex": "copper_bulb_lit"
+},
+"copper_chain": {
+"cutout": true,
+"shape": "rod",
+"tags": "orange metal chain hanging thin",
+"tex": "copper_chain"
+},
+"copper_door": {
+"cutout": true,
+"shape": "door",
+"tags": "orange metal entrance",
+"tex": {
+"bottom": "copper_door_bottom",
+"top": "copper_door_top"
+}
+},
+"copper_grate": {
+"cutout": true,
+"tags": "orange metal mesh vent",
+"tex": "copper_grate"
+},
+"copper_lantern": {
+"cutout": true,
+"shape": "lantern",
+"tags": "orange light hanging small",
+"tex": "copper_lantern"
+},
+"copper_torch": {
+"cutout": true,
+"shape": "torch",
+"tags": "light fire small",
+"tex": "copper_torch"
+},
+"copper_trapdoor": {
+"cutout": true,
+"shape": "trapdoor",
+"tags": "orange metal hatch plate thin",
+"tex": "copper_trapdoor"
 },
 "cornflower": {
 "cutout": true,
 "shape": "cross",
 "tags": "blue flower",
 "tex": "cornflower"
+},
+"cracked_deepslate_tiles": {
+"tags": "dark gray tile ruin",
+"tex": "cracked_deepslate_tiles"
+},
+"cracked_polished_blackstone_bricks": {
+"tags": "black brick ruin",
+"tex": "cracked_polished_blackstone_bricks"
 },
 "cracked_stone_bricks": {
 "tags": "gray brick wall ruin",
@@ -585,8 +711,8 @@
 },
 "dark_oak_trapdoor": {
 "cutout": true,
-"shape": "carpet",
-"tags": "dark oak wood hatch thin",
+"shape": "trapdoor",
+"tags": "dark oak wood hatch plate thin",
 "tex": "dark_oak_trapdoor"
 },
 "dark_prismarine": {
@@ -697,6 +823,12 @@
 "tags": "green gem shiny",
 "tex": "emerald_block"
 },
+"end_rod": {
+"cutout": true,
+"shape": "rod",
+"tags": "white light pole thin glow",
+"tex": "end_rod"
+},
 "end_stone_brick_slab": {
 "shape": "slab",
 "tags": "pale yellow brick half",
@@ -716,9 +848,75 @@
 "tags": "pale yellow brick",
 "tex": "end_stone_bricks"
 },
+"exposed_chiseled_copper": {
+"tags": "orange teal metal ornament",
+"tex": "exposed_chiseled_copper"
+},
 "exposed_copper": {
 "tags": "orange teal metal",
 "tex": "exposed_copper"
+},
+"exposed_copper_bars": {
+"cutout": true,
+"shape": "pane",
+"tags": "orange teal metal thin railing",
+"tex": "exposed_copper_bars"
+},
+"exposed_copper_bulb": {
+"tags": "teal metal light lamp glow",
+"tex": "exposed_copper_bulb_lit"
+},
+"exposed_copper_chain": {
+"cutout": true,
+"shape": "rod",
+"tags": "orange teal metal chain hanging thin",
+"tex": "exposed_copper_chain"
+},
+"exposed_copper_door": {
+"cutout": true,
+"shape": "door",
+"tags": "orange teal metal entrance",
+"tex": {
+"bottom": "exposed_copper_door_bottom",
+"top": "exposed_copper_door_top"
+}
+},
+"exposed_copper_grate": {
+"cutout": true,
+"tags": "orange teal metal mesh vent",
+"tex": "exposed_copper_grate"
+},
+"exposed_copper_lantern": {
+"cutout": true,
+"shape": "lantern",
+"tags": "orange teal light hanging small",
+"tex": "exposed_copper_lantern"
+},
+"exposed_copper_trapdoor": {
+"cutout": true,
+"shape": "trapdoor",
+"tags": "orange teal metal hatch plate thin",
+"tex": "exposed_copper_trapdoor"
+},
+"exposed_cut_copper": {
+"tags": "orange teal metal",
+"tex": "exposed_cut_copper"
+},
+"exposed_cut_copper_slab": {
+"shape": "slab",
+"tags": "orange teal metal half",
+"tex": "exposed_cut_copper"
+},
+"exposed_cut_copper_stairs": {
+"shape": "stairs",
+"tags": "orange teal metal roof steps",
+"tex": "exposed_cut_copper"
+},
+"exposed_lightning_rod": {
+"cutout": true,
+"shape": "rod",
+"tags": "orange teal metal antenna pipe thin",
+"tex": "exposed_lightning_rod"
 },
 "fern": {
 "cutout": true,
@@ -733,6 +931,18 @@
 "cutout": true,
 "tags": "tree pink foliage",
 "tex": "flowering_azalea_leaves"
+},
+"furnace": {
+"tags": "stone oven fire machine",
+"tex": {
+"bottom": "furnace_top",
+"side": "furnace_front_on",
+"top": "furnace_top"
+}
+},
+"gilded_blackstone": {
+"tags": "black gold ornament",
+"tex": "gilded_blackstone"
 },
 "glass": {
 "tags": "transparent window",
@@ -854,6 +1064,15 @@
 "top": "hay_block_top"
 }
 },
+"honey_block": {
+"tags": "orange transparent",
+"tex": {
+"bottom": "honey_block_bottom",
+"side": "honey_block_side",
+"top": "honey_block_top"
+},
+"transparent": true
+},
 "honeycomb_block": {
 "tags": "orange",
 "tex": "honeycomb_block"
@@ -873,6 +1092,12 @@
 "tags": "white metal",
 "tex": "iron_block"
 },
+"iron_chain": {
+"cutout": true,
+"shape": "rod",
+"tags": "metal chain hanging thin",
+"tex": "iron_chain"
+},
 "iron_door": {
 "cutout": true,
 "shape": "door",
@@ -880,6 +1105,14 @@
 "tex": {
 "bottom": "iron_door_bottom",
 "top": "iron_door_top"
+}
+},
+"jukebox": {
+"tags": "wood music",
+"tex": {
+"bottom": "jukebox_side",
+"side": "jukebox_side",
+"top": "jukebox_top"
 }
 },
 "jungle_door": {
@@ -928,8 +1161,8 @@
 },
 "jungle_trapdoor": {
 "cutout": true,
-"shape": "carpet",
-"tags": "jungle wood hatch thin",
+"shape": "trapdoor",
+"tags": "jungle wood hatch plate thin",
 "tex": "jungle_trapdoor"
 },
 "ladder": {
@@ -1009,6 +1242,12 @@
 "tags": "light gray soft fabric",
 "tex": "light_gray_wool"
 },
+"lightning_rod": {
+"cutout": true,
+"shape": "rod",
+"tags": "orange metal antenna pipe thin",
+"tex": "lightning_rod"
+},
 "lily_of_the_valley": {
 "cutout": true,
 "shape": "cross",
@@ -1042,6 +1281,22 @@
 "lime_wool": {
 "tags": "lime soft fabric",
 "tex": "lime_wool"
+},
+"lodestone": {
+"tags": "metal machine",
+"tex": {
+"bottom": "lodestone_top",
+"side": "lodestone_side",
+"top": "lodestone_top"
+}
+},
+"loom": {
+"tags": "workshop fabric",
+"tex": {
+"bottom": "loom_bottom",
+"side": "loom_side",
+"top": "loom_top"
+}
 },
 "magenta_carpet": {
 "shape": "carpet",
@@ -1121,8 +1376,8 @@
 },
 "mangrove_trapdoor": {
 "cutout": true,
-"shape": "carpet",
-"tags": "mangrove wood hatch thin",
+"shape": "trapdoor",
+"tags": "mangrove wood hatch plate thin",
 "tex": "mangrove_trapdoor"
 },
 "melon": {
@@ -1221,6 +1476,10 @@
 "tags": "red",
 "tex": "netherrack"
 },
+"note_block": {
+"tags": "wood music",
+"tex": "note_block"
+},
 "oak_door": {
 "cutout": true,
 "shape": "door",
@@ -1273,9 +1532,17 @@
 },
 "oak_trapdoor": {
 "cutout": true,
-"shape": "carpet",
-"tags": "oak wood hatch thin",
+"shape": "trapdoor",
+"tags": "oak wood hatch plate thin",
 "tex": "oak_trapdoor"
+},
+"observer": {
+"tags": "machine mechanical",
+"tex": {
+"bottom": "observer_top",
+"side": "observer_side",
+"top": "observer_top"
+}
 },
 "obsidian": {
 "tags": "black purple",
@@ -1321,9 +1588,75 @@
 "tags": "white flower",
 "tex": "oxeye_daisy"
 },
+"oxidized_chiseled_copper": {
+"tags": "teal green metal ornament",
+"tex": "oxidized_chiseled_copper"
+},
 "oxidized_copper": {
 "tags": "teal green metal roof",
 "tex": "oxidized_copper"
+},
+"oxidized_copper_bars": {
+"cutout": true,
+"shape": "pane",
+"tags": "green metal thin railing",
+"tex": "oxidized_copper_bars"
+},
+"oxidized_copper_bulb": {
+"tags": "green metal light lamp glow",
+"tex": "oxidized_copper_bulb_lit"
+},
+"oxidized_copper_chain": {
+"cutout": true,
+"shape": "rod",
+"tags": "green metal chain hanging thin",
+"tex": "oxidized_copper_chain"
+},
+"oxidized_copper_door": {
+"cutout": true,
+"shape": "door",
+"tags": "green metal entrance",
+"tex": {
+"bottom": "oxidized_copper_door_bottom",
+"top": "oxidized_copper_door_top"
+}
+},
+"oxidized_copper_grate": {
+"cutout": true,
+"tags": "green metal mesh vent",
+"tex": "oxidized_copper_grate"
+},
+"oxidized_copper_lantern": {
+"cutout": true,
+"shape": "lantern",
+"tags": "green light hanging small",
+"tex": "oxidized_copper_lantern"
+},
+"oxidized_copper_trapdoor": {
+"cutout": true,
+"shape": "trapdoor",
+"tags": "green metal hatch plate thin",
+"tex": "oxidized_copper_trapdoor"
+},
+"oxidized_cut_copper": {
+"tags": "teal green metal roof",
+"tex": "oxidized_cut_copper"
+},
+"oxidized_cut_copper_slab": {
+"shape": "slab",
+"tags": "teal green metal roof half",
+"tex": "oxidized_cut_copper"
+},
+"oxidized_cut_copper_stairs": {
+"shape": "stairs",
+"tags": "teal green metal roof roof steps",
+"tex": "oxidized_cut_copper"
+},
+"oxidized_lightning_rod": {
+"cutout": true,
+"shape": "rod",
+"tags": "green metal antenna pipe thin",
+"tex": "oxidized_lightning_rod"
 },
 "packed_ice": {
 "tags": "blue winter",
@@ -1367,6 +1700,14 @@
 "tags": "pink soft fabric",
 "tex": "pink_wool"
 },
+"piston": {
+"tags": "machine mechanical",
+"tex": {
+"bottom": "piston_bottom",
+"side": "piston_side",
+"top": "piston_top"
+}
+},
 "podzol": {
 "tags": "brown ground forest",
 "tex": {
@@ -1388,6 +1729,14 @@
 "shape": "stairs",
 "tags": "gray smooth roof steps",
 "tex": "polished_andesite"
+},
+"polished_basalt": {
+"shape": "log",
+"tags": "dark gray smooth column pillar",
+"tex": {
+"side": "polished_basalt_side",
+"top": "polished_basalt_top"
+}
 },
 "polished_blackstone": {
 "tags": "black smooth",
@@ -1468,6 +1817,25 @@
 "shape": "stairs",
 "tags": "pink red smooth roof steps",
 "tex": "polished_granite"
+},
+"polished_tuff": {
+"tags": "gray smooth",
+"tex": "polished_tuff"
+},
+"polished_tuff_slab": {
+"shape": "slab",
+"tags": "gray smooth half",
+"tex": "polished_tuff"
+},
+"polished_tuff_stairs": {
+"shape": "stairs",
+"tags": "gray smooth roof steps",
+"tex": "polished_tuff"
+},
+"polished_tuff_wall": {
+"shape": "wall",
+"tags": "gray smooth low fence parapet",
+"tex": "polished_tuff"
 },
 "poppy": {
 "cutout": true,
@@ -1596,6 +1964,10 @@
 "top": "quartz_block_top"
 }
 },
+"raw_copper_block": {
+"tags": "orange rough metal ore",
+"tex": "raw_copper_block"
+},
 "red_carpet": {
 "shape": "carpet",
 "tags": "red rug floor thin",
@@ -1692,6 +2064,10 @@
 "tags": "red",
 "tex": "redstone_block"
 },
+"redstone_lamp": {
+"tags": "yellow light lamp glow",
+"tex": "redstone_lamp_on"
+},
 "sand": {
 "tags": "yellow beach desert",
 "tex": "sand"
@@ -1747,6 +2123,36 @@
 "shroomlight": {
 "tags": "orange light glow lamp",
 "tex": "shroomlight"
+},
+"smithing_table": {
+"tags": "workshop tools",
+"tex": {
+"bottom": "smithing_table_bottom",
+"side": "smithing_table_side",
+"top": "smithing_table_top"
+}
+},
+"smoker": {
+"tags": "wood oven fire machine",
+"tex": {
+"bottom": "smoker_bottom",
+"side": "smoker_front_on",
+"top": "smoker_top"
+}
+},
+"smooth_basalt": {
+"tags": "dark gray smooth",
+"tex": "smooth_basalt"
+},
+"smooth_basalt_slab": {
+"shape": "slab",
+"tags": "dark gray smooth half",
+"tex": "smooth_basalt"
+},
+"smooth_basalt_stairs": {
+"shape": "stairs",
+"tags": "dark gray smooth roof steps",
+"tex": "smooth_basalt"
 },
 "smooth_quartz": {
 "tags": "white smooth marble",
@@ -1879,8 +2285,8 @@
 },
 "spruce_trapdoor": {
 "cutout": true,
-"shape": "carpet",
-"tags": "spruce wood hatch thin",
+"shape": "trapdoor",
+"tags": "spruce wood hatch plate thin",
 "tex": "spruce_trapdoor"
 },
 "stone": {
@@ -1989,6 +2395,14 @@
 "#79c05a"
 ]
 },
+"target": {
+"tags": "red white circle",
+"tex": {
+"bottom": "target_top",
+"side": "target_side",
+"top": "target_top"
+}
+},
 "terracotta": {
 "tags": "orange brown clay roof",
 "tex": "terracotta"
@@ -2006,6 +2420,40 @@
 },
 "tuff": {
 "tags": "gray rock",
+"tex": "tuff"
+},
+"tuff_brick_slab": {
+"shape": "slab",
+"tags": "gray brick half",
+"tex": "tuff_bricks"
+},
+"tuff_brick_stairs": {
+"shape": "stairs",
+"tags": "gray brick roof steps",
+"tex": "tuff_bricks"
+},
+"tuff_brick_wall": {
+"shape": "wall",
+"tags": "gray brick low fence parapet",
+"tex": "tuff_bricks"
+},
+"tuff_bricks": {
+"tags": "gray brick",
+"tex": "tuff_bricks"
+},
+"tuff_slab": {
+"shape": "slab",
+"tags": "gray rock half",
+"tex": "tuff"
+},
+"tuff_stairs": {
+"shape": "stairs",
+"tags": "gray rock roof steps",
+"tex": "tuff"
+},
+"tuff_wall": {
+"shape": "wall",
+"tags": "gray rock low fence parapet",
 "tex": "tuff"
 },
 "warped_fence": {
@@ -2036,9 +2484,75 @@
 ],
 "transparent": true
 },
+"weathered_chiseled_copper": {
+"tags": "teal metal ornament",
+"tex": "weathered_chiseled_copper"
+},
 "weathered_copper": {
 "tags": "teal metal",
 "tex": "weathered_copper"
+},
+"weathered_copper_bars": {
+"cutout": true,
+"shape": "pane",
+"tags": "teal metal thin railing",
+"tex": "weathered_copper_bars"
+},
+"weathered_copper_bulb": {
+"tags": "teal metal light lamp glow",
+"tex": "weathered_copper_bulb_lit"
+},
+"weathered_copper_chain": {
+"cutout": true,
+"shape": "rod",
+"tags": "teal metal chain hanging thin",
+"tex": "weathered_copper_chain"
+},
+"weathered_copper_door": {
+"cutout": true,
+"shape": "door",
+"tags": "teal metal entrance",
+"tex": {
+"bottom": "weathered_copper_door_bottom",
+"top": "weathered_copper_door_top"
+}
+},
+"weathered_copper_grate": {
+"cutout": true,
+"tags": "teal metal mesh vent",
+"tex": "weathered_copper_grate"
+},
+"weathered_copper_lantern": {
+"cutout": true,
+"shape": "lantern",
+"tags": "teal light hanging small",
+"tex": "weathered_copper_lantern"
+},
+"weathered_copper_trapdoor": {
+"cutout": true,
+"shape": "trapdoor",
+"tags": "teal metal hatch plate thin",
+"tex": "weathered_copper_trapdoor"
+},
+"weathered_cut_copper": {
+"tags": "teal metal",
+"tex": "weathered_cut_copper"
+},
+"weathered_cut_copper_slab": {
+"shape": "slab",
+"tags": "teal metal half",
+"tex": "weathered_cut_copper"
+},
+"weathered_cut_copper_stairs": {
+"shape": "stairs",
+"tags": "teal metal roof steps",
+"tex": "weathered_cut_copper"
+},
+"weathered_lightning_rod": {
+"cutout": true,
+"shape": "rod",
+"tags": "teal metal antenna pipe thin",
+"tex": "weathered_lightning_rod"
 },
 "white_carpet": {
 "shape": "carpet",

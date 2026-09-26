@@ -110,10 +110,10 @@ const TANGENTS: { u: [number, number, number]; v: [number, number, number] }[] =
   { u: [1, 0, 0], v: [0, 1, 0] },
   { u: [-1, 0, 0], v: [0, 1, 0] },
 ];
-const SHADE = [0.6, 0.6, 1.0, 0.5, 0.8, 0.8];
+const SHADE = [0.92, 0.92, 1.0, 0.8, 0.96, 0.96];
 /** Which box coordinate lies on the cell boundary for each face direction. */
 const FACE_EDGE = [3, 0, 4, 1, 5, 2];
-const AO_LEVELS = [0.45, 0.65, 0.85, 1.0];
+const AO_LEVELS = [0.58, 0.72, 0.86, 1.0];
 
 type Box16 = [number, number, number, number, number, number];
 const FULL: Box16 = [0, 0, 0, 16, 16, 16];
@@ -189,7 +189,21 @@ function shapeBoxes(world: VoxelWorld, s: State, x: number, y: number, z: number
     case "lantern":
       return [[5, 0, 5, 11, 7, 11], [6, 7, 6, 10, 9, 10]];
     case "carpet":
-      return [[0, 0, 0, 16, s.name.includes("trapdoor") ? 3 : 1, 16]];
+      return [[0, 0, 0, 16, 1, 16]];
+    case "rod":
+      return [[6, 0, 6, 10, 16, 10]];
+    case "trapdoor": {
+      if (s.props.open === "true") {
+        const plates: Record<string, Box16> = {
+          north: [0, 0, 13, 16, 16, 16],
+          south: [0, 0, 0, 16, 16, 3],
+          east: [0, 0, 0, 3, 16, 16],
+          west: [13, 0, 0, 16, 16, 16],
+        };
+        return [plates[s.props.facing ?? "north"]];
+      }
+      return s.props.half === "top" ? [[0, 13, 0, 16, 16, 16]] : [[0, 0, 0, 16, 3, 16]];
+    }
     case "door": {
       const panels: Record<string, Box16> = {
         north: [0, 0, 13, 16, 16, 16],
@@ -242,9 +256,9 @@ export interface Materials {
 export function makeMaterials(atlas: Atlas): Materials {
   const map = atlas.texture;
   return {
-    opaque: new THREE.MeshBasicMaterial({ map, vertexColors: true }),
-    cutout: new THREE.MeshBasicMaterial({ map, vertexColors: true, alphaTest: 0.5, side: THREE.DoubleSide }),
-    transparent: new THREE.MeshBasicMaterial({ map, vertexColors: true, transparent: true, opacity: 0.85, depthWrite: false }),
+    opaque: new THREE.MeshLambertMaterial({ map, vertexColors: true }),
+    cutout: new THREE.MeshLambertMaterial({ map, vertexColors: true, alphaTest: 0.5, side: THREE.DoubleSide }),
+    transparent: new THREE.MeshLambertMaterial({ map, vertexColors: true, transparent: true, opacity: 0.85, depthWrite: false }),
   };
 }
 
@@ -284,7 +298,8 @@ export function buildMeshes(world: VoxelWorld, atlas: Atlas, materials: Material
       return axis[k] > 0 ? p[k] - cell : cell + 1 - p[k];
     };
     const [tu0, tv0, tu1, tv1] = atlas.uv(texKey(faceTex(s, dir)));
-    const fu0 = frac(u, p0), fu1 = frac(u, p1), fv0 = frac(v, p0), fv1 = frac(v, p3);
+    let fu0 = frac(u, p0), fu1 = frac(u, p1), fv0 = frac(v, p0), fv1 = frac(v, p3);
+    if (s.info.shape === "rod") [fu0, fu1, fv0, fv1] = [0, 0.25, 0, 1];
     const U = (f: number) => tu0 + (tu1 - tu0) * f;
     const V = (f: number) => tv0 + (tv1 - tv0) * f;
     const uv = [[U(fu0), V(fv0)], [U(fu1), V(fv0)], [U(fu1), V(fv1)], [U(fu0), V(fv1)]];
@@ -329,7 +344,7 @@ export function buildMeshes(world: VoxelWorld, atlas: Atlas, materials: Material
             const n = NORMALS[dir];
             const neighbour = world.get(x + n[0], y + n[1], z + n[2]);
             const flush = box[FACE_EDGE[dir]] === (dir % 2 === 0 ? 16 : 0);
-            const same = neighbour.name === s.name && full && (s.info.transparent || s.info.cutout);
+            const same = neighbour.name === s.name && (s.info.transparent || s.info.cutout);
             if (flush && (isFullOpaque(neighbour) || same)) continue;
             emit(kind, s, x, y, z, box, dir as Dir, full);
           }

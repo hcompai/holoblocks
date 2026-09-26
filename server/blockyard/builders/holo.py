@@ -32,7 +32,9 @@ Each step is JavaScript with these functions:
 "walls" (four sides, no floor or ceiling).
   set(x, y, z, block) places one block. clear(x0, y0, z0, x1, y1, z1) removes blocks. log(text) reports back to you.
   Loops and Math are available; there are no other globals. Later calls overwrite earlier ones, so fill a solid box \
-then clear the inside, or fill a wall then set windows into it.
+then clear the inside, or fill a wall then set windows into it. A fill also overwrites earlier steps' blocks in its \
+box, so lay out ground, water and paths before the buildings, or fill them only where nothing stands (a moat is four \
+strips around the walls, not a slab across the site).
 - Call look every 3 or 4 steps. Compare the render with the reference photos and your plan: name what is off \
 (proportions, missing features, floating parts, flat facades, wrong colors), fix it with clear and new steps or \
 undo_step, then continue.
@@ -47,9 +49,11 @@ lamps and small props. Vary the ground with dirt paths, gravel, grass and flower
 slabs for the ridge and eaves, an overhang of one block. Never leave a box with a flat lid.
 - Facades need depth: pillars or corner blocks in a contrasting material, window sills with slabs, a plinth of a \
 darker block, battlements of alternating blocks and slabs, lanterns and torches.
-- Use block states for shapes: stairs take [facing=north|south|east|west] (the side the low step faces toward, \
-also half=top for upside down), slabs take [type=bottom|top|double], logs take [axis=x|y|z] for horizontal beams. \
-Doors take [facing=...] and fill two blocks by themselves. Fences, walls and panes connect on their own.
+- Use block states for shapes: stairs take [facing=north|south|east|west] (facing points from the low step to the tall half, so \
+roof stairs face the ridge: the south eave uses facing=north, the east eave facing=west; half=top for upside down), slabs take [type=bottom|top|double], logs take [axis=x|y|z] for horizontal beams. \
+Doors take [facing=...] and fill two blocks by themselves. Trapdoors are thin plates: [half=top] under a ceiling, or \
+[open=true,facing=south] for a shutter standing flat against the south face of a wall (facing is the side the plate \
+shows). Chains and lightning rods are thin vertical rods. Fences, walls and panes connect on their own.
 - Trees: a log trunk 4 to 6 tall, a leaves ball two blocks wider than the trunk, a smaller ball on top.
 
 Coordinates
@@ -148,6 +152,7 @@ class HoloBuilder:
         transport: httpx.AsyncBaseTransport | None = None,
     ):
         self.name = "holo"
+        self.label = "Holo"
         self.model = model
         self.url = f"{base_url.rstrip('/')}/chat/completions"
         self.api_key = api_key

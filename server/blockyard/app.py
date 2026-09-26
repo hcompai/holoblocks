@@ -9,12 +9,14 @@ from contextlib import suppress
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from blockyard import blocks
 from blockyard.builders import BUILDERS
+from blockyard.builders.scripted import ScriptedBuilder
 from blockyard.model import Build
 from blockyard.session import Session, Store
 from blockyard.workbench import Workbench
@@ -35,6 +37,7 @@ class Say(BaseModel):
 store = Store()
 sessions: dict[str, Session] = {}
 app = FastAPI(title="Blockyard")
+app.add_middleware(GZipMiddleware, minimum_size=1024)
 
 
 def session_for(build_id: str) -> Session:
@@ -69,8 +72,8 @@ def start(session: Session, request: str) -> None:
 
 
 @app.get("/api/builders")
-def builders() -> list[str]:
-    return list(BUILDERS)
+def builders() -> list[dict]:
+    return [{"name": b.name, "label": b.label, "showcase": isinstance(b, ScriptedBuilder)} for b in BUILDERS.values()]
 
 
 @app.get("/api/blocks")
@@ -185,4 +188,9 @@ def main() -> None:
     import uvicorn
 
     with suppress(KeyboardInterrupt):
-        uvicorn.run(app, host="127.0.0.1", port=int(os.environ.get("BLOCKYARD_PORT", "8000")))
+        uvicorn.run(
+            app,
+            host="127.0.0.1",
+            port=int(os.environ.get("BLOCKYARD_PORT", "8000")),
+            timeout_graceful_shutdown=3,
+        )

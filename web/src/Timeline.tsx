@@ -1,3 +1,4 @@
+import { PauseIcon, PlayIcon, SkipBackIcon, SkipForwardIcon } from "@phosphor-icons/react";
 import type { CSSProperties } from "react";
 import type { Build } from "./api";
 
@@ -27,7 +28,7 @@ export function Timeline({ build, step, playing, speed, onStep, onPlay, onSpeed 
   return (
     <div className="timeline">
       <button className="icon" disabled={!steps.length} onClick={() => onStep(0)} title="First step">
-        ⏮
+        <SkipBackIcon size={16} weight="fill" />
       </button>
       <button
         className="play"
@@ -38,10 +39,10 @@ export function Timeline({ build, step, playing, speed, onStep, onPlay, onSpeed 
         }}
         title={playing ? "Pause" : "Play"}
       >
-        {playing ? "❚❚" : "▶"}
+        {playing ? <PauseIcon size={14} weight="fill" /> : <PlayIcon size={14} weight="fill" />}
       </button>
       <button className="icon" disabled={current >= last} onClick={() => onStep(last)} title="Last step">
-        ⏭
+        <SkipForwardIcon size={16} weight="fill" />
       </button>
       <div className="speeds">
         {SPEEDS.map((s) => (

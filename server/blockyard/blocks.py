@@ -16,6 +16,7 @@ STATE_KEYS = {
     "slab": {"type": {"top", "bottom", "double"}},
     "log": {"axis": {"x", "y", "z"}},
     "door": {"facing": {"north", "south", "east", "west"}, "half": {"lower", "upper"}},
+    "trapdoor": {"facing": {"north", "south", "east", "west"}, "half": {"top", "bottom"}, "open": {"true", "false"}},
 }
 
 

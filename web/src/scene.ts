@@ -28,6 +28,45 @@ export interface Site {
 }
 
 /** Three.js scene showing a build's blocks up to a step, remeshed whenever either changes. */
+const SKY = { zenith: 0x0d1018, horizon: 0x2c3247, ground: 0x0a0b10 };
+
+function skyDome(): THREE.Mesh {
+  const material = new THREE.ShaderMaterial({
+    side: THREE.BackSide,
+    depthWrite: false,
+    uniforms: {
+      zenith: { value: new THREE.Color(SKY.zenith) },
+      horizon: { value: new THREE.Color(SKY.horizon) },
+      ground: { value: new THREE.Color(SKY.ground) },
+    },
+    vertexShader: `
+      varying vec3 vDir;
+      void main() {
+        vDir = normalize(position);
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }`,
+    fragmentShader: `
+      uniform vec3 zenith; uniform vec3 horizon; uniform vec3 ground;
+      varying vec3 vDir;
+      void main() {
+        float h = vDir.y;
+        vec3 up = mix(horizon, zenith, pow(clamp(h, 0.0, 1.0), 0.6));
+        vec3 down = mix(horizon, ground, pow(clamp(-h, 0.0, 1.0), 0.35));
+        gl_FragColor = vec4(h >= 0.0 ? up : down, 1.0);
+      }`,
+  });
+  const dome = new THREE.Mesh(new THREE.SphereGeometry(3000, 32, 16), material);
+  dome.frustumCulled = false;
+  dome.renderOrder = -1;
+  return dome;
+}
+
+const LIGHTS: [number, number, number, number, number][] = [
+  [-6, 10, 8, 2.2, 0xfff4e0],
+  [8, 6, -6, 0.5, 0xcfe3ff],
+  [10, 7, 10, 0.3, 0xffffff],
+];
+
 export class BlockScene {
   private renderer: THREE.WebGLRenderer;
   private scene = new THREE.Scene();
@@ -36,12 +75,15 @@ export class BlockScene {
   private meshes: THREE.Group | null = null;
   private atlas: Atlas | null = null;
   private materials: Materials | null = null;
+  private lights: THREE.DirectionalLight[] = [];
+  private sun!: THREE.DirectionalLight;
   private palette: Palette | null = null;
   private site: Site | null = null;
   private step = Infinity;
   private world: VoxelWorld | null = null;
   private resizeObserver: ResizeObserver;
   private frame = 0;
+  private dirty = true;
   /** Set once the user orbits or zooms, so live framing stops fighting them. */
   userMoved = false;
   /** Resolves once textures are loaded and the first world can be meshed. */
@@ -52,10 +94,28 @@ export class BlockScene {
     private container: HTMLElement,
     palette: Promise<Palette>,
   ) {
-    this.renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+    this.renderer = new THREE.WebGLRenderer({ antialias: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     container.appendChild(this.renderer.domElement);
-    this.scene.background = new THREE.Color(0xeef1f4);
+    this.scene.add(skyDome());
+    this.scene.fog = new THREE.Fog(SKY.horizon, 140, 420);
+    this.scene.add(new THREE.AmbientLight(0xffffff, 0.8));
+    this.scene.add(new THREE.HemisphereLight(0xdfe8ff, 0x8a7a66, 0.6));
+    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.shadowMap.autoUpdate = false;
+    for (const [x, y, z, intensity, color] of LIGHTS) {
+      const light = new THREE.DirectionalLight(color, intensity);
+      light.position.set(x, y, z);
+      this.scene.add(light);
+      this.lights.push(light);
+    }
+    this.sun = this.lights[0];
+    this.sun.castShadow = true;
+    this.sun.shadow.mapSize.set(4096, 4096);
+    this.sun.shadow.bias = -0.0004;
+    this.sun.shadow.normalBias = 0.03;
+    this.scene.add(this.sun.target);
 
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableDamping = true;
@@ -75,7 +135,8 @@ export class BlockScene {
     this.frameView("iso", 64, 64);
     const tick = () => {
       this.frame = requestAnimationFrame(tick);
-      this.controls.update();
+      if (!this.controls.update() && !this.dirty) return;
+      this.dirty = false;
       this.renderer.render(this.scene, this.camera);
     };
     tick();
@@ -95,6 +156,7 @@ export class BlockScene {
     this.renderer.setSize(w, h);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
+    this.dirty = true;
   }
 
   /** Show this site's boxes up to `step`. */
@@ -111,17 +173,40 @@ export class BlockScene {
       this.meshes = null;
     }
     this.world = null;
+    this.dirty = true;
+    this.renderer.shadowMap.needsUpdate = true;
     if (!this.site || !this.palette || !this.atlas || !this.materials) return;
     const { width, height, depth, boxes } = this.site;
     this.world = new VoxelWorld(width, height, depth, this.palette);
     this.world.apply(boxes, this.step);
     this.meshes = buildMeshes(this.world, this.atlas, this.materials);
+    this.meshes.traverse((o) => {
+      if (!(o instanceof THREE.Mesh)) return;
+      o.receiveShadow = true;
+      o.castShadow = !(o.material as THREE.Material).transparent;
+    });
     this.scene.add(this.meshes);
+    this.aimLights(width, height, depth);
     this.onWorld?.(this.world);
   }
 
-  currentWorld(): VoxelWorld | null {
-    return this.world;
+  private aimLights(width: number, height: number, depth: number) {
+    const center = new THREE.Vector3(width / 2, 0, depth / 2);
+    const reach = Math.max(width, depth, height);
+    for (const [i, light] of this.lights.entries()) {
+      const [x, y, z] = LIGHTS[i];
+      light.position.set(x, y, z).normalize().multiplyScalar(reach * 2).add(center);
+      light.target.position.copy(center);
+    }
+    const cam = this.sun.shadow.camera;
+    const half = Math.hypot(width, depth) / 2 + 2;
+    cam.left = -half;
+    cam.right = half;
+    cam.top = half;
+    cam.bottom = -half;
+    cam.near = reach * 0.5;
+    cam.far = reach * 3.5;
+    cam.updateProjectionMatrix();
   }
 
   setSpin(spin: boolean) {
@@ -140,13 +225,14 @@ export class BlockScene {
     const halfFov = THREE.MathUtils.degToRad(this.camera.fov / 2);
     const fitHeight = radius / Math.tan(halfFov);
     const fitWidth = radius / (Math.tan(halfFov) * this.camera.aspect);
-    const distance = Math.max(fitHeight, fitWidth) * 0.8;
+    const distance = Math.max(fitHeight, fitWidth) * 0.7;
     this.camera.position.copy(center).addScaledVector(VIEW_DIRECTIONS[view], distance);
     this.camera.near = Math.max(0.1, distance / 100);
     this.camera.far = distance * 100;
     this.camera.updateProjectionMatrix();
     this.controls.target.copy(center);
     this.controls.update();
+    this.dirty = true;
   }
 
   /** Square renders of the whole model into a 2D canvas, leaving the user's camera and timeline untouched. */
@@ -175,9 +261,9 @@ export class BlockScene {
       ctx.drawImage(this.renderer.domElement, tile.x, tile.y, size, size);
       if (tile.label) {
         ctx.font = "600 15px system-ui, sans-serif";
-        ctx.fillStyle = "#333";
+        ctx.fillStyle = "#e8e8f0";
         ctx.fillText(tile.label, tile.x + 10, tile.y + 22);
-        ctx.strokeStyle = "#d0d0cc";
+        ctx.strokeStyle = "#3a3f52";
         ctx.strokeRect(tile.x + 0.5, tile.y + 0.5, size - 1, size - 1);
       }
     }
