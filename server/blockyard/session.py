@@ -7,9 +7,12 @@ import os
 import uuid
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 from blockyard.model import Box, Build, Message, Step
+
+if TYPE_CHECKING:
+    from blockyard.renderer import Renderer
 
 DATA = Path(os.environ.get("BLOCKYARD_DATA", Path(__file__).resolve().parents[2] / "data"))
 SIDES = ("front", "front-right", "right", "back-right", "back", "back-left", "left", "front-left")
@@ -38,6 +41,7 @@ class Store:
     def __init__(self, root: Path = DATA):
         self.root = root / "builds"
         self.root.mkdir(parents=True, exist_ok=True)
+        self._summaries: dict[str, tuple[int, dict]] = {}
 
     def save(self, build: Build) -> None:
         path = self.root / f"{build.id}.json"
@@ -67,18 +71,33 @@ class Store:
         builds = [Build.model_validate_json(p.read_text()) for p in self.root.glob("*.json")]
         return sorted(builds, key=lambda b: -b.created)
 
+    def summaries(self) -> list[dict]:
+        """Every build's summary, newest first; a build is parsed again only when its file changed."""
+        out = []
+        for path in self.root.glob("*.json"):
+            mtime = path.stat().st_mtime_ns
+            cached = self._summaries.get(path.name)
+            if cached is None or cached[0] != mtime:
+                cached = self._summaries[path.name] = (mtime, Build.model_validate_json(path.read_text()).summary())
+            out.append(cached[1])
+        return sorted(out, key=lambda s: -s["created"])
+
 
 class Session:
-    def __init__(self, build: Build, store: Store):
+    def __init__(self, build: Build, store: Store, renderer: Renderer | None = None):
         self.build = build
         self.store = store
+        self.renderer = renderer
         self.subscribers: set[asyncio.Queue[dict]] = set()
         self.task: asyncio.Task | None = None
-        self.renders: dict[str, asyncio.Future[bytes]] = {}
+        self.renders: dict[str, tuple[dict, asyncio.Future[bytes]]] = {}
         self.lock = asyncio.Lock()
 
     def subscribe(self) -> asyncio.Queue[dict]:
+        """A queue of the build's events, starting with the renders still waiting for a viewer."""
         queue: asyncio.Queue[dict] = asyncio.Queue()
+        for event, _ in self.renders.values():
+            queue.put_nowait(event)
         self.subscribers.add(queue)
         return queue
 
@@ -98,10 +117,11 @@ class Session:
     async def step(self, title: str, boxes: list[Box], code: str = "", key: str | None = None) -> Step:
         """Add boxes as one step of the build; they overwrite whatever earlier steps put there."""
         step = Step(index=len(self.build.steps), title=title, code=code, key=key)
-        placed = [b.model_copy(update={"step": step.index}) for b in boxes]
+        for b in boxes:
+            b.step = step.index
         self.build.steps.append(step)
-        self.build.boxes += placed
-        self._publish({"type": "step", "step": step.model_dump(), "boxes": [b.model_dump() for b in placed]})
+        self.build.boxes += boxes
+        self._publish({"type": "step", "step": step.model_dump(), "boxes": [b.model_dump() for b in boxes]})
         await asyncio.sleep(0)
         return step
 
@@ -117,12 +137,15 @@ class Session:
             queue.put_nowait({"type": "thinking", "text": text, "reset": reset})
 
     async def render(self, timeout: float = 30, box: list[int] | None = None, view: View = FOUR_VIEWS) -> bytes | None:
-        """Ask an open viewer to render the model, or `box` (x0, y0, z0, x1, y1, z1) of it; None when none answers."""
+        """Ask a viewer to render the model, or `box` (x0, y0, z0, x1, y1, z1) of it; None when none answers."""
+        if self.renderer is not None:
+            await self.renderer.watch(self.build.id)
         request = uuid.uuid4().hex[:8]
+        event = {"type": "render", "request": request, "box": box} | asdict(view)
         future: asyncio.Future[bytes] = asyncio.get_running_loop().create_future()
-        self.renders[request] = future
+        self.renders[request] = (event, future)
         for queue in self.subscribers:
-            queue.put_nowait({"type": "render", "request": request, "box": box} | asdict(view))
+            queue.put_nowait(event)
         try:
             return await asyncio.wait_for(future, timeout)
         except TimeoutError:
@@ -131,7 +154,7 @@ class Session:
             self.renders.pop(request, None)
 
     def deliver_render(self, request: str, png: bytes) -> bool:
-        future = self.renders.get(request)
+        _, future = self.renders.get(request, (None, None))
         if future is None or future.done():
             return False
         future.set_result(png)

@@ -8,7 +8,7 @@
 ![Blockyard showing the gothic cathedral](docs/blockyard.jpg)
 
 - **Chat** to describe a build; Holo, a sagent agent, writes a Python build script, and every run rebuilds the model, streams the new steps and shows Holo the render.
-- **Every block is checked** against a ~400-block palette and clipped to the 64x64x64 site.
+- **Every block is checked** against a ~400-block palette and clipped to the 128x128 site, 100 blocks tall.
 - **Replay** the steps, read each step's code, browse the blocks, download a WorldEdit `.schem`.
 
 Gallery for the H team: [blockyard-h-company.vercel.app](https://blockyard-h-company.vercel.app) (Vercel login).
@@ -16,7 +16,7 @@ Gallery for the H team: [blockyard-h-company.vercel.app](https://blockyard-h-com
 ## Run
 
 ```bash
-cd server && uv sync && cd ..
+cd server && uv sync && .venv/bin/playwright install chromium-headless-shell && cd ..
 cd web && npm install && npm run build && cd ..
 server/.venv/bin/blockyard                    # http://127.0.0.1:8000
 ```
@@ -27,6 +27,7 @@ Needs Node 20+. Hot reload: `cd web && npm run dev` (http://127.0.0.1:5173).
 | --- | --- |
 | `HAI_ROOT` | unset: only the scripted showcases can build |
 | `HAI_API_KEY`, `HAI_BASE_URL` | for Holo: your key, and `https://api.hcompany.ai/v1/models` |
+| `LINKUP_API_KEY` | for Holo's image search |
 | `HOLO_MODEL` | `holo4-27b` |
 | `BLOCKYARD_PORT` | `8000`, on 127.0.0.1 only (no auth) |
 | `BLOCKYARD_DATA` | `./data` |
@@ -36,19 +37,20 @@ Needs Node 20+. Hot reload: `cd web && npm run dev` (http://127.0.0.1:5173).
 Live building runs on your machine only. The Vercel site is a read-only gallery of finished builds.
 
 ```
-browser tab  <── steps, renders ──>  blockyard server  ── starts ──>  sagent (hai venv), agent/holo.py
-(viewer)                              (FastAPI, :8000)                  │ edits build.py in data/workspaces/<build>
-                                            ▲                           │ shell: blocks run / look / reference
+browser tabs <── steps, renders ──>  blockyard server  ── starts ──>  sagent (hai venv), agent/holo.py
+(yours + a hidden one)                (FastAPI, :8000)                  │ edits build.py in data/workspaces/<build>
+                                            ▲                           │ shell: blocks run / look
                                             └────── HTTP tools API ─────┘
 ```
 
-- Holo is a sagent Forest agent with the managed sandbox tools (`shell`, `write_file`, `search_replace`, ...). It writes `build.py` in plain Python: `step`, `fill`, `set`, `clear` to place blocks, WorldEdit-style patterns (`"70%stone_bricks,30%andesite"`) anywhere a block goes, and `get`, `replace`, `overlay` to read and rework what is placed, with its own functions for roofs, towers, trees and land; `random` is seeded per step, so every run builds the same model. It runs `blocks run`, which rebuilds the model on the server from the first changed step and prints the problems by line. `blocks look` renders the four views or one view from any angle and zoom; `blocks reference` saves Wikipedia photos in the workspace. Images reach Holo through `@@attach PATH` lines, which the shell tool swaps for the image in the same result.
-- Renders come from the open browser tab, so keep the build open while Holo works.
-- sagent comes from a local hai checkout: set `HAI_ROOT` to it, with its venv synced (`cd hai && uv sync`).
+- Holo is a sagent Forest agent with the managed sandbox tools (`shell`, `write_file`, `search_replace`, ...). It writes `build.py` in plain Python: `step`, `fill`, `set`, `clear` to place blocks, WorldEdit-style patterns (`"70%stone_bricks,30%andesite"`) anywhere a block goes, and `get`, `replace`, `overlay` to read and rework what is placed, with its own functions for roofs, towers, trees and land; `random` is seeded per step, so every run builds the same model. It runs `blocks run`, which rebuilds the model on the server from the first changed step and prints the problems by line. `blocks look` renders the four views or one view from any angle and zoom. For references it has `web_search` (Linkup pages, then image URLs) and `view_image`: it downloads the photos it wants into the workspace and looks at them, all through the build. Renders reach Holo through `@@attach PATH` lines, which the shell tool swaps for the image in the same result.
+- Renders come from a hidden Chromium tab the server keeps on each build asking for them, so Holo sees its model with no tab open; without that browser, an open viewer on the build answers instead.
+- sagent comes from a local hai checkout recent enough for Linkup's `include_images`: set `HAI_ROOT` to it, with its venv synced (`cd hai && uv sync`).
 
 ```bash
 export HAI_ROOT=~/code/hai HAI_BASE_URL=https://api.hcompany.ai/v1/models
 export HAI_API_KEY=$(grep '^HAI_API_KEY=' $HAI_ROOT/.env | cut -d= -f2- | tr -d '"')
+export LINKUP_API_KEY=$(grep '^LINKUP_API_KEY=' $HAI_ROOT/.env | cut -d= -f2- | tr -d '"')
 server/.venv/bin/blockyard
 ```
 

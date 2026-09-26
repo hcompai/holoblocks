@@ -18,7 +18,7 @@ class Showcase:
     name: str
     label: str
     intro: str
-    height: int = 64
+    site: tuple[int, int, int] = (64, 64, 64)
 
     @property
     def path(self) -> Path:
@@ -38,9 +38,9 @@ class ScriptedBuilder:
             await session.say("This showcase is scripted and already built; start a new build to see it again.")
             return
         build = session.build
-        build.height = self.showcase.height
+        build.width, build.height, build.depth = self.showcase.site
         code = self.showcase.path.read_text()
-        out = await execute(code, (build.width, build.height, build.depth))
+        out = await execute(code, self.showcase.site)
         if "error" in out:
             raise RuntimeError(f"The {self.showcase.name} script stopped: {out['error']}")
         session.build.script = code

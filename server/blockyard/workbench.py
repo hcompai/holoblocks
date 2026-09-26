@@ -11,9 +11,7 @@ import tempfile
 from collections import Counter
 from dataclasses import dataclass, field
 
-import httpx
-
-from blockyard import blocks, reference
+from blockyard import blocks
 from blockyard.model import Box
 from blockyard.session import Session, View
 from blockyard.world import World
@@ -27,8 +25,6 @@ MAX_STEP_BLOCKS = 2_000_000
 class Picture:
     data: bytes
     mime: str
-    title: str = ""
-    url: str = ""
 
 
 @dataclass
@@ -220,20 +216,6 @@ class Workbench:
             caption = f"Close-up of x {corners[0]}-{corners[3]}, y {corners[1]}-{corners[4]}, z {corners[2]}-{corners[5]}, showing only the blocks inside: {view.caption()}"
         await self.session.say(note, role="tool", image=self.session.store.save_image(png))
         return Result(summary, images=[Picture(png, "image/png")], kind="render", caption=caption)
-
-    async def find_reference(self, query: str) -> Result:
-        try:
-            photos = await reference.search(query)
-        except (httpx.HTTPError, ValueError) as e:
-            return Result(f"Reference search failed ({e}). Build from what you know.")
-        if not photos:
-            return Result(f"No photos for '{query}'. Try a more common name, or build from what you know.")
-        await self.session.say(f"Found reference photos for '{query}'", role="tool")
-        return Result(
-            f"Found {len(photos)} photos from Wikipedia for '{query}'.",
-            images=[Picture(p.data, p.mime, p.title, p.url) for p in photos],
-            kind="reference",
-        )
 
     async def find_blocks(self, query: str) -> Result:
         hits = blocks.search(query)

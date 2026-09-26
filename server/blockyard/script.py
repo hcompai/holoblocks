@@ -172,40 +172,58 @@ class Script:
     def clear(self, x0, y0, z0, x1, y1, z1) -> None:
         self.fill(x0, y0, z0, x1, y1, z1, "air")
 
-    def get(self, x, y, z) -> str:
-        """The block this script has put at (x, y, z) so far, as written; 'air' where it put none."""
+    def _grid(self) -> dict[tuple[int, int, int], str]:
         if self.grid is None:
             self.grid = {}
             for step in self.steps:
                 for op in step["ops"]:
                     self._paint(op["x0"], op["y0"], op["z0"], op["x1"], op["y1"], op["z1"], op["block"])
-        return self.grid.get(tuple(_ints(x, y, z)), "air")
+        return self.grid
+
+    def _filled(self, xs: range, ys: range, zs: range) -> dict[tuple[int, int], list[int]]:
+        """The heights of the placed blocks in a box, by column, in x, z, y order."""
+        grid, columns = self._grid(), {}
+        if len(xs) * len(ys) * len(zs) <= len(grid):
+            for x in xs:
+                for z in zs:
+                    if column := [y for y in ys if (x, y, z) in grid]:
+                        columns[x, z] = column
+            return columns
+        for x, y, z in grid:
+            if x in xs and y in ys and z in zs:
+                columns.setdefault((x, z), []).append(y)
+        return {key: sorted(columns[key]) for key in sorted(columns)}
+
+    def get(self, x, y, z) -> str:
+        """The block this script has put at (x, y, z) so far, as written; 'air' where it put none."""
+        key = (x, y, z) if type(x) is type(y) is type(z) is int else tuple(_ints(x, y, z))
+        return self._grid().get(key, "air")
 
     def replace(self, x0, y0, z0, x1, y1, z1, mask: str, block: str) -> None:
         """Like WorldEdit's //replace: every block in the box matching `mask` becomes `block` (a pattern too)."""
         (x0, x1), (y0, y1), (z0, z1) = _span(x0, x1), _span(y0, y1), _span(z0, z1)
         match, pattern = _matcher(mask), _pattern(block)
         xs, ys, zs = self._within(x0, y0, z0, x1, y1, z1)
-        for x in xs:
-            for z in zs:
-                cells = [(y, _pick(pattern, x, y, z) if pattern else block) for y in ys if match(self.get(x, y, z))]
-                self._column(x, z, cells)
+        grid = self._grid()
+        columns = {(x, z): ys for x in xs for z in zs} if match("air") else self._filled(xs, ys, zs)
+        for (x, z), heights in columns.items():
+            cells = [
+                (y, _pick(pattern, x, y, z) if pattern else block) for y in heights if match(grid.get((x, y, z), "air"))
+            ]
+            self._column(x, z, cells)
 
     def overlay(self, x0, y0, z0, x1, y1, z1, block: str, on: str = "") -> None:
         """Like WorldEdit's //overlay: `block` on each column's highest block in the box, where open and matching `on`."""
         (x0, x1), (y0, y1), (z0, z1) = _span(x0, x1), _span(y0, y1), _span(z0, z1)
         pattern, match = _pattern(block), _matcher(on) if on else None
-        xs, ys, zs = self._within(x0, y0, z0, x1, y1, z1)
-        for x in xs:
-            for z in zs:
-                top = next((y for y in reversed(ys) if self.get(x, y, z) != "air"), None)
-                if top is None or top + 1 >= self.site[1] or self.get(x, top + 1, z) != "air":
-                    continue
-                if match and not match(self.get(x, top, z)):
-                    continue
-                chosen = _pick(pattern, x, top + 1, z) if pattern else block
-                if chosen != "air":
-                    self._add(x, top + 1, z, x, top + 1, z, chosen)
+        grid = self._grid()
+        for (x, z), heights in self._filled(*self._within(x0, y0, z0, x1, y1, z1)).items():
+            top = heights[-1]
+            if top + 1 >= self.site[1] or (x, top + 1, z) in grid or (match and not match(grid[x, top, z])):
+                continue
+            chosen = _pick(pattern, x, top + 1, z) if pattern else block
+            if chosen != "air":
+                self._add(x, top + 1, z, x, top + 1, z, chosen)
 
 
 def _explain(error: BaseException, code: str) -> str:

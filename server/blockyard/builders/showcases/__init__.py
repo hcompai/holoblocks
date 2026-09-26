@@ -18,6 +18,6 @@ SHOWCASES = [
             "Scripted showcase: a dark gothic cathedral with flying buttresses, rose windows, gargoyles and "
             "two openwork stone spires, built one step at a time."
         ),
-        height=96,
+        site=(64, 96, 64),
     ),
 ]

@@ -130,7 +130,7 @@ column's highest block in the box, only where that block matches `on` if given; 
 Every other shape is your own code on these calls: the example below writes its roofs, round forms, trees, land and \
 walls as plain functions, to copy, vary and outgrow.
 
-Example: a hall with a tower, on a plinth that hugs its walls. Every wall is weathered, windows sit in recesses with \
+Example: a hall with a tower on a 64x64 plot at the northwest corner, on a plinth that hugs its walls. Every wall is weathered, windows sit in recesses with \
 sills and hoods and a lit room behind, buttresses step back as they rise, the ground is patchy with a wandering path \
 and mounds, and no two trees match.
 ```python

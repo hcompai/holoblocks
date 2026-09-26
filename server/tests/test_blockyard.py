@@ -96,6 +96,7 @@ def test_showcases_replay_their_script_step_by_step_told_by_its_comments(tmp_pat
     assert not problems, problems
     told = [m.text for m in messages if m.role == "assistant"][1:-1]
     assert len(steps) == len(told) > 1 and session.build.name == showcase.name
+    assert (session.build.width, session.build.height, session.build.depth) == showcase.site
     for step, text in zip(steps, told, strict=True):
         assert step.code.startswith(f"# {text[:40]}") and not step.code.splitlines()[-1].startswith("#")
     world = Workbench(session).world()
@@ -117,3 +118,15 @@ def test_gallery_exports_the_latest_showcase_runs_with_everything_the_viewer_rea
     assert Build.model_validate_json((out / "builds" / f"{new.id}.json").read_text()).boxes == [stone]
     assert gzip.decompress((out / "builds" / f"{new.id}.schem").read_bytes()).startswith(b"\x0a\x00\x09Schematic")
     assert "stone" in json.loads((out / "blocks.json").read_text())
+
+
+def test_a_viewer_that_opens_late_still_answers_the_waiting_render(tmp_path):
+    async def main():
+        session = Session(Build(), Store(tmp_path))
+        waiting = asyncio.create_task(session.render(timeout=5))
+        await asyncio.sleep(0)
+        request = session.subscribe().get_nowait()["request"]
+        assert session.deliver_render(request, b"png")
+        return await waiting
+
+    assert asyncio.run(main()) == b"png"

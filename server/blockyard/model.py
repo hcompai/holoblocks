@@ -46,9 +46,9 @@ class Build(BaseModel):
     name: str = "Untitled build"
     prompt: str = ""
     builder: str = "demo"
-    width: int = 64
-    depth: int = 64
-    height: int = 64
+    width: int = 128
+    depth: int = 128
+    height: int = 100
     created: float = Field(default_factory=time.time)
     status: Literal["idle", "building", "done", "error"] = "idle"
     boxes: list[Box] = []

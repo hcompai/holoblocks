@@ -22,10 +22,12 @@ from blockyard import blocks
 from blockyard.builders import BUILDERS
 from blockyard.builders.scripted import ScriptedBuilder
 from blockyard.model import Build
+from blockyard.renderer import Renderer
 from blockyard.session import Session, Store
 from blockyard.workbench import Workbench
 
 WEB_DIST = Path(__file__).resolve().parents[2] / "web" / "dist"
+PORT = int(os.environ.get("BLOCKYARD_PORT", "8000"))
 HEARTBEAT_S = 15
 
 
@@ -45,11 +47,11 @@ class AgentSay(BaseModel):
 
 store = Store()
 sessions: dict[str, Session] = {}
+renderer = Renderer(f"http://127.0.0.1:{PORT}") if WEB_DIST.exists() else None
 TOOLS = {
     "run": Workbench.run_script,
     "look": Workbench.look,
     "find": Workbench.find_blocks,
-    "reference": Workbench.find_reference,
     "name": Workbench.rename,
 }
 
@@ -66,6 +68,8 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     for task in running:
         task.cancel()
     await asyncio.gather(*running, return_exceptions=True)
+    if renderer is not None:
+        await renderer.stop()
 
 
 app = FastAPI(title="Blockyard", lifespan=lifespan)
@@ -77,7 +81,7 @@ def session_for(build_id: str) -> Session:
         build = store.load(build_id)
         if build is None:
             raise HTTPException(404, f"no build {build_id}")
-        sessions[build_id] = Session(build, store)
+        sessions[build_id] = Session(build, store, renderer)
     return sessions[build_id]
 
 
@@ -99,6 +103,9 @@ def start(session: Session, request: str) -> None:
         except Exception as e:  # noqa: BLE001
             await session.say(f"Builder failed: {e}", role="system")
             await session.set_status("error")
+        finally:
+            if renderer is not None:
+                await renderer.release(session.build.id)
 
     session.task = asyncio.create_task(run())
 
@@ -115,7 +122,7 @@ def palette() -> dict:
 
 @app.get("/api/builds")
 def list_builds() -> list[dict]:
-    return [b.summary() | {"thumbnail": store.thumbnail(b.id).exists()} for b in store.all()]
+    return [s | {"thumbnail": store.thumbnail(s["id"]).exists()} for s in store.summaries()]
 
 
 @app.post("/api/builds")
@@ -192,10 +199,7 @@ async def call_tool(build_id: str, tool: str, args: dict[str, str]) -> dict:
         "text": result.text,
         "problems": result.problems,
         "caption": result.caption,
-        "images": [
-            {"mime": p.mime, "data": base64.b64encode(p.data).decode(), "title": p.title, "url": p.url}
-            for p in result.images
-        ],
+        "images": [{"mime": p.mime, "data": base64.b64encode(p.data).decode()} for p in result.images],
     }
 
 
@@ -257,6 +261,6 @@ def main() -> None:
         uvicorn.run(
             app,
             host="127.0.0.1",
-            port=int(os.environ.get("BLOCKYARD_PORT", "8000")),
+            port=PORT,
             timeout_graceful_shutdown=3,
         )

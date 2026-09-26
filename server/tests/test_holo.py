@@ -67,12 +67,9 @@ def test_a_script_rebuilds_from_its_first_changed_step_and_names_the_lines_of_it
     assert bench.build.boxes == before and "undefined()" in bench.build.script
 
 
-def test_agents_build_through_the_tools_endpoint_and_keep_every_reference_photo(tmp_path, monkeypatch, capsys):
+def test_agents_build_through_the_tools_endpoint(tmp_path, monkeypatch, capsys):
     from blockyard import app as app_module
-    from blockyard import client, reference
-
-    async def search(query: str) -> list[reference.Photo]:
-        return [reference.Photo(f"{query} {n}", b"jpg", "image/jpeg", f"https://img/{n}.jpg") for n in (1, 2)]
+    from blockyard import client
 
     views = []
 
@@ -83,7 +80,6 @@ def test_agents_build_through_the_tools_endpoint_and_keep_every_reference_photo(
     store = Store(tmp_path)
     monkeypatch.setattr(app_module, "store", store)
     monkeypatch.setattr(Session, "render", render)
-    monkeypatch.setattr(reference, "search", search)
     monkeypatch.chdir(tmp_path)
     build = Build()
     store.save(build)
@@ -100,17 +96,14 @@ def test_agents_build_through_the_tools_endpoint_and_keep_every_reference_photo(
         assert http.post(f"{tools}/run", json={"script": "x"}).status_code == 400
 
         monkeypatch.setattr(client, "call", lambda tool, **args: http.post(f"{tools}/{tool}", json=args).json())
-        for command in (["reference", "Tower"], ["reference", "Bridge"], ["look", "--angle", "-90", "--zoom", "2"]):
-            monkeypatch.setattr(sys, "argv", ["blocks", *command])
-            with pytest.raises(SystemExit) as done:
-                client.main()
-            assert done.value.code == 0
+        monkeypatch.setattr(sys, "argv", ["blocks", "look", "--angle", "-90", "--zoom", "2"])
+        with pytest.raises(SystemExit) as done:
+            client.main()
+        assert done.value.code == 0
     out = capsys.readouterr().out
     assert views[-1] == View(270, 30, 2) and views[0] == FOUR_VIEWS
     assert "Saved view.png. The render: one view from 270 degrees around (left), 30 degrees up, zoom 2x." in out
-    assert "- reference-1.jpg: Tower 1, https://img/1.jpg" in out
-    assert "- reference-4.jpg: Bridge 2, https://img/2.jpg\n@@attach reference-3.jpg\n@@attach reference-4.jpg" in out
-    assert sorted(p.name for p in tmp_path.glob("reference-*")) == [f"reference-{n}.jpg" for n in range(1, 5)]
+    assert (tmp_path / "view.png").read_bytes() == RENDER and out.rstrip().endswith("@@attach view.png")
     assert store.load(build.id).script.startswith('step("Core")')
 
 

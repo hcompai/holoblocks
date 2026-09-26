@@ -225,6 +225,9 @@ export class BlockScene {
   private aimLights(width: number, height: number, depth: number) {
     const center = new THREE.Vector3(width / 2, 0, depth / 2);
     const reach = Math.max(width, depth, height);
+    const span = Math.max(width, depth);
+    this.fog.near = span * 2.2;
+    this.fog.far = span * 6.5;
     for (const [i, light] of this.lights.entries()) {
       const [x, y, z] = LIGHTS[i];
       light.position.set(x, y, z).normalize().multiplyScalar(reach * 2).add(center);
