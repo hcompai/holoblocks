@@ -78,6 +78,8 @@ blocks look                            # the four views again: 3/4 front-right, 
 blocks look --angle 35 --pitch 10      # one large view (view.png): angle around the model, 0 front, 90 right, 180 back; pitch above the horizon, default 30, 0 eye level
 blocks look --angle 180 --zoom 3       # magnified, zoom 1 to 8
 blocks look 56 38 56 72 52 72          # only the blocks in the box x0 y0 z0 x1 y1 z1 (closeup.png); takes --angle and --pitch too
+blocks look --from 64 14 110           # a wide camera at a visitor's eye x y z, turned to the middle, level; --pitch tilts it down (negative: up); takes a box too
+blocks look --angle 90 --out east.png  # any look saved under its own name, to keep several
 blocks find "dark oak"                 # block names matching the words
 ```
 
@@ -114,18 +116,18 @@ The site starts empty: the land is part of the model. The script is plain Python
 
 x runs 0-127 from west (left) to east (right), z runs 0-127 from north (back) to south (front, the side the viewer faces), y is the height from 0.
 
-You can add block states in brackets: stairs [facing=north|south|east|west] (facing points to the tall back of the step; half=top hangs it upside down, for eaves, hoods, corbels and arches; compute facing from geometry, never type it per side: on a roof slope every stair faces the ridge, on a cone the centre), slabs [type=bottom|top|double], logs [axis=x|y|z] for beams, doors [facing=south] (two blocks tall by themselves), trapdoors [open=true,facing=south] for shutters flat against a south face, [half=top] for a thin ledge. Fences, walls, panes and bars connect on their own; iron_chain and end_rod are thin vertical rods. A door on a south wall stands at that wall's z with facing=south. Out of a south wall is +z, into it is -z.
+You can add block states in brackets: stairs [facing=north|south|east|west] (facing points to the tall back of the step; half=top hangs it upside down, for eaves, hoods, corbels and arches; compute facing from geometry, never type it per side: on a roof slope every stair faces the ridge, on a cone the centre), slabs [type=bottom|top|double], logs [axis=x|y|z] for beams, doors [facing=south] (two blocks tall by themselves), trapdoors [open=true,facing=south] for shutters flat against a south face, [half=top] for a thin ledge. Tall plants (tall_grass, large_fern, rose_bush, lilac, peony, sunflower) are two blocks tall by themselves too. vine and glow_lichen are sheets on the sides of their cell set true [north=true,up=true]; a ladder [facing=north] lies on its cell's south side, like an open trapdoor. Fences, walls, panes and bars connect on their own; iron_chain and end_rod are thin vertical rods. A door on a south wall stands at that wall's z with facing=south. Out of a south wall is +z, into it is -z.
 
 ### Available blocks
 
-About 480 of Minecraft's, named as in the game; `blocks find` searches them. They come in families:
+About 750 of Minecraft's, named as in the game; `blocks find` searches them. They come in families:
 - Stone: stone, cobblestone, stone_bricks, deepslate, tuff, andesite, granite, diorite, calcite, blackstone, basalt, sandstone, red_sandstone, bricks, mud_bricks, quartz_block, prismarine, nether_bricks, purpur_block, end_stone_bricks. Variants: polished_, smooth_, cut_, chiseled_, mossy_, cracked_ (polished_andesite, smooth_sandstone, mossy_cobblestone, cracked_deepslate_tiles). Most take _stairs and _slab, the walling stones _wall too, with "bricks" singular: stone_brick_stairs, mud_brick_wall, polished_blackstone_brick_slab.
-- Wood: oak, spruce, birch, dark_oak, jungle, acacia, mangrove, cherry, each with _planks, _log, stripped_ _log, _stairs, _slab, _fence, _door, _trapdoor, _leaves (spruce_log, stripped_cherry_log, dark_oak_trapdoor); bamboo, crimson and warped have planks, stairs, slab and fence only.
-- Colors: white, light_gray, gray, black, brown, red, orange, yellow, lime, green, cyan, light_blue, blue, purple, magenta, pink, each with _wool, _concrete, _terracotta, _stained_glass, _stained_glass_pane, _carpet (cyan_terracotta, red_stained_glass_pane); plain terracotta, glass and glass_pane too.
+- Wood: oak, spruce, birch, dark_oak, jungle, acacia, mangrove, cherry, pale_oak, each with _planks, _log, _wood (bark on all sides), stripped_ _log and _wood, _stairs, _slab, _fence, _door, _trapdoor, _leaves (spruce_log, stripped_cherry_wood, dark_oak_trapdoor); crimson and warped have _stem and _hyphae for log and wood; bamboo has bamboo_block.
+- Colors: white, light_gray, gray, black, brown, red, orange, yellow, lime, green, cyan, light_blue, blue, purple, magenta, pink, each with _wool, _concrete, _concrete_powder, _terracotta, _glazed_terracotta, _stained_glass, _stained_glass_pane, _carpet (cyan_terracotta, red_stained_glass_pane); plain terracotta, glass and glass_pane too.
 - Copper, in four ages: copper_block, exposed_copper, weathered_copper, oxidized_copper, and the same age prefix on cut_copper (with stairs and slab), chiseled_copper, copper_grate, copper_bulb, copper_door, copper_trapdoor, copper_bars, copper_chain, copper_lantern, lightning_rod (oxidized_cut_copper_stairs, weathered_copper_grate).
-- Ground and plants: grass_block, dirt, coarse_dirt, podzol, dirt_path, mud, packed_mud, sand, red_sand, gravel, clay, moss_block, snow, snow_block, ice, packed_ice, water, lava; short_grass, fern, sugar_cane, dead_bush, poppy, cornflower, oxeye_daisy, red_tulip, oak_sapling.
-- Light and props: lantern, soul_lantern, torch, sea_lantern, glowstone, shroomlight, redstone_lamp, end_rod, iron_chain, iron_bars; barrel, bookshelf, anvil, cauldron, furnace, loom, hay_block, pumpkin, melon, gold_block, amethyst_block.
-- Not here: signs, buttons, fence gates, beds, banners, glazed terracotta, concrete powder, waxed copper.
+- Ground and plants: grass_block, dirt, coarse_dirt, podzol, dirt_path, mud, packed_mud, sand, red_sand, gravel, clay, moss_block, snow, snow_block, ice, packed_ice, water, lava; short_grass, fern, tall_grass, sugar_cane, dead_bush, bush, poppy, cornflower, oxeye_daisy, red_tulip, rose_bush, oak_sapling, vine, moss_carpet, lily_pad, wheat, carrots, mushrooms and mushroom blocks, corals, kelp.
+- Light and props: lantern, soul_lantern, torch, sea_lantern, glowstone, shroomlight, redstone_lamp, froglights, end_rod, iron_chain, iron_bars, ladder; barrel, bookshelf, crafting_table, anvil, cauldron, furnace, loom, hay_block, pumpkin, carved_pumpkin, melon, ores, gold_block, amethyst_block.
+- Not here: signs, buttons, fence gates, beds, banners, chests, candles, rails, waxed copper.
 
 ## A strong script
 
@@ -293,9 +295,10 @@ A request may be a detailed brief or a few words. Follow every requirement it st
 
 ### Showcases
 
-`showcase/` holds two strong hand-built models. Read their code and view their renders to learn technique: helpers, loops, block mixes. They were built on a 64x64 site, so take their techniques, never their coordinates, palette or layout.
+`showcase/` holds three strong hand-built models. Read their code and view their renders to learn technique: helpers, loops, block mixes. Take their techniques, never their coordinates, palette or layout.
 - `showcase/steampunk-manor.py`: an overgrown steampunk manor, renders: `showcase/steampunk-manor.png`, `showcase/steampunk-manor-front.png`.
-- `showcase/gothic-cathedral.py`: a dark gothic cathedral with flying buttresses, rose windows, gargoyles and two openwork stone spires, renders: `showcase/gothic-cathedral.png`, `showcase/gothic-cathedral-front.png`.
+- `showcase/gothic-cathedral.py`: a dark gothic cathedral with flying buttresses, rose windows, gargoyles and two openwork stone spires, renders: `showcase/gothic-cathedral.png`, `showcase/gothic-cathedral-front.png`. Both on a 64x64 site.
+- `showcase/bag-end.py`: Bag End under the Hill on a 128x128 site: a horseshoe of smooth hills inside an oval coast, cut by garden notches, hobbit-hole facades built from shared parts, a great oak grown from curved boughs, fields, hedgerows and sheep, renders: `showcase/bag-end.png`, `showcase/bag-end-front.png`.
 
 ### User references
 
@@ -343,7 +346,7 @@ Principles that make a build look alive and complex. Not every one fits every su
 1. Silhouette first: a striking outline from every side, with a skyline that climbs, peaks and steps. If the shape or proportions are wrong, no detail saves it: fix the structure before adding details.
 2. Masses with a base and a cap: several volumes at different heights around one main mass, each on a heavier, darker base and under a shaped cap (a roof, crown, crest or canopy), never a flat open top. Break the symmetry: it is easy to code and dull to look at.
 3. Ambitious scale: use the space, tall where the subject is tall; give a low subject presence from its setting (a hill, cliffs, trees). The smallest defining feature (a window, an eye, a wheel) is at least 3 blocks, and odd widths leave a centre for a door, a ridge or a spire.
-4. Rooted, never on a plate: the land rises and falls, stone on steep faces, grass on flats, coarse dirt and gravel between; the build grows out of it, with rocks, roots and plants at its foot, and everything is held by something unless it flies.
+4. Rooted, never on a plate: from above, the overall layout is a round, natural, organic shape (an island, a hill, a winding shore), with its parts set along curves, never a square plate or the site's rectangle filled edge to edge. The land rises and falls, stone on steep faces, grass on flats, coarse dirt and gravel between; the build grows out of it, with rocks, roots and plants at its foot, and everything is held by something unless it flies.
 5. Solid, then shaped: raise the structure in full blocks, then dress it with stairs, slabs, walls, fences, trapdoors and panes: frames and pilasters 1 block out, openings 1 block in with sills beneath, caps overhanging 1 or 2 with upside-down stairs under them. No wall stays one flat layer of full blocks for more than about 6 blocks. Organic forms take their depth from curves and undercuts instead.
 6. Curves over lines: a parabola, arc or wave where a straight edge or a diagonal would go; no natural edge runs straight for more than about 7 blocks.
 7. Randomness for nature: leaves, rocks, roots and terrain vary in broad random forms (sizes, angles, choices), never in 1-block noise.

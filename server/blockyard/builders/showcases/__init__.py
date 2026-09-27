@@ -20,4 +20,14 @@ SHOWCASES = [
         ),
         site=(64, 96, 64),
     ),
+    Showcase(
+        key="bag-end",
+        name="Bag End, Under the Hill",
+        label="Showcase: Bag End",
+        intro=(
+            "Scripted showcase: Bilbo's round green door dug into a grassy hill under a great oak, with Bagshot Row, "
+            "fields, hedgerows and sheep around it."
+        ),
+        site=(128, 100, 128),
+    ),
 ]

@@ -79,7 +79,10 @@ export interface BlockInfo {
     | "carpet"
     | "door"
     | "trapdoor"
-    | "rod";
+    | "rod"
+    | "tall_cross"
+    | "face"
+    | "ladder";
   tags?: string;
   transparent?: boolean;
   cutout?: boolean;
@@ -104,7 +107,7 @@ export type BuildEvent =
   | { type: "thinking"; text: string; reset: boolean }
   | RenderRequest;
 
-/** A builder asking an open viewer for its views of the model, or of the blocks inside `box` (x0 y0 z0 x1 y1 z1): the four views when `angle` is null, else one view from `angle` degrees around (0 front, 90 right) and `pitch` degrees up. */
+/** A builder asking an open viewer for its views of the model, or of the blocks inside `box` (x0 y0 z0 x1 y1 z1): one view from a camera at `eye` (x y z) looking at the middle when set, else the four views when `angle` is null, else one view from `angle` degrees around (0 front, 90 right) and `pitch` degrees up. */
 export interface RenderRequest {
   type: "render";
   request: string;
@@ -112,6 +115,7 @@ export interface RenderRequest {
   angle: number | null;
   pitch: number;
   zoom: number;
+  eye: number[] | null;
 }
 
 /** A static, read-only export of chosen builds (`vite build --mode gallery`), served without the Python server. */

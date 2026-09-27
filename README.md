@@ -8,7 +8,7 @@
 ![Blockyard showing the gothic cathedral](docs/blockyard.jpg)
 
 - **Chat** to describe a build; Holo, a sagent agent, writes a Python build script, and every run rebuilds the model, streams the new steps and shows Holo the render.
-- **Every block is checked** against a ~400-block palette and clipped to the 128x128 site, 100 blocks tall.
+- **Every block is checked** against a ~750-block palette and clipped to the 128x128 site, 100 blocks tall.
 - **Replay** the steps, read each step's code, browse the blocks, download a WorldEdit `.schem`.
 
 Gallery for the H team: [blockyard-h-company.vercel.app](https://blockyard-h-company.vercel.app) (Vercel login).
@@ -64,9 +64,9 @@ Each request leaves `data/workspaces/<build>/runs/<time>.log` (what Holo did, as
 
 ## Showcases and gallery
 
-The steampunk manor and the gothic cathedral are build scripts in `server/blockyard/builders/showcases`, on the same
-calls as Holo's, each step told by the comment above it. Holo gets a copy of both, with their renders, to learn
-from. To replay one, pick it in the builder menu under a new chat and send any prompt.
+The steampunk manor, the gothic cathedral and Bag End are build scripts in `server/blockyard/builders/showcases`, on
+the same calls as Holo's, each step told by the comment above it. Holo gets a copy of each, with their renders, to
+learn from. To replay one, pick it in the builder menu under a new chat and send any prompt.
 
 ```bash
 scripts/deploy-gallery.sh --preview           # or --prod; ships the latest run of each showcase, then data/gallery.txt
@@ -78,8 +78,8 @@ read-only. Open each build once in the app to refresh its thumbnail before deplo
 ## Blocks
 
 Textures are from [Faithful](https://faithfulpack.net/) (see `web/public/textures/LICENSE.txt`). Regenerate the
-palette and texture sheet from a Faithful 32x pack with
-`uv run scripts/palette.py <pack>/assets/minecraft/textures/block`.
+palette and texture sheet from a Faithful 32x pack and the matching vanilla client jar (for block models) with
+`uv run scripts/palette.py <pack>/assets/minecraft/textures/block <jar>/assets/minecraft`.
 
 ## Tests
 

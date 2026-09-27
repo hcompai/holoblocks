@@ -27,11 +27,6 @@ def _ints(*values) -> list[int]:
     return out
 
 
-def _span(a, b) -> tuple[int, int]:
-    a, b = _ints(a, b)
-    return min(a, b), max(a, b)
-
-
 def _parts(text: str) -> list[str]:
     """Split on the commas outside block-state brackets."""
     parts, depth, start = [], 0, 0
@@ -87,6 +82,7 @@ class Script:
         self.steps: list[dict] = []
         self.count = 0
         self.grid: dict[tuple[int, int, int], str] | None = None
+        self.backwards: dict[tuple[int, str], int] = {}
 
     @staticmethod
     def _line() -> int:
@@ -94,6 +90,18 @@ class Script:
         while frame and frame.f_code.co_filename != SOURCE:
             frame = frame.f_back
         return frame.f_lineno if frame else 0
+
+    def _corners(self, x0, y0, z0, x1, y1, z1) -> list[tuple[int, int]]:
+        """Each axis's span; corners come in any order, but an end one below its start, the shape of an empty range
+        like `fill(x, a + 1, z, x, a, z)`, still fills both cells, so it is noted by script line."""
+        spans = []
+        for axis, a, b in (("x", x0, x1), ("y", y0, y1), ("z", z0, z1)):
+            a, b = _ints(a, b)
+            if a == b + 1:
+                key = (self._line(), axis)
+                self.backwards[key] = self.backwards.get(key, 0) + 1
+            spans.append((min(a, b), max(a, b)))
+        return spans
 
     def _within(self, x0: int, y0: int, z0: int, x1: int, y1: int, z1: int):
         w, h, d = self.site
@@ -153,7 +161,7 @@ class Script:
         random.seed(str(title))
 
     def fill(self, x0, y0, z0, x1, y1, z1, block: str, mode: str = "solid") -> None:
-        (x0, x1), (y0, y1), (z0, z1) = _span(x0, x1), _span(y0, y1), _span(z0, z1)
+        (x0, x1), (y0, y1), (z0, z1) = self._corners(x0, y0, z0, x1, y1, z1)
         if mode == "solid":
             return self._box(x0, y0, z0, x1, y1, z1, block)
         if mode not in ("hollow", "walls"):
@@ -201,7 +209,7 @@ class Script:
 
     def replace(self, x0, y0, z0, x1, y1, z1, mask: str, block: str) -> None:
         """Like WorldEdit's //replace: every block in the box matching `mask` becomes `block` (a pattern too)."""
-        (x0, x1), (y0, y1), (z0, z1) = _span(x0, x1), _span(y0, y1), _span(z0, z1)
+        (x0, x1), (y0, y1), (z0, z1) = self._corners(x0, y0, z0, x1, y1, z1)
         match, pattern = _matcher(mask), _pattern(block)
         xs, ys, zs = self._within(x0, y0, z0, x1, y1, z1)
         grid = self._grid()
@@ -214,7 +222,7 @@ class Script:
 
     def overlay(self, x0, y0, z0, x1, y1, z1, block: str, on: str = "") -> None:
         """Like WorldEdit's //overlay: `block` on each column's highest block in the box, where open and matching `on`."""
-        (x0, x1), (y0, y1), (z0, z1) = _span(x0, x1), _span(y0, y1), _span(z0, z1)
+        (x0, x1), (y0, y1), (z0, z1) = self._corners(x0, y0, z0, x1, y1, z1)
         pattern, match = _pattern(block), _matcher(on) if on else None
         grid = self._grid()
         for (x, z), heights in self._filled(*self._within(x0, y0, z0, x1, y1, z1)).items():
@@ -250,7 +258,8 @@ def run(code: str, site: tuple[int, int, int] = (64, 64, 64)) -> dict:
     except (Exception, SystemExit) as e:  # noqa: BLE001
         return {"error": _explain(e, code), "printed": printed.getvalue()[-PRINT_LIMIT:]}
     steps = [s for s in script.steps if s["ops"]]
-    return {"steps": steps, "printed": printed.getvalue()[-PRINT_LIMIT:]}
+    backwards = [{"line": line, "axis": axis, "count": n} for (line, axis), n in script.backwards.items()]
+    return {"steps": steps, "printed": printed.getvalue()[-PRINT_LIMIT:], "backwards": backwards}
 
 
 def main() -> None:

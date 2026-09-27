@@ -60,7 +60,7 @@ class Workbench:
         """Validate and clip ops; returns the boxes to place and (op index, reason) for each call skipped or clipped."""
         w, d, h = self.build.width, self.build.depth, self.build.height
         boxes, rejected = [], []
-        doors: set[tuple[int, int, int]] = set()
+        lowers: set[tuple[int, int, int]] = set()
         volume = 0
         for n, op in enumerate(ops):
             try:
@@ -79,22 +79,23 @@ class Workbench:
                 ]
                 rejected.append((n, f"cut at the site edge, blocks at {' and '.join(edges)} dropped"))
             box = Box(**{k: v for k, v in clipped.items() if k != "block"}, block=str(state), step=0)
-            door = state.name != "air" and blocks.shape(state.name) == "door" and "half" not in state.props
-            if door:
+            tall = state.name != "air" and blocks.shape(state.name) in blocks.TWO_TALL and "half" not in state.props
+            if tall:
                 cells = [(x, z) for x in range(box.x0, box.x1 + 1) for z in range(box.z0, box.z1 + 1)]
-                stacked = any((x, box.y0 - 1, z) in doors for x, z in cells)
+                stacked = any((x, box.y0 - 1, z) in lowers for x, z in cells)
                 if stacked or box.y1 > box.y0:
-                    rejected.append((n, "a door is two blocks tall by itself: set only its lower block"))
+                    kind = "door" if blocks.shape(state.name) == "door" else state.name
+                    rejected.append((n, f"a {kind} is two blocks tall by itself: set only its lower block"))
                 if stacked:
                     continue
                 box = box.model_copy(update={"y1": box.y0})
-                doors.update((x, box.y0, z) for x, z in cells)
+                lowers.update((x, box.y0, z) for x, z in cells)
             volume += box.volume
             if volume > MAX_STEP_BLOCKS:
                 rejected.append((n, f"this step fills more than {MAX_STEP_BLOCKS} blocks; stopped here"))
                 break
             boxes.append(box)
-            if door and box.y1 + 1 < h:
+            if tall and box.y1 + 1 < h:
                 lower = blocks.BlockState(state.name, {**state.props, "half": "lower"})
                 upper = blocks.BlockState(state.name, {**state.props, "half": "upper"})
                 boxes[-1] = box.model_copy(update={"block": str(lower)})
@@ -140,6 +141,13 @@ class Workbench:
             lines.append("No problems: every block is known, on the site, and every step shows.")
         if floating:
             lines += ["Floating, fine only if the subject flies or hangs there:", *floating]
+        if out.get("backwards"):
+            lines.append(
+                "Spans whose end is one below their start fill both cells; skip the call if the range is empty:"
+            )
+            for b in out["backwards"][:PROBLEM_LIMIT]:
+                times = f" ({b['count']} times)" if b["count"] > 1 else ""
+                lines.append(f"{_line(source, b['line'])}: {b['axis']}{times}")
         lines.append(
             "Steps, with exact sizes and positions: blocks set, then where they sit (x, z, and y from bottom to top):"
         )
@@ -225,20 +233,33 @@ class Workbench:
         return "\n".join(lines) or "No steps yet."
 
     async def look(
-        self, note: str = "Looked at the model", box: str = "", angle: str = "", pitch: str = "", zoom: str = ""
+        self,
+        note: str = "Looked at the model",
+        box: str = "",
+        angle: str = "",
+        pitch: str = "",
+        zoom: str = "",
+        eye: str = "",
     ) -> Result:
-        """Render the four views, or one view from `angle` and `pitch` in degrees; of the model, or only of `box`."""
+        """Render the four views, one view from `angle` and `pitch` in degrees, or one from a camera at `eye` (x y z)
+        looking at the middle; of the model, or only of `box`."""
         corners = [int(v) for v in re.findall(r"-?\d+", box)]
         if box and len(corners) != 6:
             return Result(f"box needs six numbers, x0 y0 z0 x1 y1 z1; got '{box}'", problems=1)
         try:
-            around = float(angle) % 360 if angle else 0.0 if pitch else None
-            view = View(around, float(pitch or 30), float(zoom or 1))
+            at = tuple(float(v) for v in eye.split())
+            around = None if at else float(angle) % 360 if angle else 0.0 if pitch else None
+            view = View(around, float(pitch or (0 if at else 30)), float(zoom or 1), at or None)
         except ValueError:
-            return Result(f"angle, pitch and zoom are numbers; got '{angle}', '{pitch}', '{zoom}'", problems=1)
-        if not 0 <= view.pitch <= 90 or not 1 <= view.zoom <= 8:
             return Result(
-                f"pitch goes from 0 to 90 and zoom from 1 to 8; got {view.pitch:g} and {view.zoom:g}", problems=1
+                f"angle, pitch, zoom and eye are numbers; got '{angle}', '{pitch}', '{zoom}', '{eye}'", problems=1
+            )
+        if eye and len(at) != 3:
+            return Result(f"eye needs three numbers, x y z; got '{eye}'", problems=1)
+        low = -90 if at else 0
+        if not low <= view.pitch <= 90 or not 1 <= view.zoom <= 8:
+            return Result(
+                f"pitch goes from {low} to 90 and zoom from 1 to 8; got {view.pitch:g} and {view.zoom:g}", problems=1
             )
         png = await self.session.render(box=corners or None, view=view)
         if png is None:

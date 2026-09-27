@@ -42,12 +42,23 @@ def main() -> None:
     )
     look = tools.add_parser(
         "look",
-        help="render the four views again (render.png), one view from an angle (view.png), or a box (closeup.png)",
+        help="render the four views again (render.png), one view from an angle or a camera (view.png), "
+        "or a box (closeup.png)",
     )
     look.add_argument("box", nargs="*", type=int, metavar="x0 y0 z0 x1 y1 z1")
     look.add_argument("--angle", help="degrees around the model: 0 front, 90 right, 180 back, 270 left")
     look.add_argument("--pitch", help="degrees above the horizon: 0 eye level, 90 straight down (default 30)")
     look.add_argument("--zoom", help="magnification, 1 to 8 (default 1)")
+    look.add_argument(
+        "--from",
+        dest="eye",
+        nargs=3,
+        type=float,
+        metavar=("X", "Y", "Z"),
+        help="a wide camera at this point, turned to the middle of the box or the model, level unless --pitch "
+        "tilts it down (negative: up): a visitor's eye",
+    )
+    look.add_argument("--out", help="file name for the image, instead of render.png, view.png or closeup.png")
     tools.add_parser("find", help="search blocks by words").add_argument("query")
     tools.add_parser("name", help="name the build").add_argument("name")
     args = parser.parse_args()
@@ -63,8 +74,12 @@ def main() -> None:
         if args.box and len(args.box) != 6:
             sys.exit("blocks look takes no box, or six numbers: x0 y0 z0 x1 y1 z1")
         view = {k: v for k in ("angle", "pitch", "zoom") if (v := getattr(args, k)) is not None}
+        if args.eye:
+            view["eye"] = " ".join(f"{v:g}" for v in args.eye)
         out = call("look", box=" ".join(map(str, args.box)), **view)
-        stem = "closeup" if args.box else "view" if view else "render"
+        stem = (
+            str(Path(args.out).with_suffix("")) if args.out else "closeup" if args.box else "view" if view else "render"
+        )
     if out["text"]:
         print(out["text"], end="\n\n" if out["images"] else "\n")
     if out["images"]:

@@ -30,6 +30,7 @@ set(4, 1, 2, "nope")
 set(4, 1, 3, "oak_stairs[facing=up]")
 set(40, 1, 3, "stone")
 fill(0, 1, 0, 20, 1, 0, "stone")
+fill(8, 1, 8, 9, 1, 8, "tall_grass")
 """
 
 
@@ -40,6 +41,7 @@ def test_a_script_places_blocks_and_explains_every_skip(bench):
     assert world.get(4, 1, 6) == "oak_door[facing=south,half=lower]"
     assert world.get(4, 2, 6) == "oak_door[facing=south,half=upper]"
     assert world.get(4, 3, 6) == "oak_planks" and "a door is two blocks tall by itself" in result.text
+    assert world.get(9, 2, 8) == "tall_grass[half=upper]"
     assert world.get(4, 1, 4) == "air"
     assert world.get(15, 1, 0) == "stone"
     assert "unknown block 'nope'" in result.text

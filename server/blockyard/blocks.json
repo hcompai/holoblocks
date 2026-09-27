@@ -33,6 +33,17 @@
 "tags": "acacia wood floor wall",
 "tex": "acacia_planks"
 },
+"acacia_pressure_plate": {
+"shape": "carpet",
+"tags": "rug floor thin",
+"tex": "acacia_planks"
+},
+"acacia_sapling": {
+"cutout": true,
+"shape": "cross",
+"tags": "plant",
+"tex": "acacia_sapling"
+},
 "acacia_slab": {
 "shape": "slab",
 "tags": "acacia wood half",
@@ -49,6 +60,11 @@
 "tags": "acacia wood hatch plate thin",
 "tex": "acacia_trapdoor"
 },
+"acacia_wood": {
+"shape": "log",
+"tags": "pillar column",
+"tex": "acacia_log"
+},
 "allium": {
 "cutout": true,
 "shape": "cross",
@@ -58,6 +74,19 @@
 "amethyst_block": {
 "tags": "purple gem",
 "tex": "amethyst_block"
+},
+"amethyst_cluster": {
+"cutout": true,
+"shape": "cross",
+"tags": "plant",
+"tex": "amethyst_cluster"
+},
+"ancient_debris": {
+"tags": "",
+"tex": {
+"side": "ancient_debris_side",
+"top": "ancient_debris_top"
+}
 },
 "andesite": {
 "tags": "gray rock",
@@ -86,6 +115,14 @@
 "top": "anvil_top"
 }
 },
+"azalea": {
+"cutout": true,
+"tags": "",
+"tex": {
+"side": "azalea_side",
+"top": "azalea_top"
+}
+},
 "azalea_leaves": {
 "cutout": true,
 "tags": "tree green foliage",
@@ -97,14 +134,59 @@
 "tags": "white flower",
 "tex": "azure_bluet"
 },
+"bamboo_block": {
+"shape": "log",
+"tags": "pillar column",
+"tex": {
+"side": "bamboo_block",
+"top": "bamboo_block_top"
+}
+},
+"bamboo_door": {
+"cutout": true,
+"shape": "door",
+"tags": "entrance",
+"tex": {
+"bottom": "bamboo_door_bottom",
+"top": "bamboo_door_top"
+}
+},
 "bamboo_fence": {
 "shape": "fence",
 "tags": "bamboo wood railing",
 "tex": "bamboo_planks"
 },
+"bamboo_mosaic": {
+"tags": "",
+"tex": "bamboo_mosaic"
+},
+"bamboo_mosaic_slab": {
+"shape": "slab",
+"tags": "half",
+"tex": "bamboo_mosaic"
+},
+"bamboo_mosaic_stairs": {
+"shape": "stairs",
+"tags": "steps roof",
+"tex": "bamboo_mosaic"
+},
 "bamboo_planks": {
 "tags": "bamboo wood floor wall",
 "tex": "bamboo_planks"
+},
+"bamboo_pressure_plate": {
+"shape": "carpet",
+"tags": "rug floor thin",
+"tex": "bamboo_planks"
+},
+"bamboo_sapling": {
+"cutout": true,
+"shape": "cross",
+"tags": "plant",
+"tex": [
+"bamboo_stage0",
+"#79c05a"
+]
 },
 "bamboo_slab": {
 "shape": "slab",
@@ -115,6 +197,12 @@
 "shape": "stairs",
 "tags": "bamboo wood roof",
 "tex": "bamboo_planks"
+},
+"bamboo_trapdoor": {
+"cutout": true,
+"shape": "trapdoor",
+"tags": "hatch plate thin",
+"tex": "bamboo_trapdoor"
 },
 "barrel": {
 "tags": "wood storage cask",
@@ -131,6 +219,31 @@
 "side": "basalt_side",
 "top": "basalt_top"
 }
+},
+"bedrock": {
+"tags": "",
+"tex": "bedrock"
+},
+"bee_nest": {
+"tags": "",
+"tex": {
+"bottom": "bee_nest_bottom",
+"side": "bee_nest_front",
+"top": "bee_nest_top"
+}
+},
+"beehive": {
+"tags": "",
+"tex": {
+"side": "beehive_front",
+"top": "beehive_end"
+}
+},
+"beetroots": {
+"cutout": true,
+"shape": "cross",
+"tags": "plant",
+"tex": "beetroots_stage3"
 },
 "birch_door": {
 "cutout": true,
@@ -166,6 +279,11 @@
 "tags": "birch wood floor wall",
 "tex": "birch_planks"
 },
+"birch_pressure_plate": {
+"shape": "carpet",
+"tags": "rug floor thin",
+"tex": "birch_planks"
+},
 "birch_sapling": {
 "cutout": true,
 "shape": "cross",
@@ -188,6 +306,11 @@
 "tags": "birch wood hatch plate thin",
 "tex": "birch_trapdoor"
 },
+"birch_wood": {
+"shape": "log",
+"tags": "pillar column",
+"tex": "birch_log"
+},
 "black_carpet": {
 "shape": "carpet",
 "tags": "black rug floor thin",
@@ -196,6 +319,14 @@
 "black_concrete": {
 "tags": "black smooth flat modern",
 "tex": "black_concrete"
+},
+"black_concrete_powder": {
+"tags": "",
+"tex": "black_concrete_powder"
+},
+"black_glazed_terracotta": {
+"tags": "",
+"tex": "black_glazed_terracotta"
 },
 "black_stained_glass": {
 "tags": "black transparent window",
@@ -252,6 +383,14 @@
 "tags": "blue smooth flat modern",
 "tex": "blue_concrete"
 },
+"blue_concrete_powder": {
+"tags": "",
+"tex": "blue_concrete_powder"
+},
+"blue_glazed_terracotta": {
+"tags": "",
+"tex": "blue_glazed_terracotta"
+},
 "blue_ice": {
 "tags": "blue winter",
 "tex": "blue_ice"
@@ -296,6 +435,22 @@
 "top": "oak_planks"
 }
 },
+"brain_coral": {
+"cutout": true,
+"shape": "cross",
+"tags": "plant",
+"tex": "brain_coral"
+},
+"brain_coral_block": {
+"tags": "",
+"tex": "brain_coral_block"
+},
+"brain_coral_fan": {
+"cutout": true,
+"shape": "cross",
+"tags": "plant",
+"tex": "brain_coral_fan"
+},
 "brick_slab": {
 "shape": "slab",
 "tags": "red brick wall half",
@@ -324,6 +479,24 @@
 "tags": "brown smooth flat modern",
 "tex": "brown_concrete"
 },
+"brown_concrete_powder": {
+"tags": "",
+"tex": "brown_concrete_powder"
+},
+"brown_glazed_terracotta": {
+"tags": "",
+"tex": "brown_glazed_terracotta"
+},
+"brown_mushroom": {
+"cutout": true,
+"shape": "cross",
+"tags": "plant",
+"tex": "brown_mushroom"
+},
+"brown_mushroom_block": {
+"tags": "",
+"tex": "brown_mushroom_block"
+},
 "brown_stained_glass": {
 "tags": "brown transparent window",
 "tex": "brown_stained_glass",
@@ -343,6 +516,35 @@
 "tags": "brown soft fabric",
 "tex": "brown_wool"
 },
+"bubble_coral": {
+"cutout": true,
+"shape": "cross",
+"tags": "plant",
+"tex": "bubble_coral"
+},
+"bubble_coral_block": {
+"tags": "",
+"tex": "bubble_coral_block"
+},
+"bubble_coral_fan": {
+"cutout": true,
+"shape": "cross",
+"tags": "plant",
+"tex": "bubble_coral_fan"
+},
+"budding_amethyst": {
+"tags": "",
+"tex": "budding_amethyst"
+},
+"bush": {
+"cutout": true,
+"shape": "cross",
+"tags": "plant",
+"tex": [
+"bush",
+"#79c05a"
+]
+},
 "cactus": {
 "tags": "green desert plant",
 "tex": {
@@ -351,9 +553,21 @@
 "top": "cactus_top"
 }
 },
+"cactus_flower": {
+"cutout": true,
+"shape": "cross",
+"tags": "plant",
+"tex": "cactus_flower"
+},
 "calcite": {
 "tags": "white rock",
 "tex": "calcite"
+},
+"carrots": {
+"cutout": true,
+"shape": "cross",
+"tags": "plant",
+"tex": "carrots_stage3"
 },
 "cartography_table": {
 "tags": "workshop maps",
@@ -363,6 +577,13 @@
 "top": "cartography_table_top"
 }
 },
+"carved_pumpkin": {
+"tags": "",
+"tex": {
+"side": "carved_pumpkin",
+"top": "pumpkin_top"
+}
+},
 "cauldron": {
 "tags": "iron pot",
 "tex": {
@@ -370,6 +591,18 @@
 "side": "cauldron_side",
 "top": "cauldron_top"
 }
+},
+"cave_vines": {
+"cutout": true,
+"shape": "cross",
+"tags": "plant",
+"tex": "cave_vines"
+},
+"cave_vines_plant": {
+"cutout": true,
+"shape": "cross",
+"tags": "plant",
+"tex": "cave_vines_plant"
 },
 "cherry_door": {
 "cutout": true,
@@ -402,6 +635,17 @@
 "tags": "cherry wood floor wall",
 "tex": "cherry_planks"
 },
+"cherry_pressure_plate": {
+"shape": "carpet",
+"tags": "rug floor thin",
+"tex": "cherry_planks"
+},
+"cherry_sapling": {
+"cutout": true,
+"shape": "cross",
+"tags": "plant",
+"tex": "cherry_sapling"
+},
 "cherry_slab": {
 "shape": "slab",
 "tags": "cherry wood half",
@@ -418,9 +662,22 @@
 "tags": "cherry wood hatch plate thin",
 "tex": "cherry_trapdoor"
 },
+"cherry_wood": {
+"shape": "log",
+"tags": "pillar column",
+"tex": "cherry_log"
+},
 "chiseled_copper": {
 "tags": "orange metal ornament",
 "tex": "chiseled_copper"
+},
+"chiseled_deepslate": {
+"tags": "",
+"tex": "chiseled_deepslate"
+},
+"chiseled_nether_bricks": {
+"tags": "",
+"tex": "chiseled_nether_bricks"
 },
 "chiseled_polished_blackstone": {
 "tags": "black ornament",
@@ -433,6 +690,17 @@
 "side": "chiseled_quartz_block",
 "top": "chiseled_quartz_block_top"
 }
+},
+"chiseled_red_sandstone": {
+"tags": "",
+"tex": {
+"side": "chiseled_red_sandstone",
+"top": "red_sandstone_top"
+}
+},
+"chiseled_resin_bricks": {
+"tags": "",
+"tex": "chiseled_resin_bricks"
 },
 "chiseled_sandstone": {
 "tags": "yellow desert ornament",
@@ -464,9 +732,19 @@
 "tags": "gray",
 "tex": "clay"
 },
+"closed_eyeblossom": {
+"cutout": true,
+"shape": "cross",
+"tags": "plant",
+"tex": "closed_eyeblossom"
+},
 "coal_block": {
 "tags": "black",
 "tex": "coal_block"
+},
+"coal_ore": {
+"tags": "",
+"tex": "coal_ore"
 },
 "coarse_dirt": {
 "tags": "brown ground path",
@@ -556,6 +834,10 @@
 "tags": "orange light hanging small",
 "tex": "copper_lantern"
 },
+"copper_ore": {
+"tags": "",
+"tex": "copper_ore"
+},
 "copper_torch": {
 "cutout": true,
 "shape": "torch",
@@ -574,9 +856,17 @@
 "tags": "blue flower",
 "tex": "cornflower"
 },
+"cracked_deepslate_bricks": {
+"tags": "",
+"tex": "cracked_deepslate_bricks"
+},
 "cracked_deepslate_tiles": {
 "tags": "dark gray tile ruin",
 "tex": "cracked_deepslate_tiles"
+},
+"cracked_nether_bricks": {
+"tags": "",
+"tex": "cracked_nether_bricks"
 },
 "cracked_polished_blackstone_bricks": {
 "tags": "black brick ruin",
@@ -586,14 +876,68 @@
 "tags": "gray brick wall ruin",
 "tex": "cracked_stone_bricks"
 },
+"crafting_table": {
+"tags": "",
+"tex": {
+"bottom": "oak_planks",
+"side": "crafting_table_front",
+"top": "crafting_table_top"
+}
+},
+"creaking_heart": {
+"shape": "log",
+"tags": "pillar column",
+"tex": {
+"side": "creaking_heart_awake",
+"top": "creaking_heart_top_awake"
+}
+},
+"crimson_door": {
+"shape": "door",
+"tags": "entrance",
+"tex": {
+"bottom": "crimson_door_bottom",
+"top": "crimson_door_top"
+}
+},
 "crimson_fence": {
 "shape": "fence",
 "tags": "crimson wood railing",
 "tex": "crimson_planks"
 },
+"crimson_fungus": {
+"cutout": true,
+"shape": "cross",
+"tags": "plant",
+"tex": "crimson_fungus"
+},
+"crimson_hyphae": {
+"shape": "log",
+"tags": "pillar column",
+"tex": "crimson_stem"
+},
+"crimson_nylium": {
+"tags": "",
+"tex": {
+"bottom": "netherrack",
+"side": "crimson_nylium_side",
+"top": "crimson_nylium"
+}
+},
 "crimson_planks": {
 "tags": "crimson wood floor wall",
 "tex": "crimson_planks"
+},
+"crimson_pressure_plate": {
+"shape": "carpet",
+"tags": "rug floor thin",
+"tex": "crimson_planks"
+},
+"crimson_roots": {
+"cutout": true,
+"shape": "cross",
+"tags": "plant",
+"tex": "crimson_roots"
 },
 "crimson_slab": {
 "shape": "slab",
@@ -604,6 +948,20 @@
 "shape": "stairs",
 "tags": "crimson wood roof",
 "tex": "crimson_planks"
+},
+"crimson_stem": {
+"shape": "log",
+"tags": "pillar column",
+"tex": {
+"side": "crimson_stem",
+"top": "crimson_stem_top"
+}
+},
+"crimson_trapdoor": {
+"cutout": true,
+"shape": "trapdoor",
+"tags": "hatch plate thin",
+"tex": "crimson_trapdoor"
 },
 "crying_obsidian": {
 "tags": "black purple glow",
@@ -623,10 +981,33 @@
 "tags": "orange metal roof steps",
 "tex": "cut_copper"
 },
+"cut_red_sandstone": {
+"tags": "",
+"tex": {
+"side": "cut_red_sandstone",
+"top": "red_sandstone_top"
+}
+},
+"cut_red_sandstone_slab": {
+"shape": "slab",
+"tags": "half",
+"tex": {
+"side": "cut_red_sandstone",
+"top": "red_sandstone_top"
+}
+},
 "cut_sandstone": {
 "tags": "yellow desert",
 "tex": {
 "bottom": "sandstone_bottom",
+"side": "cut_sandstone",
+"top": "sandstone_top"
+}
+},
+"cut_sandstone_slab": {
+"shape": "slab",
+"tags": "half",
+"tex": {
 "side": "cut_sandstone",
 "top": "sandstone_top"
 }
@@ -639,6 +1020,14 @@
 "cyan_concrete": {
 "tags": "cyan smooth flat modern",
 "tex": "cyan_concrete"
+},
+"cyan_concrete_powder": {
+"tags": "",
+"tex": "cyan_concrete_powder"
+},
+"cyan_glazed_terracotta": {
+"tags": "",
+"tex": "cyan_glazed_terracotta"
 },
 "cyan_stained_glass": {
 "tags": "cyan transparent window",
@@ -699,6 +1088,17 @@
 "tags": "dark oak wood floor wall",
 "tex": "dark_oak_planks"
 },
+"dark_oak_pressure_plate": {
+"shape": "carpet",
+"tags": "rug floor thin",
+"tex": "dark_oak_planks"
+},
+"dark_oak_sapling": {
+"cutout": true,
+"shape": "cross",
+"tags": "plant",
+"tex": "dark_oak_sapling"
+},
 "dark_oak_slab": {
 "shape": "slab",
 "tags": "dark oak wood half",
@@ -715,6 +1115,11 @@
 "tags": "dark oak wood hatch plate thin",
 "tex": "dark_oak_trapdoor"
 },
+"dark_oak_wood": {
+"shape": "log",
+"tags": "pillar column",
+"tex": "dark_oak_log"
+},
 "dark_prismarine": {
 "tags": "dark teal sea",
 "tex": "dark_prismarine"
@@ -729,11 +1134,91 @@
 "tags": "dark teal sea roof steps",
 "tex": "dark_prismarine"
 },
+"dead_brain_coral": {
+"cutout": true,
+"shape": "cross",
+"tags": "plant",
+"tex": "dead_brain_coral"
+},
+"dead_brain_coral_block": {
+"tags": "",
+"tex": "dead_brain_coral_block"
+},
+"dead_brain_coral_fan": {
+"cutout": true,
+"shape": "cross",
+"tags": "plant",
+"tex": "dead_brain_coral_fan"
+},
+"dead_bubble_coral": {
+"cutout": true,
+"shape": "cross",
+"tags": "plant",
+"tex": "dead_bubble_coral"
+},
+"dead_bubble_coral_block": {
+"tags": "",
+"tex": "dead_bubble_coral_block"
+},
+"dead_bubble_coral_fan": {
+"cutout": true,
+"shape": "cross",
+"tags": "plant",
+"tex": "dead_bubble_coral_fan"
+},
 "dead_bush": {
 "cutout": true,
 "shape": "cross",
 "tags": "brown plant desert",
 "tex": "dead_bush"
+},
+"dead_fire_coral": {
+"cutout": true,
+"shape": "cross",
+"tags": "plant",
+"tex": "dead_fire_coral"
+},
+"dead_fire_coral_block": {
+"tags": "",
+"tex": "dead_fire_coral_block"
+},
+"dead_fire_coral_fan": {
+"cutout": true,
+"shape": "cross",
+"tags": "plant",
+"tex": "dead_fire_coral_fan"
+},
+"dead_horn_coral": {
+"cutout": true,
+"shape": "cross",
+"tags": "plant",
+"tex": "dead_horn_coral"
+},
+"dead_horn_coral_block": {
+"tags": "",
+"tex": "dead_horn_coral_block"
+},
+"dead_horn_coral_fan": {
+"cutout": true,
+"shape": "cross",
+"tags": "plant",
+"tex": "dead_horn_coral_fan"
+},
+"dead_tube_coral": {
+"cutout": true,
+"shape": "cross",
+"tags": "plant",
+"tex": "dead_tube_coral"
+},
+"dead_tube_coral_block": {
+"tags": "",
+"tex": "dead_tube_coral_block"
+},
+"dead_tube_coral_fan": {
+"cutout": true,
+"shape": "cross",
+"tags": "plant",
+"tex": "dead_tube_coral_fan"
 },
 "deepslate": {
 "tags": "dark gray rock",
@@ -761,6 +1246,38 @@
 "tags": "dark gray brick castle",
 "tex": "deepslate_bricks"
 },
+"deepslate_coal_ore": {
+"tags": "",
+"tex": "deepslate_coal_ore"
+},
+"deepslate_copper_ore": {
+"tags": "",
+"tex": "deepslate_copper_ore"
+},
+"deepslate_diamond_ore": {
+"tags": "",
+"tex": "deepslate_diamond_ore"
+},
+"deepslate_emerald_ore": {
+"tags": "",
+"tex": "deepslate_emerald_ore"
+},
+"deepslate_gold_ore": {
+"tags": "",
+"tex": "deepslate_gold_ore"
+},
+"deepslate_iron_ore": {
+"tags": "",
+"tex": "deepslate_iron_ore"
+},
+"deepslate_lapis_ore": {
+"tags": "",
+"tex": "deepslate_lapis_ore"
+},
+"deepslate_redstone_ore": {
+"tags": "",
+"tex": "deepslate_redstone_ore"
+},
 "deepslate_tile_slab": {
 "shape": "slab",
 "tags": "dark gray tile roof half",
@@ -783,6 +1300,10 @@
 "diamond_block": {
 "tags": "cyan gem shiny",
 "tex": "diamond_block"
+},
+"diamond_ore": {
+"tags": "",
+"tex": "diamond_ore"
 },
 "diorite": {
 "tags": "white rock",
@@ -815,19 +1336,51 @@
 "top": "dirt_path_top"
 }
 },
+"dispenser": {
+"tags": "",
+"tex": {
+"bottom": "furnace_top",
+"side": "furnace_top",
+"top": "dispenser_front_vertical"
+}
+},
+"dried_kelp_block": {
+"tags": "",
+"tex": {
+"bottom": "dried_kelp_bottom",
+"side": "dried_kelp_side",
+"top": "dried_kelp_top"
+}
+},
 "dripstone_block": {
 "tags": "brown rock",
 "tex": "dripstone_block"
 },
+"dropper": {
+"tags": "",
+"tex": {
+"bottom": "furnace_top",
+"side": "furnace_top",
+"top": "dropper_front_vertical"
+}
+},
 "emerald_block": {
 "tags": "green gem shiny",
 "tex": "emerald_block"
+},
+"emerald_ore": {
+"tags": "",
+"tex": "emerald_ore"
 },
 "end_rod": {
 "cutout": true,
 "shape": "rod",
 "tags": "white light pole thin glow",
 "tex": "end_rod"
+},
+"end_stone": {
+"tags": "",
+"tex": "end_stone"
 },
 "end_stone_brick_slab": {
 "shape": "slab",
@@ -927,10 +1480,53 @@
 "#79c05a"
 ]
 },
+"fire_coral": {
+"cutout": true,
+"shape": "cross",
+"tags": "plant",
+"tex": "fire_coral"
+},
+"fire_coral_block": {
+"tags": "",
+"tex": "fire_coral_block"
+},
+"fire_coral_fan": {
+"cutout": true,
+"shape": "cross",
+"tags": "plant",
+"tex": "fire_coral_fan"
+},
+"firefly_bush": {
+"cutout": true,
+"shape": "cross",
+"tags": "plant",
+"tex": "firefly_bush"
+},
+"fletching_table": {
+"tags": "",
+"tex": {
+"bottom": "birch_planks",
+"side": "fletching_table_front",
+"top": "fletching_table_top"
+}
+},
+"flowering_azalea": {
+"cutout": true,
+"tags": "",
+"tex": {
+"side": "flowering_azalea_side",
+"top": "flowering_azalea_top"
+}
+},
 "flowering_azalea_leaves": {
 "cutout": true,
 "tags": "tree pink foliage",
 "tex": "flowering_azalea_leaves"
+},
+"frosted_ice": {
+"tags": "",
+"tex": "frosted_ice_3",
+"transparent": true
 },
 "furnace": {
 "tags": "stone oven fire machine",
@@ -955,6 +1551,12 @@
 "tex": "glass",
 "transparent": true
 },
+"glow_lichen": {
+"cutout": true,
+"shape": "face",
+"tags": "green plant climbing glow",
+"tex": "glow_lichen"
+},
 "glowstone": {
 "tags": "yellow light glow lamp",
 "tex": "glowstone"
@@ -962,6 +1564,16 @@
 "gold_block": {
 "tags": "yellow metal shiny",
 "tex": "gold_block"
+},
+"gold_ore": {
+"tags": "",
+"tex": "gold_ore"
+},
+"golden_dandelion": {
+"cutout": true,
+"shape": "cross",
+"tags": "plant",
+"tex": "golden_dandelion"
 },
 "granite": {
 "tags": "pink red rock",
@@ -1010,6 +1622,14 @@
 "tags": "gray smooth flat modern",
 "tex": "gray_concrete"
 },
+"gray_concrete_powder": {
+"tags": "",
+"tex": "gray_concrete_powder"
+},
+"gray_glazed_terracotta": {
+"tags": "",
+"tex": "gray_glazed_terracotta"
+},
 "gray_stained_glass": {
 "tags": "gray transparent window",
 "tex": "gray_stained_glass",
@@ -1038,6 +1658,14 @@
 "tags": "green smooth flat modern",
 "tex": "green_concrete"
 },
+"green_concrete_powder": {
+"tags": "",
+"tex": "green_concrete_powder"
+},
+"green_glazed_terracotta": {
+"tags": "",
+"tex": "green_glazed_terracotta"
+},
 "green_stained_glass": {
 "tags": "green transparent window",
 "tex": "green_stained_glass",
@@ -1057,12 +1685,23 @@
 "tags": "green soft fabric",
 "tex": "green_wool"
 },
+"hanging_roots": {
+"cutout": true,
+"shape": "cross",
+"tags": "plant",
+"tex": "hanging_roots"
+},
 "hay_block": {
 "tags": "yellow farm straw thatch",
 "tex": {
 "side": "hay_block_side",
 "top": "hay_block_top"
 }
+},
+"heavy_weighted_pressure_plate": {
+"shape": "carpet",
+"tags": "rug floor thin",
+"tex": "iron_block"
 },
 "honey_block": {
 "tags": "orange transparent",
@@ -1076,6 +1715,22 @@
 "honeycomb_block": {
 "tags": "orange",
 "tex": "honeycomb_block"
+},
+"horn_coral": {
+"cutout": true,
+"shape": "cross",
+"tags": "plant",
+"tex": "horn_coral"
+},
+"horn_coral_block": {
+"tags": "",
+"tex": "horn_coral_block"
+},
+"horn_coral_fan": {
+"cutout": true,
+"shape": "cross",
+"tags": "plant",
+"tex": "horn_coral_fan"
 },
 "ice": {
 "tags": "blue winter transparent",
@@ -1105,6 +1760,23 @@
 "tex": {
 "bottom": "iron_door_bottom",
 "top": "iron_door_top"
+}
+},
+"iron_ore": {
+"tags": "",
+"tex": "iron_ore"
+},
+"iron_trapdoor": {
+"cutout": true,
+"shape": "trapdoor",
+"tags": "hatch plate thin",
+"tex": "iron_trapdoor"
+},
+"jack_o_lantern": {
+"tags": "",
+"tex": {
+"side": "jack_o_lantern",
+"top": "pumpkin_top"
 }
 },
 "jukebox": {
@@ -1149,6 +1821,17 @@
 "tags": "jungle wood floor wall",
 "tex": "jungle_planks"
 },
+"jungle_pressure_plate": {
+"shape": "carpet",
+"tags": "rug floor thin",
+"tex": "jungle_planks"
+},
+"jungle_sapling": {
+"cutout": true,
+"shape": "cross",
+"tags": "plant",
+"tex": "jungle_sapling"
+},
 "jungle_slab": {
 "shape": "slab",
 "tags": "jungle wood half",
@@ -1165,9 +1848,26 @@
 "tags": "jungle wood hatch plate thin",
 "tex": "jungle_trapdoor"
 },
+"jungle_wood": {
+"shape": "log",
+"tags": "pillar column",
+"tex": "jungle_log"
+},
+"kelp": {
+"cutout": true,
+"shape": "cross",
+"tags": "plant",
+"tex": "kelp"
+},
+"kelp_plant": {
+"cutout": true,
+"shape": "cross",
+"tags": "plant",
+"tex": "kelp_plant"
+},
 "ladder": {
 "cutout": true,
-"shape": "pane",
+"shape": "ladder",
 "tags": "wood climb",
 "tex": "ladder"
 },
@@ -1180,6 +1880,31 @@
 "lapis_block": {
 "tags": "blue",
 "tex": "lapis_block"
+},
+"lapis_ore": {
+"tags": "",
+"tex": "lapis_ore"
+},
+"large_amethyst_bud": {
+"cutout": true,
+"shape": "cross",
+"tags": "plant",
+"tex": "large_amethyst_bud"
+},
+"large_fern": {
+"cutout": true,
+"shape": "tall_cross",
+"tags": "green plant forest",
+"tex": {
+"bottom": [
+"large_fern_bottom",
+"#79c05a"
+],
+"top": [
+"large_fern_top",
+"#79c05a"
+]
+}
 },
 "lava": {
 "liquid": true,
@@ -1194,6 +1919,14 @@
 "light_blue_concrete": {
 "tags": "light blue smooth flat modern",
 "tex": "light_blue_concrete"
+},
+"light_blue_concrete_powder": {
+"tags": "",
+"tex": "light_blue_concrete_powder"
+},
+"light_blue_glazed_terracotta": {
+"tags": "",
+"tex": "light_blue_glazed_terracotta"
 },
 "light_blue_stained_glass": {
 "tags": "light blue transparent window",
@@ -1223,6 +1956,14 @@
 "tags": "light gray smooth flat modern",
 "tex": "light_gray_concrete"
 },
+"light_gray_concrete_powder": {
+"tags": "",
+"tex": "light_gray_concrete_powder"
+},
+"light_gray_glazed_terracotta": {
+"tags": "",
+"tex": "light_gray_glazed_terracotta"
+},
 "light_gray_stained_glass": {
 "tags": "light gray transparent window",
 "tex": "light_gray_stained_glass",
@@ -1242,17 +1983,40 @@
 "tags": "light gray soft fabric",
 "tex": "light_gray_wool"
 },
+"light_weighted_pressure_plate": {
+"shape": "carpet",
+"tags": "rug floor thin",
+"tex": "gold_block"
+},
 "lightning_rod": {
 "cutout": true,
 "shape": "rod",
 "tags": "orange metal antenna pipe thin",
 "tex": "lightning_rod"
 },
+"lilac": {
+"cutout": true,
+"shape": "tall_cross",
+"tags": "purple flower tall bush",
+"tex": {
+"bottom": "lilac_bottom",
+"top": "lilac_top"
+}
+},
 "lily_of_the_valley": {
 "cutout": true,
 "shape": "cross",
 "tags": "white flower",
 "tex": "lily_of_the_valley"
+},
+"lily_pad": {
+"cutout": true,
+"shape": "carpet",
+"tags": "rug floor thin",
+"tex": [
+"lily_pad",
+"#208030"
+]
 },
 "lime_carpet": {
 "shape": "carpet",
@@ -1262,6 +2026,14 @@
 "lime_concrete": {
 "tags": "lime smooth flat modern",
 "tex": "lime_concrete"
+},
+"lime_concrete_powder": {
+"tags": "",
+"tex": "lime_concrete_powder"
+},
+"lime_glazed_terracotta": {
+"tags": "",
+"tex": "lime_glazed_terracotta"
 },
 "lime_stained_glass": {
 "tags": "lime transparent window",
@@ -1306,6 +2078,14 @@
 "magenta_concrete": {
 "tags": "magenta smooth flat modern",
 "tex": "magenta_concrete"
+},
+"magenta_concrete_powder": {
+"tags": "",
+"tex": "magenta_concrete_powder"
+},
+"magenta_glazed_terracotta": {
+"tags": "",
+"tex": "magenta_glazed_terracotta"
 },
 "magenta_stained_glass": {
 "tags": "magenta transparent window",
@@ -1364,6 +2144,19 @@
 "tags": "mangrove wood floor wall",
 "tex": "mangrove_planks"
 },
+"mangrove_pressure_plate": {
+"shape": "carpet",
+"tags": "rug floor thin",
+"tex": "mangrove_planks"
+},
+"mangrove_roots": {
+"cutout": true,
+"tags": "",
+"tex": {
+"side": "mangrove_roots_side",
+"top": "mangrove_roots_top"
+}
+},
 "mangrove_slab": {
 "shape": "slab",
 "tags": "mangrove wood half",
@@ -1380,6 +2173,17 @@
 "tags": "mangrove wood hatch plate thin",
 "tex": "mangrove_trapdoor"
 },
+"mangrove_wood": {
+"shape": "log",
+"tags": "pillar column",
+"tex": "mangrove_log"
+},
+"medium_amethyst_bud": {
+"cutout": true,
+"shape": "cross",
+"tags": "plant",
+"tex": "medium_amethyst_bud"
+},
 "melon": {
 "tags": "green farm",
 "tex": {
@@ -1390,6 +2194,11 @@
 },
 "moss_block": {
 "tags": "green ground",
+"tex": "moss_block"
+},
+"moss_carpet": {
+"shape": "carpet",
+"tags": "rug floor thin",
 "tex": "moss_block"
 },
 "mossy_cobblestone": {
@@ -1453,6 +2262,31 @@
 "tags": "brown brick adobe",
 "tex": "mud_bricks"
 },
+"muddy_mangrove_roots": {
+"shape": "log",
+"tags": "pillar column",
+"tex": {
+"side": "muddy_mangrove_roots_side",
+"top": "muddy_mangrove_roots_top"
+}
+},
+"mushroom_stem": {
+"tags": "",
+"tex": "mushroom_stem"
+},
+"mycelium": {
+"tags": "",
+"tex": {
+"bottom": "dirt",
+"side": "mycelium_side",
+"top": "mycelium_top"
+}
+},
+"nether_brick_fence": {
+"shape": "fence",
+"tags": "railing",
+"tex": "nether_bricks"
+},
 "nether_brick_slab": {
 "shape": "slab",
 "tags": "dark red brick half",
@@ -1471,6 +2305,34 @@
 "nether_bricks": {
 "tags": "dark red brick",
 "tex": "nether_bricks"
+},
+"nether_gold_ore": {
+"tags": "",
+"tex": "nether_gold_ore"
+},
+"nether_quartz_ore": {
+"tags": "",
+"tex": "nether_quartz_ore"
+},
+"nether_sprouts": {
+"cutout": true,
+"shape": "cross",
+"tags": "plant",
+"tex": "nether_sprouts"
+},
+"nether_wart": {
+"cutout": true,
+"shape": "cross",
+"tags": "plant",
+"tex": "nether_wart_stage2"
+},
+"nether_wart_block": {
+"tags": "",
+"tex": "nether_wart_block"
+},
+"netherite_block": {
+"tags": "",
+"tex": "netherite_block"
 },
 "netherrack": {
 "tags": "red",
@@ -1514,6 +2376,11 @@
 "tags": "oak wood floor wall",
 "tex": "oak_planks"
 },
+"oak_pressure_plate": {
+"shape": "carpet",
+"tags": "rug floor thin",
+"tex": "oak_planks"
+},
 "oak_sapling": {
 "cutout": true,
 "shape": "cross",
@@ -1536,6 +2403,11 @@
 "tags": "oak wood hatch plate thin",
 "tex": "oak_trapdoor"
 },
+"oak_wood": {
+"shape": "log",
+"tags": "pillar column",
+"tex": "oak_log"
+},
 "observer": {
 "tags": "machine mechanical",
 "tex": {
@@ -1548,6 +2420,20 @@
 "tags": "black purple",
 "tex": "obsidian"
 },
+"ochre_froglight": {
+"shape": "log",
+"tags": "pillar column",
+"tex": {
+"side": "ochre_froglight_side",
+"top": "ochre_froglight_top"
+}
+},
+"open_eyeblossom": {
+"cutout": true,
+"shape": "cross",
+"tags": "plant",
+"tex": "open_eyeblossom"
+},
 "orange_carpet": {
 "shape": "carpet",
 "tags": "orange rug floor thin",
@@ -1556,6 +2442,14 @@
 "orange_concrete": {
 "tags": "orange smooth flat modern",
 "tex": "orange_concrete"
+},
+"orange_concrete_powder": {
+"tags": "",
+"tex": "orange_concrete_powder"
+},
+"orange_glazed_terracotta": {
+"tags": "",
+"tex": "orange_glazed_terracotta"
 },
 "orange_stained_glass": {
 "tags": "orange transparent window",
@@ -1666,6 +2560,104 @@
 "tags": "brown adobe",
 "tex": "packed_mud"
 },
+"pale_hanging_moss": {
+"cutout": true,
+"shape": "cross",
+"tags": "plant",
+"tex": "pale_hanging_moss"
+},
+"pale_moss_block": {
+"tags": "",
+"tex": "pale_moss_block"
+},
+"pale_moss_carpet": {
+"shape": "carpet",
+"tags": "rug floor thin",
+"tex": "pale_moss_carpet"
+},
+"pale_oak_door": {
+"shape": "door",
+"tags": "entrance",
+"tex": {
+"bottom": "pale_oak_door_bottom",
+"top": "pale_oak_door_top"
+}
+},
+"pale_oak_fence": {
+"shape": "fence",
+"tags": "railing",
+"tex": "pale_oak_planks"
+},
+"pale_oak_leaves": {
+"cutout": true,
+"tags": "",
+"tex": "pale_oak_leaves"
+},
+"pale_oak_log": {
+"shape": "log",
+"tags": "pillar column",
+"tex": {
+"side": "pale_oak_log",
+"top": "pale_oak_log_top"
+}
+},
+"pale_oak_planks": {
+"tags": "",
+"tex": "pale_oak_planks"
+},
+"pale_oak_pressure_plate": {
+"shape": "carpet",
+"tags": "rug floor thin",
+"tex": "pale_oak_planks"
+},
+"pale_oak_sapling": {
+"cutout": true,
+"shape": "cross",
+"tags": "plant",
+"tex": "pale_oak_sapling"
+},
+"pale_oak_slab": {
+"shape": "slab",
+"tags": "half",
+"tex": "pale_oak_planks"
+},
+"pale_oak_stairs": {
+"shape": "stairs",
+"tags": "steps roof",
+"tex": "pale_oak_planks"
+},
+"pale_oak_trapdoor": {
+"shape": "trapdoor",
+"tags": "hatch plate thin",
+"tex": "pale_oak_trapdoor"
+},
+"pale_oak_wood": {
+"shape": "log",
+"tags": "pillar column",
+"tex": "pale_oak_log"
+},
+"pearlescent_froglight": {
+"shape": "log",
+"tags": "pillar column",
+"tex": {
+"side": "pearlescent_froglight_side",
+"top": "pearlescent_froglight_top"
+}
+},
+"peony": {
+"cutout": true,
+"shape": "tall_cross",
+"tags": "pink flower tall bush",
+"tex": {
+"bottom": "peony_bottom",
+"top": "peony_top"
+}
+},
+"petrified_oak_slab": {
+"shape": "slab",
+"tags": "half",
+"tex": "oak_planks"
+},
 "pink_carpet": {
 "shape": "carpet",
 "tags": "pink rug floor thin",
@@ -1674,6 +2666,20 @@
 "pink_concrete": {
 "tags": "pink smooth flat modern",
 "tex": "pink_concrete"
+},
+"pink_concrete_powder": {
+"tags": "",
+"tex": "pink_concrete_powder"
+},
+"pink_glazed_terracotta": {
+"tags": "",
+"tex": "pink_glazed_terracotta"
+},
+"pink_petals": {
+"cutout": true,
+"shape": "carpet",
+"tags": "rug floor thin",
+"tex": "pink_petals"
 },
 "pink_stained_glass": {
 "tags": "pink transparent window",
@@ -1761,6 +2767,11 @@
 "tags": "black brick",
 "tex": "polished_blackstone_bricks"
 },
+"polished_blackstone_pressure_plate": {
+"shape": "carpet",
+"tags": "rug floor thin",
+"tex": "polished_blackstone"
+},
 "polished_blackstone_slab": {
 "shape": "slab",
 "tags": "black smooth half",
@@ -1769,6 +2780,11 @@
 "polished_blackstone_stairs": {
 "shape": "stairs",
 "tags": "black smooth roof steps",
+"tex": "polished_blackstone"
+},
+"polished_blackstone_wall": {
+"shape": "wall",
+"tags": "low fence parapet",
 "tex": "polished_blackstone"
 },
 "polished_deepslate": {
@@ -1843,6 +2859,12 @@
 "tags": "red flower",
 "tex": "poppy"
 },
+"potatoes": {
+"cutout": true,
+"shape": "cross",
+"tags": "plant",
+"tex": "potatoes_stage3"
+},
 "prismarine": {
 "tags": "teal sea",
 "tex": "prismarine"
@@ -1893,6 +2915,14 @@
 "tags": "purple smooth flat modern",
 "tex": "purple_concrete"
 },
+"purple_concrete_powder": {
+"tags": "",
+"tex": "purple_concrete_powder"
+},
+"purple_glazed_terracotta": {
+"tags": "",
+"tex": "purple_glazed_terracotta"
+},
 "purple_stained_glass": {
 "tags": "purple transparent window",
 "tex": "purple_stained_glass",
@@ -1915,6 +2945,14 @@
 "purpur_block": {
 "tags": "purple",
 "tex": "purpur_block"
+},
+"purpur_pillar": {
+"shape": "log",
+"tags": "pillar column",
+"tex": {
+"side": "purpur_pillar",
+"top": "purpur_pillar_top"
+}
 },
 "purpur_slab": {
 "shape": "slab",
@@ -1968,6 +3006,14 @@
 "tags": "orange rough metal ore",
 "tex": "raw_copper_block"
 },
+"raw_gold_block": {
+"tags": "",
+"tex": "raw_gold_block"
+},
+"raw_iron_block": {
+"tags": "",
+"tex": "raw_iron_block"
+},
 "red_carpet": {
 "shape": "carpet",
 "tags": "red rug floor thin",
@@ -1976,6 +3022,24 @@
 "red_concrete": {
 "tags": "red smooth flat modern",
 "tex": "red_concrete"
+},
+"red_concrete_powder": {
+"tags": "",
+"tex": "red_concrete_powder"
+},
+"red_glazed_terracotta": {
+"tags": "",
+"tex": "red_glazed_terracotta"
+},
+"red_mushroom": {
+"cutout": true,
+"shape": "cross",
+"tags": "plant",
+"tex": "red_mushroom"
+},
+"red_mushroom_block": {
+"tags": "",
+"tex": "red_mushroom_block"
 },
 "red_nether_brick_slab": {
 "shape": "slab",
@@ -2068,6 +3132,74 @@
 "tags": "yellow light lamp glow",
 "tex": "redstone_lamp_on"
 },
+"redstone_ore": {
+"tags": "",
+"tex": "redstone_ore"
+},
+"redstone_torch": {
+"cutout": true,
+"shape": "torch",
+"tags": "light fire small",
+"tex": "redstone_torch"
+},
+"reinforced_deepslate": {
+"tags": "",
+"tex": {
+"bottom": "reinforced_deepslate_bottom",
+"side": "reinforced_deepslate_side",
+"top": "reinforced_deepslate_top"
+}
+},
+"resin_block": {
+"tags": "",
+"tex": "resin_block"
+},
+"resin_brick_slab": {
+"shape": "slab",
+"tags": "half",
+"tex": "resin_bricks"
+},
+"resin_brick_stairs": {
+"shape": "stairs",
+"tags": "steps roof",
+"tex": "resin_bricks"
+},
+"resin_brick_wall": {
+"shape": "wall",
+"tags": "low fence parapet",
+"tex": "resin_bricks"
+},
+"resin_bricks": {
+"tags": "",
+"tex": "resin_bricks"
+},
+"resin_clump": {
+"cutout": true,
+"shape": "face",
+"tags": "thin climbing cover",
+"tex": "resin_clump"
+},
+"respawn_anchor": {
+"tags": "",
+"tex": {
+"bottom": "respawn_anchor_bottom",
+"side": "respawn_anchor_side0",
+"top": "respawn_anchor_top_off"
+}
+},
+"rooted_dirt": {
+"tags": "",
+"tex": "rooted_dirt"
+},
+"rose_bush": {
+"cutout": true,
+"shape": "tall_cross",
+"tags": "red flower tall bush",
+"tex": {
+"bottom": "rose_bush_bottom",
+"top": "rose_bush_top"
+}
+},
 "sand": {
 "tags": "yellow beach desert",
 "tex": "sand"
@@ -2107,9 +3239,39 @@
 "top": "sandstone_top"
 }
 },
+"sculk": {
+"tags": "",
+"tex": "sculk"
+},
+"sculk_catalyst": {
+"tags": "",
+"tex": {
+"bottom": "sculk_catalyst_bottom",
+"side": "sculk_catalyst_side",
+"top": "sculk_catalyst_top"
+}
+},
+"sculk_vein": {
+"cutout": true,
+"shape": "face",
+"tags": "thin climbing cover",
+"tex": "sculk_vein"
+},
 "sea_lantern": {
 "tags": "white light glow lamp",
 "tex": "sea_lantern"
+},
+"seagrass": {
+"cutout": true,
+"shape": "cross",
+"tags": "plant",
+"tex": "seagrass"
+},
+"short_dry_grass": {
+"cutout": true,
+"shape": "cross",
+"tags": "plant",
+"tex": "short_dry_grass"
 },
 "short_grass": {
 "cutout": true,
@@ -2123,6 +3285,17 @@
 "shroomlight": {
 "tags": "orange light glow lamp",
 "tex": "shroomlight"
+},
+"slime_block": {
+"tags": "",
+"tex": "slime_block",
+"transparent": true
+},
+"small_amethyst_bud": {
+"cutout": true,
+"shape": "cross",
+"tags": "plant",
+"tex": "small_amethyst_bud"
 },
 "smithing_table": {
 "tags": "workshop tools",
@@ -2229,6 +3402,21 @@
 "tags": "brown",
 "tex": "soul_sand"
 },
+"soul_soil": {
+"tags": "",
+"tex": "soul_soil"
+},
+"soul_torch": {
+"cutout": true,
+"shape": "torch",
+"tags": "light fire small",
+"tex": "soul_torch"
+},
+"spawner": {
+"cutout": true,
+"tags": "",
+"tex": "spawner"
+},
 "sponge": {
 "tags": "yellow",
 "tex": "sponge"
@@ -2267,6 +3455,11 @@
 "tags": "spruce wood floor wall",
 "tex": "spruce_planks"
 },
+"spruce_pressure_plate": {
+"shape": "carpet",
+"tags": "rug floor thin",
+"tex": "spruce_planks"
+},
 "spruce_sapling": {
 "cutout": true,
 "shape": "cross",
@@ -2288,6 +3481,11 @@
 "shape": "trapdoor",
 "tags": "spruce wood hatch plate thin",
 "tex": "spruce_trapdoor"
+},
+"spruce_wood": {
+"shape": "log",
+"tags": "pillar column",
+"tex": "spruce_log"
 },
 "stone": {
 "tags": "gray rock",
@@ -2312,6 +3510,11 @@
 "tags": "gray brick wall castle",
 "tex": "stone_bricks"
 },
+"stone_pressure_plate": {
+"shape": "carpet",
+"tags": "rug floor thin",
+"tex": "stone"
+},
 "stone_slab": {
 "shape": "slab",
 "tags": "gray rock half",
@@ -2330,6 +3533,19 @@
 "top": "stripped_acacia_log_top"
 }
 },
+"stripped_acacia_wood": {
+"shape": "log",
+"tags": "pillar column",
+"tex": "stripped_acacia_log"
+},
+"stripped_bamboo_block": {
+"shape": "log",
+"tags": "pillar column",
+"tex": {
+"side": "stripped_bamboo_block",
+"top": "stripped_bamboo_block_top"
+}
+},
 "stripped_birch_log": {
 "shape": "log",
 "tags": "birch wood beam pillar",
@@ -2338,12 +3554,35 @@
 "top": "stripped_birch_log_top"
 }
 },
+"stripped_birch_wood": {
+"shape": "log",
+"tags": "pillar column",
+"tex": "stripped_birch_log"
+},
 "stripped_cherry_log": {
 "shape": "log",
 "tags": "cherry wood beam pillar",
 "tex": {
 "side": "stripped_cherry_log",
 "top": "stripped_cherry_log_top"
+}
+},
+"stripped_cherry_wood": {
+"shape": "log",
+"tags": "pillar column",
+"tex": "stripped_cherry_log"
+},
+"stripped_crimson_hyphae": {
+"shape": "log",
+"tags": "pillar column",
+"tex": "stripped_crimson_stem"
+},
+"stripped_crimson_stem": {
+"shape": "log",
+"tags": "pillar column",
+"tex": {
+"side": "stripped_crimson_stem",
+"top": "stripped_crimson_stem_top"
 }
 },
 "stripped_dark_oak_log": {
@@ -2354,6 +3593,11 @@
 "top": "stripped_dark_oak_log_top"
 }
 },
+"stripped_dark_oak_wood": {
+"shape": "log",
+"tags": "pillar column",
+"tex": "stripped_dark_oak_log"
+},
 "stripped_jungle_log": {
 "shape": "log",
 "tags": "jungle wood beam pillar",
@@ -2361,6 +3605,11 @@
 "side": "stripped_jungle_log",
 "top": "stripped_jungle_log_top"
 }
+},
+"stripped_jungle_wood": {
+"shape": "log",
+"tags": "pillar column",
+"tex": "stripped_jungle_log"
 },
 "stripped_mangrove_log": {
 "shape": "log",
@@ -2370,6 +3619,11 @@
 "top": "stripped_mangrove_log_top"
 }
 },
+"stripped_mangrove_wood": {
+"shape": "log",
+"tags": "pillar column",
+"tex": "stripped_mangrove_log"
+},
 "stripped_oak_log": {
 "shape": "log",
 "tags": "oak wood beam pillar",
@@ -2378,12 +3632,48 @@
 "top": "stripped_oak_log_top"
 }
 },
+"stripped_oak_wood": {
+"shape": "log",
+"tags": "pillar column",
+"tex": "stripped_oak_log"
+},
+"stripped_pale_oak_log": {
+"shape": "log",
+"tags": "pillar column",
+"tex": {
+"side": "stripped_pale_oak_log",
+"top": "stripped_pale_oak_log_top"
+}
+},
+"stripped_pale_oak_wood": {
+"shape": "log",
+"tags": "pillar column",
+"tex": "stripped_pale_oak_log"
+},
 "stripped_spruce_log": {
 "shape": "log",
 "tags": "spruce wood beam pillar",
 "tex": {
 "side": "stripped_spruce_log",
 "top": "stripped_spruce_log_top"
+}
+},
+"stripped_spruce_wood": {
+"shape": "log",
+"tags": "pillar column",
+"tex": "stripped_spruce_log"
+},
+"stripped_warped_hyphae": {
+"shape": "log",
+"tags": "pillar column",
+"tex": "stripped_warped_stem"
+},
+"stripped_warped_stem": {
+"shape": "log",
+"tags": "pillar column",
+"tex": {
+"side": "stripped_warped_stem",
+"top": "stripped_warped_stem_top"
 }
 },
 "sugar_cane": {
@@ -2394,6 +3684,59 @@
 "sugar_cane",
 "#79c05a"
 ]
+},
+"sunflower": {
+"cutout": true,
+"shape": "tall_cross",
+"tags": "yellow flower tall bush",
+"tex": {
+"bottom": "sunflower_bottom",
+"top": "sunflower_front"
+}
+},
+"suspicious_gravel": {
+"tags": "",
+"tex": "suspicious_gravel_0"
+},
+"suspicious_sand": {
+"tags": "",
+"tex": "suspicious_sand_0"
+},
+"sweet_berry_bush": {
+"cutout": true,
+"shape": "cross",
+"tags": "plant",
+"tex": "sweet_berry_bush_stage3"
+},
+"tall_dry_grass": {
+"cutout": true,
+"shape": "cross",
+"tags": "plant",
+"tex": "tall_dry_grass"
+},
+"tall_grass": {
+"cutout": true,
+"shape": "tall_cross",
+"tags": "green plant lawn meadow",
+"tex": {
+"bottom": [
+"tall_grass_bottom",
+"#79c05a"
+],
+"top": [
+"tall_grass_top",
+"#79c05a"
+]
+}
+},
+"tall_seagrass": {
+"cutout": true,
+"shape": "tall_cross",
+"tags": "plant tall",
+"tex": {
+"bottom": "tall_seagrass_bottom",
+"top": "tall_seagrass_top"
+}
 },
 "target": {
 "tags": "red white circle",
@@ -2412,11 +3755,56 @@
 "tex": "tinted_glass",
 "transparent": true
 },
+"tnt": {
+"tags": "",
+"tex": {
+"bottom": "tnt_bottom",
+"side": "tnt_side",
+"top": "tnt_top"
+}
+},
 "torch": {
 "cutout": true,
 "shape": "torch",
 "tags": "light fire small",
 "tex": "torch"
+},
+"torchflower": {
+"cutout": true,
+"shape": "cross",
+"tags": "plant",
+"tex": "torchflower"
+},
+"torchflower_crop": {
+"cutout": true,
+"shape": "cross",
+"tags": "plant",
+"tex": "torchflower_crop_stage1"
+},
+"trial_spawner": {
+"cutout": true,
+"tags": "",
+"tex": {
+"bottom": "trial_spawner_bottom",
+"side": "trial_spawner_side_active",
+"top": "trial_spawner_top_active"
+}
+},
+"tube_coral": {
+"cutout": true,
+"shape": "cross",
+"tags": "plant",
+"tex": "tube_coral"
+},
+"tube_coral_block": {
+"tags": "",
+"tex": "tube_coral_block"
+},
+"tube_coral_fan": {
+"cutout": true,
+"shape": "cross",
+"tags": "plant",
+"tex": "tube_coral_fan"
 },
 "tuff": {
 "tags": "gray rock",
@@ -2456,14 +3844,81 @@
 "tags": "gray rock low fence parapet",
 "tex": "tuff"
 },
+"twisting_vines": {
+"cutout": true,
+"shape": "cross",
+"tags": "plant",
+"tex": "twisting_vines"
+},
+"twisting_vines_plant": {
+"cutout": true,
+"shape": "cross",
+"tags": "plant",
+"tex": "twisting_vines_plant"
+},
+"verdant_froglight": {
+"shape": "log",
+"tags": "pillar column",
+"tex": {
+"side": "verdant_froglight_side",
+"top": "verdant_froglight_top"
+}
+},
+"vine": {
+"cutout": true,
+"shape": "face",
+"tags": "green plant climbing ivy",
+"tex": [
+"vine",
+"#59ae30"
+]
+},
+"warped_door": {
+"shape": "door",
+"tags": "entrance",
+"tex": {
+"bottom": "warped_door_bottom",
+"top": "warped_door_top"
+}
+},
 "warped_fence": {
 "shape": "fence",
 "tags": "warped wood railing",
 "tex": "warped_planks"
 },
+"warped_fungus": {
+"cutout": true,
+"shape": "cross",
+"tags": "plant",
+"tex": "warped_fungus"
+},
+"warped_hyphae": {
+"shape": "log",
+"tags": "pillar column",
+"tex": "warped_stem"
+},
+"warped_nylium": {
+"tags": "",
+"tex": {
+"bottom": "netherrack",
+"side": "warped_nylium_side",
+"top": "warped_nylium"
+}
+},
 "warped_planks": {
 "tags": "warped wood floor wall",
 "tex": "warped_planks"
+},
+"warped_pressure_plate": {
+"shape": "carpet",
+"tags": "rug floor thin",
+"tex": "warped_planks"
+},
+"warped_roots": {
+"cutout": true,
+"shape": "cross",
+"tags": "plant",
+"tex": "warped_roots"
 },
 "warped_slab": {
 "shape": "slab",
@@ -2474,6 +3929,24 @@
 "shape": "stairs",
 "tags": "warped wood roof",
 "tex": "warped_planks"
+},
+"warped_stem": {
+"shape": "log",
+"tags": "pillar column",
+"tex": {
+"side": "warped_stem",
+"top": "warped_stem_top"
+}
+},
+"warped_trapdoor": {
+"cutout": true,
+"shape": "trapdoor",
+"tags": "hatch plate thin",
+"tex": "warped_trapdoor"
+},
+"warped_wart_block": {
+"tags": "",
+"tex": "warped_wart_block"
 },
 "water": {
 "liquid": true,
@@ -2554,6 +4027,28 @@
 "tags": "teal metal antenna pipe thin",
 "tex": "weathered_lightning_rod"
 },
+"weeping_vines": {
+"cutout": true,
+"shape": "cross",
+"tags": "plant",
+"tex": "weeping_vines"
+},
+"weeping_vines_plant": {
+"cutout": true,
+"shape": "cross",
+"tags": "plant",
+"tex": "weeping_vines_plant"
+},
+"wet_sponge": {
+"tags": "",
+"tex": "wet_sponge"
+},
+"wheat": {
+"cutout": true,
+"shape": "cross",
+"tags": "plant",
+"tex": "wheat_stage7"
+},
 "white_carpet": {
 "shape": "carpet",
 "tags": "white rug floor thin",
@@ -2562,6 +4057,14 @@
 "white_concrete": {
 "tags": "white smooth flat modern",
 "tex": "white_concrete"
+},
+"white_concrete_powder": {
+"tags": "",
+"tex": "white_concrete_powder"
+},
+"white_glazed_terracotta": {
+"tags": "",
+"tex": "white_glazed_terracotta"
 },
 "white_stained_glass": {
 "tags": "white transparent window",
@@ -2588,6 +4091,18 @@
 "tags": "white soft fabric",
 "tex": "white_wool"
 },
+"wildflowers": {
+"cutout": true,
+"shape": "carpet",
+"tags": "rug floor thin",
+"tex": "wildflowers"
+},
+"wither_rose": {
+"cutout": true,
+"shape": "cross",
+"tags": "plant",
+"tex": "wither_rose"
+},
 "yellow_carpet": {
 "shape": "carpet",
 "tags": "yellow rug floor thin",
@@ -2596,6 +4111,14 @@
 "yellow_concrete": {
 "tags": "yellow smooth flat modern",
 "tex": "yellow_concrete"
+},
+"yellow_concrete_powder": {
+"tags": "",
+"tex": "yellow_concrete_powder"
+},
+"yellow_glazed_terracotta": {
+"tags": "",
+"tex": "yellow_glazed_terracotta"
 },
 "yellow_stained_glass": {
 "tags": "yellow transparent window",

@@ -7,7 +7,7 @@ max_images:
   message: 2
   tool_result: 3
 model_name: ${oc.env:HOLO_MODEL,holo4-27b}
-reasoning_effort: medium
+reasoning_effort: xhigh
 max_completion_tokens: 32768
 compactor_trigger_tokens: 120000
 llm_timeout: 1200

@@ -162,7 +162,8 @@ const connects = (s: State, kinds: string[]) =>
 function faceTex(state: State, dir: Dir): Tex {
   const tex = state.info.tex;
   if (typeof tex === "string" || Array.isArray(tex)) return tex;
-  if (state.info.shape === "door") return (state.props.half === "upper" ? tex.top : tex.bottom) ?? tex.side ?? "";
+  if (state.info.shape === "door" || state.info.shape === "tall_cross")
+    return (state.props.half === "upper" ? tex.top : tex.bottom) ?? tex.side ?? "";
   let axisDir = dir;
   if (state.info.shape === "log") {
     const axis = state.props.axis ?? "y";
@@ -251,6 +252,29 @@ function shapeBoxes(world: VoxelWorld, s: State, x: number, y: number, z: number
         west: [13, 0, 0, 16, 16, 16],
       };
       return [panels[s.props.facing ?? "north"]];
+    }
+    case "ladder": {
+      const rungs: Record<string, Box16> = {
+        north: [0, 0, 15, 16, 16, 16],
+        south: [0, 0, 0, 16, 16, 1],
+        east: [0, 0, 0, 1, 16, 16],
+        west: [15, 0, 0, 16, 16, 16],
+      };
+      return [rungs[s.props.facing ?? "north"]];
+    }
+    case "face": {
+      const sheets: Record<string, Box16> = {
+        north: [0, 0, 0, 16, 16, 1],
+        south: [0, 0, 15, 16, 16, 16],
+        west: [0, 0, 0, 1, 16, 16],
+        east: [15, 0, 0, 16, 16, 16],
+        up: [0, 15, 0, 16, 16, 16],
+        down: [0, 0, 0, 16, 1, 16],
+      };
+      const out = Object.keys(sheets)
+        .filter((side) => s.props[side] === "true")
+        .map((side) => sheets[side]);
+      return out.length ? out : [sheets.north];
     }
     default:
       return [s.info.liquid ? [0, 0, 0, 16, 14, 16] : FULL];
@@ -425,7 +449,7 @@ export function meshWorld(world: VoxelWorld, uvs: Map<string, UV>): MeshData[] {
         if (s === AIR) continue;
         const buffer = buffers[s.info.transparent ? "transparent" : s.info.cutout ? "cutout" : "opaque"];
         const shape = s.info.shape ?? "cube";
-        if (shape === "cross") {
+        if (shape === "cross" || shape === "tall_cross") {
           cross(buffer, tiles[id][4], x, y, z);
           continue;
         }

@@ -3,7 +3,9 @@
 # ///
 """Generate server/blockyard/blocks.json and a texture sheet of what it needs from a Faithful 32x resource pack.
 
-    uv run scripts/palette.py path/to/faithful/assets/minecraft/textures/block
+    uv run scripts/palette.py path/to/faithful/assets/minecraft/textures/block path/to/client-jar/assets/minecraft
+
+The hand-tagged blocks below come first; every other vanilla block whose model maps onto a known shape follows.
 """
 
 from __future__ import annotations
@@ -169,7 +171,7 @@ def entry(tex, tags: str, **extra) -> dict:
     return {"tex": tex, "tags": tags, **extra}
 
 
-def main(pack: Path) -> None:
+def main(pack: Path, assets: Path) -> None:
     blocks: dict[str, dict] = {}
     for name, (tex, tags) in PLAIN.items():
         blocks[name] = entry(tex, tags)
@@ -258,8 +260,16 @@ def main(pack: Path) -> None:
     blocks["lantern"] = entry("lantern", "light hanging small", shape="lantern", cutout=True)
     blocks["soul_lantern"] = entry("soul_lantern", "blue light hanging small", shape="lantern", cutout=True)
     blocks["snow"] = entry("snow", "white winter thin layer", shape="carpet")
-    blocks["ladder"] = entry("ladder", "wood climb", shape="pane", cutout=True)
+    blocks["ladder"] = entry("ladder", "wood climb", shape="ladder", cutout=True)
+    for name, tags in {"vine": "green plant climbing ivy", "glow_lichen": "green plant climbing glow"}.items():
+        blocks[name] = entry((name, FOLIAGE) if name == "vine" else name, tags, shape="face", cutout=True)
+    for name, tags in {"tall_grass": "green plant lawn meadow", "large_fern": "green plant forest"}.items():
+        blocks[name] = entry({"bottom": (f"{name}_bottom", GRASS), "top": (f"{name}_top", GRASS)}, tags, shape="tall_cross", cutout=True)
+    for name, tags in {"rose_bush": "red flower", "lilac": "purple flower", "peony": "pink flower", "sunflower": "yellow flower"}.items():
+        top = "sunflower_front" if name == "sunflower" else f"{name}_top"
+        blocks[name] = entry({"bottom": f"{name}_bottom", "top": top}, f"{tags} tall bush", shape="tall_cross", cutout=True)
 
+    skipped = add_vanilla(blocks, assets, pack)
     textures = set()
     for info in blocks.values():
         for t in faces(info["tex"]):
@@ -269,7 +279,175 @@ def main(pack: Path) -> None:
         sys.exit(f"missing textures in {pack}: {missing}")
     write_sheet(pack, sorted(textures))
     OUT.write_text(json.dumps(blocks, indent=0, sort_keys=True) + "\n")
-    print(f"{len(blocks)} blocks, {len(textures)} textures")
+    print(f"{len(blocks)} blocks, {len(textures)} textures; {len(skipped)} vanilla blocks with no matching shape:")
+    print(" ".join(sorted(skipped)))
+
+
+SHAPE_TAGS = {
+    "stairs": "steps roof", "slab": "half", "fence": "railing", "wall": "low fence parapet", "pane": "thin window",
+    "door": "entrance", "trapdoor": "hatch plate thin", "carpet": "rug floor thin", "lantern": "light hanging small",
+    "torch": "light fire small", "rod": "thin pole", "cross": "plant", "tall_cross": "plant tall", "log": "pillar column",
+    "face": "thin climbing cover", "ladder": "climb",
+}  # fmt: skip
+TINTS = {"birch_leaves": "#80a755", "spruce_leaves": "#619961", "vine": FOLIAGE, "lily_pad": "#208030"}
+TINTS |= {f"{w}_leaves": FOLIAGE for w in ("oak", "jungle", "acacia", "dark_oak", "mangrove")}
+SKIPPED_PREFIXES = ("waxed_", "infested_", "potted_", "structure_", "test_")
+
+
+def add_vanilla(blocks: dict[str, dict], assets: Path, pack: Path) -> list[str]:
+    """Add every vanilla block not in `blocks` whose model maps onto a shape; return the names of those that do not."""
+    skipped = []
+    for path in sorted((assets / "blockstates").glob("*.json")):
+        name = path.stem
+        if name in blocks or name.startswith(SKIPPED_PREFIXES):
+            continue
+        shape, tex = classify(assets, name, vanilla_models(json.loads(path.read_text()))) or (None, None)
+        tex = tidy(tex)
+        if not tex or any(not (pack / f"{t}.png").exists() for t in faces(tex)):
+            skipped.append(name)
+            continue
+        extra: dict = {} if shape == "cube" else {"shape": shape}
+        alphas = b"".join(Image.open(pack / f"{t}.png").convert("RGBA").getchannel("A").tobytes() for t in faces(tex))
+        if sum(0 < a < 255 for a in alphas) > len(alphas) / 4:
+            extra["transparent"] = True
+        elif min(alphas) < 255:
+            extra["cutout"] = True
+        blocks[name] = entry(tex, SHAPE_TAGS.get(shape, ""), **extra)
+    return skipped
+
+
+def tidy(tex):
+    """None if any face lacks a block texture; one texture if every face shares it; no bottom when it repeats the top."""
+    if not isinstance(tex, dict):
+        return tex if tex and (isinstance(tex, str) or tex[0]) else None
+    if any(tidy(v) is None for v in tex.values()):
+        return None
+    if len({json.dumps(v) for v in tex.values()}) == 1:
+        return next(iter(tex.values()))
+    return {k: v for k, v in tex.items() if not (k == "bottom" and v == tex.get("top"))}
+
+
+def vanilla_models(state: dict) -> list[tuple[str, str]]:
+    """(variant key, model) pairs of a blockstate file; multipart parts have an empty key."""
+    first = lambda apply: (apply[0] if isinstance(apply, list) else apply)["model"]
+    if "variants" in state:
+        return [(key, first(v)) for key, v in state["variants"].items()]
+    return [("", first(part["apply"])) for part in state["multipart"]]
+
+
+def model_chain(assets: Path, ref: str) -> tuple[list[str], dict]:
+    """A model's own name then its parents', and its textures with the nearest definition winning."""
+    chain, textures = [], {}
+    while ref:
+        ref = ref.removeprefix("minecraft:").removeprefix("block/")
+        chain.append(ref)
+        path = assets / "models" / "block" / f"{ref}.json"
+        if not path.exists():
+            break
+        model = json.loads(path.read_text())
+        textures = {**model.get("textures", {}), **textures}
+        ref = model.get("parent", "")
+    return chain, textures
+
+
+def texture(textures: dict, key: str) -> str | None:
+    value = textures.get(key)
+    while True:
+        if isinstance(value, dict):
+            value = value.get("sprite")
+        if not isinstance(value, str) or not value.startswith("#"):
+            break
+        value = textures.get(value[1:])
+    if not isinstance(value, str):
+        return None
+    value = value.removeprefix("minecraft:")
+    return value.removeprefix("block/") if value.startswith("block/") else None
+
+
+def classify(assets: Path, name: str, variants: list[tuple[str, str]]) -> tuple[str, object] | None:
+    """The shape and textures of a block from its lit, ripest or first model's template, or None when no shape matches."""
+    lit = [model for key, model in variants if "lit=true" in key]
+    ripe = variants[-1][1] if variants[0][0].startswith("age=") else None
+    chain, t = model_chain(assets, (lit and lit[0]) or ripe or variants[0][1])
+    halves = {key: model for key, model in variants if key in ("half=lower", "half=upper")}
+    tint = TINTS.get(name) or (GRASS if "tinted_cross" in chain else None)
+    tinted = lambda tex: (tex, tint) if tint and tex else tex
+    faces_of = lambda **keys: {face: texture(t, key) for face, key in keys.items()}
+    for base in chain:
+        match base:
+            case "vine" | "glow_lichen" | "sculk_vein" | "resin_clump":
+                return "face", tinted(texture(t, next(k for k in t if k != "particle")))
+            case "ladder":
+                return "ladder", texture(t, "texture")
+            case "cross" | "tinted_cross" | "template_seagrass" if len(halves) == 2:
+                key = "texture" if base == "template_seagrass" else "cross"
+                ends = {half: model_chain(assets, halves[f"half={half}"])[1] for half in ("lower", "upper")}
+                return "tall_cross", {
+                    "bottom": tinted(texture(ends["lower"], key)),
+                    "top": tinted(texture(ends["upper"], key)),
+                }
+            case "cross" | "tinted_cross" | "cross_emissive":
+                return "cross", tinted(texture(t, "cross"))
+            case "template_seagrass" | "crop" | "coral_fan":
+                return "cross", texture(t, {"template_seagrass": "texture", "crop": "crop", "coral_fan": "fan"}[base])
+            case "cube_all" | "leaves":
+                return "cube", tinted(texture(t, "all"))
+            case "template_single_face" | "slime_block":
+                return "cube", texture(t, "texture")
+            case "template_glazed_terracotta":
+                return "cube", texture(t, "pattern")
+            case "template_azalea" | "mangrove_roots":
+                return "cube", faces_of(top="top", side="side")
+            case "dried_kelp_block":
+                return "cube", faces_of(top="up", bottom="down", side="north")
+            case "pressure_plate_up":
+                return "carpet", texture(t, "texture")
+            case "flowerbed_1":
+                return "carpet", texture(t, "flowerbed")
+            case "lily_pad":
+                return "carpet", tinted(texture(t, "texture"))
+            case (
+                "cube_column"
+                | "cube_column_horizontal"
+                | "cube_column_uv_locked_x"
+                | "cube_column_uv_locked_y"
+                | "cube_column_uv_locked_z"
+            ):
+                shape = "log" if any("axis=" in key for key, _ in variants) else "cube"
+                return shape, faces_of(top="end", side="side")
+            case "cube_bottom_top":
+                return "cube", faces_of(top="top", bottom="bottom", side="side")
+            case "cube_top":
+                return "cube", faces_of(top="top", side="side")
+            case "orientable":
+                return "cube", faces_of(top="top", bottom="top", side="front")
+            case "orientable_with_bottom":
+                return "cube", faces_of(top="top", bottom="bottom", side="front")
+            case "cube":
+                return "cube", faces_of(top="up", bottom="down", side="north")
+            case "stairs" | "inner_stairs" | "outer_stairs":
+                return "stairs", faces_of(top="top", bottom="bottom", side="side")
+            case "slab":
+                return "slab", faces_of(top="top", bottom="bottom", side="side")
+            case "fence_post":
+                return "fence", texture(t, "texture")
+            case "template_wall_post":
+                return "wall", texture(t, "wall")
+            case "template_glass_pane_post":
+                return "pane", texture(t, "pane")
+            case "door_bottom_left" | "door_bottom_left_open" | "door_bottom_right" | "door_bottom_right_open":
+                return "door", faces_of(bottom="bottom", top="top")
+            case "template_trapdoor_bottom" | "template_orientable_trapdoor_bottom":
+                return "trapdoor", texture(t, "texture")
+            case "carpet":
+                return "carpet", texture(t, "wool")
+            case "template_lantern" | "template_hanging_lantern":
+                return "lantern", texture(t, "lantern")
+            case "template_torch" | "template_redstone_torch":
+                return "torch", texture(t, "torch")
+            case "template_chain":
+                return "rod", texture(t, "all")
+    return None
 
 
 def write_sheet(pack: Path, names: list[str]) -> None:
@@ -298,4 +476,4 @@ def faces(tex) -> list[str]:
 
 
 if __name__ == "__main__":
-    main(Path(sys.argv[1]))
+    main(Path(sys.argv[1]), Path(sys.argv[2]))

@@ -26,14 +26,20 @@ SIDES = ("front", "front-right", "right", "back-right", "back", "back-left", "le
 
 @dataclass(frozen=True)
 class View:
-    """Where a render looks from: the four views when `angle` is None, else one view from that angle and pitch."""
+    """Where a render looks from: a camera at `eye` when set, else the four views when `angle` is None, else one
+    view from that angle and pitch."""
 
     angle: float | None = None
     pitch: float = 30
     zoom: float = 1
+    eye: tuple[float, float, float] | None = None
 
     def caption(self) -> str:
         zoom = f", zoom {self.zoom:g}x" if self.zoom != 1 else ""
+        if self.eye is not None:
+            x, y, z = self.eye
+            tilt = f", tilted {abs(self.pitch):g} degrees {'down' if self.pitch > 0 else 'up'}" if self.pitch else ""
+            return f"one wide view from a camera at x {x:g}, y {y:g}, z {z:g}, turned to the middle{tilt}{zoom}."
         if self.angle is None:
             return f"3/4 front-right, 3/4 back-left, front, and top (back at the top){zoom}."
         side = SIDES[round(self.angle / 45) % 8]

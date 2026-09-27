@@ -108,10 +108,21 @@ def test_agents_build_through_the_tools_endpoint(tmp_path, monkeypatch, capsys):
         with pytest.raises(SystemExit) as done:
             client.main()
         assert done.value.code == 0
-    out = capsys.readouterr().out
-    assert views[-1] == View(270, 30, 2) and views[0] == FOUR_VIEWS
-    assert "Saved view.png. The render: one view from 270 degrees around (left), 30 degrees up, zoom 2x." in out
-    assert (tmp_path / "view.png").read_bytes() == RENDER and out.rstrip().endswith("@@attach view.png")
+        out = capsys.readouterr().out
+        assert views[-1] == View(270, 30, 2) and views[0] == FOUR_VIEWS
+        assert "Saved view.png. The render: one view from 270 degrees around (left), 30 degrees up, zoom 2x." in out
+        assert (tmp_path / "view.png").read_bytes() == RENDER and out.rstrip().endswith("@@attach view.png")
+
+        monkeypatch.setattr(
+            sys, "argv", ["blocks", "look", "--from", "4", "2", "20", "--pitch", "-8", "--out", "a.png"]
+        )
+        with pytest.raises(SystemExit):
+            client.main()
+        assert views[-1] == View(None, -8, 1, (4, 2, 20)) and (tmp_path / "a.png").read_bytes() == RENDER
+        assert "camera at x 4, y 2, z 20, turned to the middle, tilted 8 degrees up." in capsys.readouterr().out
+
+        empty = http.post(f"{tools}/run", json={"code": 'step("Core")\nfill(4, 2, 4, 4, 1, 4, "stone")'}).json()
+        assert 'line 2 `fill(4, 2, 4, 4, 1, 4, "stone")`: y' in empty["text"], empty["text"]
     assert store.load(build.id).script.startswith('step("Core")')
 
 

@@ -18,7 +18,11 @@ STATE_KEYS = {
     "log": {"axis": {"x", "y", "z"}},
     "door": {"facing": {"north", "south", "east", "west"}, "half": {"lower", "upper"}},
     "trapdoor": {"facing": {"north", "south", "east", "west"}, "half": {"top", "bottom"}, "open": {"true", "false"}},
+    "tall_cross": {"half": {"lower", "upper"}},
+    "face": {side: {"true", "false"} for side in ("north", "south", "east", "west", "up", "down")},
+    "ladder": {"facing": {"north", "south", "east", "west"}},
 }
+TWO_TALL = {"door", "tall_cross"}
 
 
 @dataclass(frozen=True)
