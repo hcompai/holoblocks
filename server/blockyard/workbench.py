@@ -112,25 +112,31 @@ class Workbench:
         reports = []
         for n in range(same, len(steps)):
             reports += await self.place(world, source, steps, n)
-        reports += await asyncio.to_thread(self._floating, world)
+        floating = await asyncio.to_thread(self._floating, world)
         problems = len(reports)
         kept = (
             ""
             if not same
-            else f"kept step {fixed + 1}, "
+            else f"kept step {fixed + 1} unchanged, "
             if same == 1
-            else f"kept steps {fixed + 1} to {fixed + same}, "
+            else f"kept steps {fixed + 1} to {fixed + same} unchanged, "
         )
-        lines = [f"Ran the script: {kept}rebuilt {len(steps) - same} steps."]
+        rebuilt = len(steps) - same
+        lines = [f"Ran the script: {kept}rebuilt and checked {rebuilt} step{'' if rebuilt == 1 else 's'}."]
         if reports:
             lines += ["Problems, by script line:", _first(reports)]
         else:
-            lines.append("No problems: every block is known, on the site, joined to the ground, and every step shows.")
-        lines.append("Steps: blocks set, then where they sit (x, z, and y from bottom to top):")
+            lines.append("No problems: every block is known, on the site, and every step shows.")
+        if floating:
+            lines += ["Floating, fine only if the subject flies or hangs there:", *floating]
+        lines.append(
+            "Steps, with exact sizes and positions: blocks set, then where they sit (x, z, and y from bottom to top):"
+        )
         lines.append(await asyncio.to_thread(self.describe))
+        summary = await asyncio.to_thread(self.summary)
         seen = await self.look(f"Ran the script: {build.name}" + (f", {problems} problems" if problems else ""))
         return Result(
-            "\n".join(lines) + printed + "\n" + seen.text,
+            "\n".join(lines) + printed + "\n" + "\n".join(filter(None, [summary, seen.text])),
             note=seen.note,
             images=seen.images,
             kind=seen.kind,
@@ -188,15 +194,6 @@ class Workbench:
         """How many steps were built before the script; it builds on them and never changes them."""
         return next((s.index for s in self.build.steps if s.key is not None), len(self.build.steps))
 
-    def brief(self) -> str:
-        """The model as a new request finds it: its steps, and the script behind them."""
-        lines = ["Steps:", self.describe()]
-        fixed, script = self._fixed(), self.build.script
-        if fixed:
-            lines.append(f"Steps 1-{fixed} were built before the script; it builds on them and cannot change them.")
-        lines += ["The build script:", _numbered(script)] if script else ["No build script yet."]
-        return "\n".join(lines)
-
     def describe(self) -> str:
         """One line per step: the blocks it sets and the box they span."""
         spans: dict[int, list[Box]] = {}
@@ -233,14 +230,13 @@ class Workbench:
                 f"pitch goes from 0 to 90 and zoom from 1 to 8; got {view.pitch:g} and {view.zoom:g}", problems=1
             )
         png = await self.session.render(box=corners or None, view=view)
-        summary = await asyncio.to_thread(self.summary)
         if png is None:
-            return Result(f"No viewer is open, so no image this time.\n{summary}", note=f"{note} (no viewer open)")
+            return Result("No viewer is open, so no image this time.", note=f"{note} (no viewer open)")
         caption = f"The render: {view.caption()}"
         if corners:
             caption = f"Close-up of x {corners[0]}-{corners[3]}, y {corners[1]}-{corners[4]}, z {corners[2]}-{corners[5]}, showing only the blocks inside: {view.caption()}"
         await self.session.say(note, role="tool", images=[self.session.store.save_image(png)])
-        return Result(summary, images=[Picture(png, "image/png")], kind="render", caption=caption)
+        return Result("", images=[Picture(png, "image/png")], kind="render", caption=caption)
 
     async def find_blocks(self, query: str) -> Result:
         hits = blocks.search(query)
@@ -260,11 +256,8 @@ class Workbench:
         (x0, _, z0), (x1, y1, z1) = bounds
         total = sum(counts.values())
         top = ", ".join(f"{name} {n}" for name, n in counts.most_common(5))
-        return f"{total} blocks in {len(self.build.steps)} steps, spanning x {x0}-{x1}, z {z0}-{z1}, up to y={y1}. Most used: {top}."
-
-
-def _numbered(script: str) -> str:
-    return "\n".join(f"{n:>4}  {line}" for n, line in enumerate(script.splitlines(), 1))
+        steps = len(self.build.steps)
+        return f"{total} block{'' if total == 1 else 's'} in {steps} step{'' if steps == 1 else 's'}, spanning x {x0}-{x1}, z {z0}-{z1}, up to y={y1}. Most used: {top}."
 
 
 def _line(source: list[str], n: int) -> str:

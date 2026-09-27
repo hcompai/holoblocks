@@ -13,20 +13,16 @@ from pathlib import Path
 import yaml
 
 from blockyard.builders.showcases import SHOWCASES
-from blockyard.guide import guide
-from blockyard.model import Build, Message
+from blockyard.model import Build
 from blockyard.session import Session
-from blockyard.workbench import Workbench
 
 AGENT = Path(__file__).resolve().parents[3] / "agent" / "holo.py"
 RENDERS = AGENT.parent / "showcase"
-EARLIER = 10
-EARLIER_CHARS = 400
 STOP_S = 10
 
 
 class HoloBuilder:
-    """Runs the agent command once per request, with the task on stdin and the build in BLOCKYARD_* variables."""
+    """Runs the agent command once per request, with the request on stdin and the build in BLOCKYARD_* variables."""
 
     name = "holo"
     label = "Holo"
@@ -52,7 +48,6 @@ class HoloBuilder:
         (workspace / "build.py").write_text(build.script)
         await asyncio.to_thread(_shelve, workspace / "showcase")
         names = await asyncio.to_thread(_attach, session, workspace)
-        task = await asyncio.to_thread(self.task, session, request, workspace)
         run = runs / time.strftime("%Y%m%d-%H%M%S")
         env = os.environ | {
             "BLOCKYARD_URL": self.url,
@@ -74,41 +69,12 @@ class HoloBuilder:
                 start_new_session=True,
             )
             try:
-                await process.communicate(task.encode())
+                await process.communicate(request.encode())
             finally:
                 if process.returncode is None:
                     await _stop(process)
         if process.returncode:
             raise RuntimeError(f"Holo exited with code {process.returncode}; its log is {run}.log")
-
-    @staticmethod
-    def task(session: Session, request: str, workspace: Path) -> str:
-        """The request, Holo's notes from earlier requests, the guide to the build script, and the model as it stands."""
-        build = session.build
-        names = attachment_names(build)
-
-        def attached(message: Message) -> str:
-            return ", ".join(f"`{names[url]}`" for url in message.images)
-
-        earlier = [
-            f"{m.role}: {m.text[:EARLIER_CHARS]}" + (f" (attached {a})" if (a := attached(m)) else "")
-            for m in build.messages[:-1]
-            if m.role in ("user", "assistant")
-        ][-EARLIER:]
-        parts = [f"# Request\n{request}"]
-        if a := attached(build.messages[-1]):
-            parts[0] += f"\n\nAttached: {a}, shown below and saved in your workspace."
-        if earlier:
-            parts.append("# Earlier in this chat\n" + "\n".join(earlier))
-        notes = workspace / "notes.md"
-        if notes.is_file():
-            parts.append(f"# Your notes (notes.md, from earlier requests on this build)\n{notes.read_text()}")
-        parts.append(guide(build.width, build.depth, build.height))
-        shelf = [f"- `showcase/{s.key}.py`: {s.name}" for s in SHOWCASES]
-        renders = ", ".join(f"`showcase/{p.name}`" for p in sorted(RENDERS.glob("*.png")))
-        parts.append("# Showcases\n" + "\n".join(shelf) + f"\nRenders: {renders}.")
-        parts.append(f"# The model now\n{Workbench(session).brief()}\n`build.py` in your workspace holds this script.")
-        return "\n\n".join(parts)
 
 
 def attachment_names(build: Build) -> dict[str, str]:

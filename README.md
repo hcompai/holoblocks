@@ -43,7 +43,7 @@ browser tabs <── steps, renders ──>  blockyard server  ── starts ─
                                             └────── HTTP tools API ─────┘
 ```
 
-- Holo is a sagent Forest agent with the managed sandbox tools (`shell`, `write_file`, `search_replace`, ...). It writes `build.py` in plain Python: `step`, `fill`, `set`, `clear` to place blocks, WorldEdit-style patterns (`"70%stone_bricks,30%andesite"`) anywhere a block goes, and `get`, `replace`, `overlay` to read and rework what is placed, with its own functions for roofs, towers, trees and land; `random` is seeded per step, so every run builds the same model. It runs `blocks run`, which rebuilds the model on the server from the first changed step and prints the problems by line, including any blocks that float. `blocks look` renders the four views or one view from any angle and zoom. For references it has `web_search` (Linkup pages, then image URLs) and `view_image`: it downloads the photos it wants into the workspace and looks at them, all through the build. Renders reach Holo through `@@attach PATH` lines, which the shell tool swaps for the image in the same result.
+- Holo is a sagent Forest agent with the managed sandbox tools (`shell`, `write_file`, `search_replace`, ...). It writes `build.py` in plain Python: `step`, `fill`, `set`, `clear` to place blocks, WorldEdit-style patterns (`"70%stone_bricks,30%andesite"`) anywhere a block goes, and `get`, `replace`, `overlay` to read and rework what is placed, with its own functions for roofs, towers, trees and land; `random` is seeded per step, so every run builds the same model. It runs `blocks run`, which rebuilds the model on the server from the first changed step and prints the problems by line, and notes any blocks that float. `blocks look` renders the four views or one view from any angle and zoom. For references it has `web_search` (Linkup pages, then image URLs) and `view_image`: it downloads the photos it wants into the workspace and looks at them, all through the build. Renders reach Holo through `@@attach PATH` lines, which the shell tool swaps for the image in the same result.
 - Renders come from a hidden Chromium tab the server keeps on each build asking for them, so Holo sees its model with no tab open; without that browser, an open viewer on the build answers instead.
 - sagent comes from a local hai checkout recent enough for Linkup's `include_images`: set `HAI_ROOT` to it, with its venv synced (`cd hai && uv sync`).
 
@@ -57,10 +57,10 @@ server/.venv/bin/blockyard
 | To change | Edit |
 | --- | --- |
 | model, reasoning effort, step and time budget, tools | `agent/holo.yaml` |
-| how Holo builds: principles, workflow, when to stop | `agent/holo.j2` |
-| the build script API, parts, blocks, recipes | `server/blockyard/guide.py`, `server/blockyard/script.py` |
+| how Holo builds: principles, workflow, build script API, when to stop | `agent/holo.j2` |
+| what the build script can call | `server/blockyard/script.py` |
 
-Each request leaves `data/workspaces/<build>/runs/<time>.log` (what Holo did, as the terminal shows it) and `<time>.jsonl` (the full trajectory, reasoning included). Try the tools by hand from a workspace: `BLOCKYARD_BUILD=<build> ../../../server/.venv/bin/blocks run`.
+Each request leaves `data/workspaces/<build>/runs/<time>.log` (what Holo did, as the terminal shows it) and `<time>.jsonl` (the full trajectory, reasoning included). The next request on the build replays these trajectories, so Holo continues the conversation. Try the tools by hand from a workspace: `BLOCKYARD_BUILD=<build> ../../../server/.venv/bin/blocks run`.
 
 ## Showcases and gallery
 

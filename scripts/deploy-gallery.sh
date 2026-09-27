@@ -14,4 +14,4 @@ shift
 (cd web && npm run build:gallery)
 server/.venv/bin/blockyard-gallery web/.vercel/output/static "$@"
 echo '{"version": 3}' > web/.vercel/output/config.json
-(cd web && vercel deploy --prebuilt ${target[@]+"${target[@]}"})
+(cd web && vercel deploy --prebuilt --scope h-company ${target[@]+"${target[@]}"})

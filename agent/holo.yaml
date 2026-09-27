@@ -82,7 +82,6 @@ agent:
     prompt_path: holo.j2
     prompt_source_module: holo
   tools:
-    - _target_: sagent.lib.tools.planning.UpdatePlan
     - _target_: sagent.lib.tools.sandbox.SubmitCommand
     - _target_: sagent.lib.tools.sandbox.PollExecution
     - _target_: sagent.lib.tools.sandbox.ReadFile
@@ -90,6 +89,7 @@ agent:
     - _target_: sagent.lib.tools.sandbox.SearchReplace
     - _target_: sagent.lib.tools.sandbox.ViewImage
     - _target_: sagent.lib.tools.search.WebSearch
+    - _target_: sagent.lib.tools.search.Fetch
     - _target_: sagent.lib.tools.communication.Answer
   callbacks:
     - ${compactor}

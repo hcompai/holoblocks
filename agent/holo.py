@@ -11,7 +11,17 @@ import httpx
 from hai_adapters.langfuse_tracing import flush as langfuse_flush
 from hai_protocols.image.encoding import MediaType
 from hai_protocols.image.serializable_image import SerializableImage
-from sagent.core.events import AnswerEvent, EventHandler, EventRecord, PolicyEvent
+from sagent.core.events import (
+    AnswerEvent,
+    ErrorEvent,
+    EventHandler,
+    EventRecord,
+    FlowEvent,
+    PolicyEvent,
+    ToolResultEvent,
+)
+from sagent.lib.events_handlers.jsonl_dir_handler import JSONLDirEventHandler
+from sagent.sagent import SAgent
 from sagent.utils.builder import build_agent
 
 CONFIG = Path(__file__).resolve().with_name("holo.yaml")
@@ -50,17 +60,42 @@ def attachments() -> list[SerializableImage]:
     workspace = Path(os.environ["BLOCKYARD_WORKSPACE"])
     names = [n for n in os.environ.get("BLOCKYARD_ATTACHMENTS", "").split(os.pathsep) if n]
     return [
-        SerializableImage.from_bytes((workspace / n).read_bytes(), MediaType(mimetypes.guess_type(n)[0]))
-        for n in names
+        SerializableImage.from_bytes((workspace / n).read_bytes(), MediaType(mimetypes.guess_type(n)[0])) for n in names
     ]
 
 
+def earlier_history() -> list[EventRecord]:
+    """The history this build's earlier runs left: their events since the last compaction, flow control dropped."""
+    records = list(JSONLDirEventHandler.read_records(Path(os.environ["BLOCKYARD_WORKSPACE"]) / "runs"))
+    compacted = [i for i, r in enumerate(records) if isinstance(r.event, FlowEvent) and r.event.flow == "reset_history"]
+    return [r for r in records[compacted[-1] + 1 if compacted else 0 :] if not isinstance(r.event, FlowEvent)]
+
+
+def resume(agent: SAgent, records: list[EventRecord]) -> None:
+    """Restore the earlier history; a call cut off by a stop gets an error, so every call has its result."""
+    for record in records:
+        agent.add_event_record(record, publish=False)
+    events = agent.history.events
+    settled = {e.tool_req.id for e in events if isinstance(e, (ToolResultEvent, ErrorEvent)) and e.tool_req}
+    for req in (r for e in events if isinstance(e, PolicyEvent) for r in e.tool_reqs if r.id not in settled):
+        agent.add_event(
+            ErrorEvent(
+                error="Stopped by the user before it finished.",
+                origin="blockyard",
+                traceback=None,
+                tool_req=req,
+            )
+        )
+
+
 def main() -> None:
-    """Build the agent from holo.yaml, overridable with key=value arguments, and run the task on stdin."""
+    """Build the agent from holo.yaml (key=value overrides), restore the build's history, run the request on stdin."""
     signal.signal(signal.SIGTERM, lambda *_: sys.exit(143))
+    earlier = earlier_history()
     agent = build_agent(CONFIG.stem, overrides=sys.argv[1:], config_dir=CONFIG.parent)
     agent.policy_context["max_completion_tokens"] = agent.policy.llm.base_request.max_completion_tokens
     try:
+        resume(agent, earlier)
         agent([sys.stdin.read(), *attachments()])
     finally:
         for handler in agent.event_bus.handlers:

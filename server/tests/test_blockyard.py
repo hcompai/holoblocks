@@ -54,7 +54,7 @@ def test_later_steps_overwrite_earlier_ones(bench):
     assert bench.world().get(1, 1, 1) == "oak_planks" and bench.world().get(0, 1, 0) == "stone"
 
 
-def test_blocks_joined_to_nothing_on_the_ground_are_reported_as_floating(bench):
+def test_floating_blocks_are_noted_without_counting_as_a_problem(bench):
     result = asyncio.run(
         bench.run_script(
             'step("Tower")\nfill(0, 0, 0, 0, 5, 0, "stone")\nset(1, 5, 0, "lantern")\n'
@@ -62,7 +62,7 @@ def test_blocks_joined_to_nothing_on_the_ground_are_reported_as_floating(bench):
         )
     )
     assert "step 'Island': 16 blocks float" in result.text and "`blocks look 5 4 5 8 4 8`" in result.text
-    assert "Tower" not in result.text.split("Steps:")[0] and result.problems == 1
+    assert "Tower" not in result.text.split("Steps,")[0] and result.problems == 0
 
 
 LAND = """

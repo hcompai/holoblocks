@@ -2,6 +2,7 @@ import asyncio
 import base64
 import io
 import os
+import re
 import sys
 import time
 from types import SimpleNamespace
@@ -10,7 +11,8 @@ import PIL.Image
 import pytest
 from fastapi.testclient import TestClient
 
-from blockyard.builders.holo import HoloBuilder
+from blockyard.builders.holo import AGENT, HoloBuilder
+from blockyard.builders.showcases import SHOWCASES
 from blockyard.model import Build, Message
 from blockyard.session import FOUR_VIEWS, Session, Store, View
 from blockyard.workbench import Workbench
@@ -47,14 +49,16 @@ def test_a_script_rebuilds_from_its_first_changed_step_and_names_the_lines_of_it
 
     spruce = HOUSE.replace('"oak_', '"spruce_')
     recolored = asyncio.run(bench.run_script(spruce))
-    assert "kept step 1, rebuilt 2 steps" in recolored.text
+    assert "kept step 1 unchanged, rebuilt and checked 2 steps" in recolored.text
     assert [b for b in bench.build.boxes if b.step == 0] == walls
     assert bench.world().get(5, 6, 1) == "spruce_stairs[facing=south]"
 
     stray = spruce + 'set(40, 1, 0, "stone")\nset(3, 1, 3, "stone_brik")\n'
     for _ in range(2):
         result = asyncio.run(bench.run_script(stray))
-        assert result.problems == 2 and "kept steps 1 to 2, rebuilt 1 steps" in result.text, result.text
+        assert result.problems == 2 and "kept steps 1 to 2 unchanged, rebuilt and checked 1 step" in result.text, (
+            result.text
+        )
         assert 'line 11 `set(40, 1, 0, "stone")`: entirely outside the site' in result.text
         assert (
             "line 12 `set(3, 1, 3, \"stone_brik\")`: unknown block 'stone_brik'; did you mean stone_bricks"
@@ -90,11 +94,12 @@ def test_agents_build_through_the_tools_endpoint(tmp_path, monkeypatch, capsys):
     with TestClient(app_module.app) as http:
         ran = http.post(f"{tools}/run", json={"code": 'step("Core")\nset(4, 0, 4, "stone")'}).json()
         assert ran["problems"] == 0 and "1 Core: 1 block, x 4-4" in ran["text"], ran["text"]
+        assert ran["text"].count("1 block in 1 step, spanning") == 1, ran["text"]
         assert ran["caption"].startswith("The render:") and base64.b64decode(ran["images"][0]["data"]) == RENDER
         shown = [url for m in store.load(build.id).messages for url in m.images]
         assert shown and http.get(shown[-1]).content == RENDER
         close = http.post(f"{tools}/look", json={"box": "0 0 0 8 8 8"}).json()
-        assert close["caption"].startswith("Close-up of x 0-8")
+        assert close["caption"].startswith("Close-up of x 0-8") and close["text"] == ""
         assert http.post(f"{tools}/build", json={}).status_code == 404
         assert http.post(f"{tools}/run", json={"script": "x"}).status_code == 400
 
@@ -162,16 +167,14 @@ def test_holo_gets_the_task_on_stdin_and_stop_ends_its_whole_process_group(tmp_p
 
     pids = asyncio.run(main())
     task = (workspace / "task.txt").read_text()
-    assert task.startswith(
-        "# Request\na tower\n\nAttached: `attachment-2.png`, shown below and saved in your workspace."
-    )
-    assert "user: a lighthouse (attached `attachment-1.jpg`)" in task and "# The build script" in task
-    assert task.endswith(f"attachment-2.png{session.build.id}")
+    assert task == f"a towerattachment-2.png{session.build.id}"
     assert (workspace / "attachment-1.jpg").read_bytes() == b"\xff\xd8 photo"
-    assert "No steps yet." in task and (workspace / "build.py").exists()
-    assert "`showcase/gothic-cathedral.py`" in task and "`showcase/gothic-cathedral.png`" in task
-    assert (workspace / "showcase" / "gothic-cathedral.py").read_text().count('\nstep("') == 9
-    assert (workspace / "showcase" / "gothic-cathedral.png").exists()
+    assert (workspace / "build.py").exists()
+    prompt = (AGENT.parent / "holo.j2").read_text()
+    for showcase in SHOWCASES:
+        assert f"`showcase/{showcase.key}.py`" in prompt and (workspace / "showcase" / f"{showcase.key}.py").exists()
+    for render in re.findall(r"`showcase/([\w-]+\.png)`", prompt):
+        assert (workspace / "showcase" / render).exists()
     assert not any(map(alive, pids))
 
 

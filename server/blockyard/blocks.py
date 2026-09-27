@@ -53,7 +53,7 @@ def parse(text: str) -> BlockState:
     name, props = m.group(1), {}
     if name != "air" and name not in palette():
         close = difflib.get_close_matches(name, palette(), n=3, cutoff=0.7)
-        hint = f"did you mean {' or '.join(close)}?" if close else "use find_blocks"
+        hint = f"did you mean {' or '.join(close)}?" if close else "search with `blocks find`"
         raise ValueError(f"unknown block '{name}'; {hint}")
     allowed = STATE_KEYS.get(shape(name), {}) if name != "air" else {}
     for pair in filter(None, (m.group(2) or "").split(",")):

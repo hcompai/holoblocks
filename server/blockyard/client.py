@@ -65,10 +65,11 @@ def main() -> None:
         view = {k: v for k in ("angle", "pitch", "zoom") if (v := getattr(args, k)) is not None}
         out = call("look", box=" ".join(map(str, args.box)), **view)
         stem = "closeup" if args.box else "view" if view else "render"
-    print(out["text"])
+    if out["text"]:
+        print(out["text"], end="\n\n" if out["images"] else "\n")
     if out["images"]:
         names = save(out["images"], stem)
-        print(f"\nSaved {', '.join(names)}. {out['caption']}".rstrip())
+        print(f"Saved {', '.join(names)}. {out['caption']}".rstrip())
         for name in names:
             print(f"@@attach {name}")
     sys.exit(1 if out["problems"] else 0)
