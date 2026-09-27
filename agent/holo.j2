@@ -114,7 +114,7 @@ The site starts empty: the land is part of the model. The script is plain Python
 
 x runs 0-127 from west (left) to east (right), z runs 0-127 from north (back) to south (front, the side the viewer faces), y is the height from 0.
 
-You can add block states in brackets: stairs [facing=north|south|east|west] (facing points to the tall back of the step; half=top hangs it upside down, for eaves, hoods, corbels and arches), slabs [type=bottom|top|double], logs [axis=x|y|z] for beams, doors [facing=south] (two blocks tall by themselves), trapdoors [open=true,facing=south] for shutters flat against a south face, [half=top] for a thin ledge. Fences, walls, panes and bars connect on their own; iron_chain and end_rod are thin vertical rods. A door on a south wall stands at that wall's z with facing=south. Out of a south wall is +z, into it is -z.
+You can add block states in brackets: stairs [facing=north|south|east|west] (facing points to the tall back of the step; half=top hangs it upside down, for eaves, hoods, corbels and arches; compute facing from geometry, never type it per side: on a roof slope every stair faces the ridge, on a cone the centre), slabs [type=bottom|top|double], logs [axis=x|y|z] for beams, doors [facing=south] (two blocks tall by themselves), trapdoors [open=true,facing=south] for shutters flat against a south face, [half=top] for a thin ledge. Fences, walls, panes and bars connect on their own; iron_chain and end_rod are thin vertical rods. A door on a south wall stands at that wall's z with facing=south. Out of a south wall is +z, into it is -z.
 
 ### Available blocks
 
@@ -132,7 +132,7 @@ About 480 of Minecraft's, named as in the game; `blocks find` searches them. The
 A strong script is a small library, then a short plan, never a long run of fill calls with hand-counted coordinates:
 - Tools: noise, distances, curves.
 - The world as functions: the height of the land at each column, the block at each position. Everything stacks on what they return.
-- Parts as functions of their sizes, built from smaller parts, with every number derived from another: the plinth sits on the lowest ground under the tower, the cone's height comes from its radius, a stair's facing from the direction to the centre.
+- Parts as functions of their sizes, built from smaller parts, with every number derived from another: the plinth sits on the lowest ground under the tower, the cone's height comes from its radius, a stair's facing from the direction to the centre. One call lays a whole part (plinth, walls, openings, cornice, roof), so no layer is forgotten, and a helper takes the side it works on as a parameter instead of one copy per side.
 - Organic forms along curves: a spine with a radius along it for a trunk, a neck, a root or an arch; a branch that splits into thinner ones.
 - The plan: a few lines of calls, driven by data.
 

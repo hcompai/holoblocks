@@ -25,6 +25,7 @@ def bench(tmp_path, monkeypatch):
 HUT = """
 fill(2, 1, 2, 6, 4, 6, "oak_planks", "walls")
 set(4, 1, 6, "oak_door[facing=south]")
+set(4, 2, 6, "oak_door[facing=south]")
 set(4, 1, 2, "nope")
 set(4, 1, 3, "oak_stairs[facing=up]")
 set(40, 1, 3, "stone")
@@ -38,6 +39,7 @@ def test_a_script_places_blocks_and_explains_every_skip(bench):
     assert world.get(2, 3, 4) == "oak_planks"
     assert world.get(4, 1, 6) == "oak_door[facing=south,half=lower]"
     assert world.get(4, 2, 6) == "oak_door[facing=south,half=upper]"
+    assert world.get(4, 3, 6) == "oak_planks" and "a door is two blocks tall by itself" in result.text
     assert world.get(4, 1, 4) == "air"
     assert world.get(15, 1, 0) == "stone"
     assert "unknown block 'nope'" in result.text
