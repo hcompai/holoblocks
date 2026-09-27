@@ -18,6 +18,7 @@ from blockyard.world import World
 
 SCRIPT_TIMEOUT_S = 60
 PROBLEM_LIMIT = 12
+FLOATING_LIMIT = 5
 MAX_STEP_BLOCKS = 2_000_000
 
 
@@ -111,6 +112,7 @@ class Workbench:
         reports = []
         for n in range(same, len(steps)):
             reports += await self.place(world, source, steps, n)
+        reports += await asyncio.to_thread(self._floating, world)
         problems = len(reports)
         kept = (
             ""
@@ -123,7 +125,7 @@ class Workbench:
         if reports:
             lines += ["Problems, by script line:", _first(reports)]
         else:
-            lines.append("No problems: every block is known, on the site, and every step shows.")
+            lines.append("No problems: every block is known, on the site, joined to the ground, and every step shows.")
         lines.append("Steps: blocks set, then where they sit (x, z, and y from bottom to top):")
         lines.append(await asyncio.to_thread(self.describe))
         seen = await self.look(f"Ran the script: {build.name}" + (f", {problems} problems" if problems else ""))
@@ -157,6 +159,29 @@ class Workbench:
             end -= 1
         code = "\n".join(source[start - 1 : max(end - 1, s["line"])]).strip()
         await self.session.step(s["title"], boxes, code, "" if lines else _digest(s))
+        return lines
+
+    def _floating(self, world: World) -> list[str]:
+        """One problem per group of touching blocks that nothing joins to the ground, the largest first."""
+        groups = world.floating()
+        titles = {s.index: s.title for s in self.build.steps}
+        lines = []
+        for group in groups[:FLOATING_LIMIT]:
+            x, y, z = group[0]
+            step = next(
+                b.step
+                for b in reversed(self.build.boxes)
+                if b.block != "air" and b.x0 <= x <= b.x1 and b.y0 <= y <= b.y1 and b.z0 <= z <= b.z1
+            )
+            xs, ys, zs = zip(*group)
+            box = f"{min(xs)} {min(ys)} {min(zs)} {max(xs)} {max(ys)} {max(zs)}"
+            lines.append(
+                f"step '{titles[step]}': {len(group)} blocks float, joined to nothing that reaches"
+                f" the ground; see them with `blocks look {box}`"
+            )
+        if len(groups) > FLOATING_LIMIT:
+            rest = groups[FLOATING_LIMIT:]
+            lines.append(f"{len(rest)} more floating groups, {sum(map(len, rest))} blocks in all")
         return lines
 
     def _fixed(self) -> int:
@@ -214,7 +239,7 @@ class Workbench:
         caption = f"The render: {view.caption()}"
         if corners:
             caption = f"Close-up of x {corners[0]}-{corners[3]}, y {corners[1]}-{corners[4]}, z {corners[2]}-{corners[5]}, showing only the blocks inside: {view.caption()}"
-        await self.session.say(note, role="tool", image=self.session.store.save_image(png))
+        await self.session.say(note, role="tool", images=[self.session.store.save_image(png)])
         return Result(summary, images=[Picture(png, "image/png")], kind="render", caption=caption)
 
     async def find_blocks(self, query: str) -> Result:

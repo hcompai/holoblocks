@@ -3,6 +3,8 @@ export interface BuilderInfo {
   label: string;
   /** Replays a scripted build and ignores the prompt. */
   showcase: boolean;
+  /** How many images a user message may attach. */
+  max_images: number;
 }
 
 export interface Box {
@@ -25,8 +27,8 @@ export interface Step {
 export interface Message {
   role: "user" | "assistant" | "system" | "tool";
   text: string;
-  /** A render shown with a tool note, as a URL. */
-  image?: string;
+  /** URLs: the images a user attached, or the render shown with a tool note. */
+  images: string[];
   at: number;
 }
 
@@ -39,12 +41,15 @@ export interface BuildSummary {
   builder: string;
   status: Status;
   created: number;
+  /** When the blocks last changed, in seconds; 0 when unknown. */
+  updated: number;
   boxes: number;
   steps: number;
   width: number;
   depth: number;
   height: number;
-  thumbnail?: boolean;
+  /** When the thumbnail was saved, in milliseconds; null when there is none. */
+  thumbnail?: number | null;
 }
 
 export interface Build extends Omit<BuildSummary, "boxes" | "steps" | "thumbnail"> {
@@ -56,9 +61,25 @@ export interface Build extends Omit<BuildSummary, "boxes" | "steps" | "thumbnail
 /** A texture reference from the palette: a name, [name, tint], or [base, overlay, tint]. */
 export type Tex = string | [string, string] | [string, string, string];
 
+export const texKey = (tex: Tex): string => (typeof tex === "string" ? tex : tex.join("|"));
+
 export interface BlockInfo {
   tex: Tex | { top?: Tex; bottom?: Tex; side?: Tex };
-  shape?: "cube" | "stairs" | "slab" | "log" | "fence" | "wall" | "pane" | "cross" | "torch" | "lantern" | "carpet" | "door" | "trapdoor" | "rod";
+  shape?:
+    | "cube"
+    | "stairs"
+    | "slab"
+    | "log"
+    | "fence"
+    | "wall"
+    | "pane"
+    | "cross"
+    | "torch"
+    | "lantern"
+    | "carpet"
+    | "door"
+    | "trapdoor"
+    | "rod";
   tags?: string;
   transparent?: boolean;
   cutout?: boolean;
@@ -114,9 +135,18 @@ const GALLERY_URLS: typeof LIVE_URLS = {
 
 const urls = GALLERY ? GALLERY_URLS : LIVE_URLS;
 
+export class HttpError extends Error {
+  constructor(
+    readonly status: number,
+    readonly text: string,
+  ) {
+    super(`${status} ${text}`);
+  }
+}
+
 async function json<T>(response: Promise<Response>): Promise<T> {
   const r = await response;
-  if (!r.ok) throw new Error(`${r.status} ${await r.text()}`);
+  if (!r.ok) throw new HttpError(r.status, await r.text());
   return r.json() as Promise<T>;
 }
 
@@ -130,14 +160,19 @@ export const api = {
   build: (id: string) => json<Build>(fetch(urls.build(id))),
   builders: () => (GALLERY ? Promise.resolve([]) : json<BuilderInfo[]>(fetch("/api/builders"))),
   palette: () => json<Palette>(fetch(urls.palette)),
-  create: (prompt: string, builder: string) => json<BuildSummary>(post("/api/builds", { prompt, builder })),
-  say: (id: string, text: string) => json<BuildSummary>(post(`/api/builds/${id}/messages`, { text })),
+  /** `images` are data URLs. */
+  create: (prompt: string, builder: string, images: string[]) =>
+    json<BuildSummary>(post("/api/builds", { prompt, builder, images })),
+  say: (id: string, text: string, images: string[]) =>
+    json<BuildSummary>(post(`/api/builds/${id}/messages`, { text, images })),
   stop: (id: string) => post(`/api/builds/${id}/stop`, {}),
   events: (id: string) => new EventSource(`/api/builds/${id}/events`),
   putRender: (id: string, request: string, png: Blob) =>
     fetch(`/api/builds/${id}/renders/${request}`, { method: "PUT", body: png }),
   putThumbnail: (id: string, png: Blob) => fetch(`/api/builds/${id}/thumbnail.png`, { method: "PUT", body: png }),
-  thumbnailUrl: urls.thumbnail,
+  thumbnailUrl: (id: string, version: number) => `${urls.thumbnail(id)}?v=${version}`,
+  /** A chat image as WebP with its short side at most 240 pixels. */
+  smallImageUrl: (url: string) => url.replace(/[^/]+$/, "small/$&.webp"),
   downloadUrl: urls.download,
   textureSheet: () => (sheet ??= json<TextureSheet>(fetch("/textures/sheet.json"))),
   textureSheetUrl: "/textures/sheet.png",

@@ -1,14 +1,17 @@
 import asyncio
 import base64
+import io
 import os
 import sys
 import time
+from types import SimpleNamespace
 
+import PIL.Image
 import pytest
 from fastapi.testclient import TestClient
 
 from blockyard.builders.holo import HoloBuilder
-from blockyard.model import Build
+from blockyard.model import Build, Message
 from blockyard.session import FOUR_VIEWS, Session, Store, View
 from blockyard.workbench import Workbench
 
@@ -24,7 +27,7 @@ def bench(tmp_path, monkeypatch):
 
 HOUSE = """
 step("Walls")
-fill(2, 1, 2, 9, 5, 9, "stone_bricks", "walls")
+fill(2, 0, 2, 9, 5, 9, "stone_bricks", "walls")
 step("Roof")
 for k in range(5):
     fill(1, 6 + k, 1 + k, 10, 6 + k, 1 + k, "oak_stairs[facing=south]")
@@ -58,7 +61,7 @@ def test_a_script_rebuilds_from_its_first_changed_step_and_names_the_lines_of_it
             in result.text
         )
 
-    again = asyncio.run(bench.run_script(stray + 'step("Again")\nfill(2, 1, 2, 9, 5, 9, "stone_bricks", "walls")\n'))
+    again = asyncio.run(bench.run_script(stray + 'step("Again")\nfill(2, 0, 2, 9, 5, 9, "stone_bricks", "walls")\n'))
     assert "line 13 `step(\"Again\")`: step 'Again' changed no block" in again.text, again.text
 
     before = list(bench.build.boxes)
@@ -85,10 +88,10 @@ def test_agents_build_through_the_tools_endpoint(tmp_path, monkeypatch, capsys):
     store.save(build)
     tools = f"/api/builds/{build.id}/tools"
     with TestClient(app_module.app) as http:
-        ran = http.post(f"{tools}/run", json={"code": 'step("Core")\nset(4, 1, 4, "stone")'}).json()
+        ran = http.post(f"{tools}/run", json={"code": 'step("Core")\nset(4, 0, 4, "stone")'}).json()
         assert ran["problems"] == 0 and "1 Core: 1 block, x 4-4" in ran["text"], ran["text"]
         assert ran["caption"].startswith("The render:") and base64.b64decode(ran["images"][0]["data"]) == RENDER
-        shown = [m.image for m in store.load(build.id).messages if m.image]
+        shown = [url for m in store.load(build.id).messages for url in m.images]
         assert shown and http.get(shown[-1]).content == RENDER
         close = http.post(f"{tools}/look", json={"box": "0 0 0 8 8 8"}).json()
         assert close["caption"].startswith("Close-up of x 0-8")
@@ -107,15 +110,45 @@ def test_agents_build_through_the_tools_endpoint(tmp_path, monkeypatch, capsys):
     assert store.load(build.id).script.startswith('step("Core")')
 
 
+def test_attached_images_are_kept_with_the_message_and_old_builds_still_load(tmp_path, monkeypatch):
+    from blockyard import app as app_module
+
+    store = Store(tmp_path)
+    monkeypatch.setattr(app_module, "store", store)
+    echo = SimpleNamespace(name="echo", label="Echo", max_images=2, run=lambda session, request: asyncio.sleep(0))
+    monkeypatch.setitem(app_module.BUILDERS, "echo", echo)
+    jpeg = io.BytesIO()
+    PIL.Image.new("RGB", (1200, 900), "teal").save(jpeg, "JPEG")
+    photo = "data:image/jpeg;base64," + base64.b64encode(jpeg.getvalue()).decode()
+    with TestClient(app_module.app) as http:
+        assert {"name": "echo", "label": "Echo", "showcase": False, "max_images": 2} in http.get("/api/builders").json()
+        too_many = http.post("/api/builds", json={"prompt": "this", "builder": "echo", "images": [photo] * 3})
+        assert too_many.status_code == 400 and not store.all()
+        build = http.post("/api/builds", json={"prompt": "this", "builder": "echo", "images": [photo]}).json()
+        asked = http.get(f"/api/builds/{build['id']}").json()["messages"][0]
+        assert asked["text"] == "this" and http.get(asked["images"][0]).content == jpeg.getvalue()
+        small = http.get(asked["images"][0].replace("/images/", "/images/small/") + ".webp")
+        assert small.headers["content-type"] == "image/webp"
+        assert PIL.Image.open(io.BytesIO(small.content)).size == (320, 240)
+    old = '{"role": "tool", "text": "Ran the script", "image": "/api/images/render.png", "at": 1}'
+    assert Message.model_validate_json(old).images == ["/api/images/render.png"]
+
+
 def test_holo_gets_the_task_on_stdin_and_stop_ends_its_whole_process_group(tmp_path):
     agent = (
         "import os, subprocess, sys, time; "
-        "open('task.txt', 'w').write(sys.stdin.read() + os.environ['BLOCKYARD_BUILD']); "
+        "open('task.txt', 'w').write(sys.stdin.read() + os.environ['BLOCKYARD_ATTACHMENTS'] + os.environ['BLOCKYARD_BUILD']); "
         "child = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)']); "
         "open('pids', 'w').write(f'{os.getpid()} {child.pid}'); "
         "time.sleep(60)"
     )
-    session = Session(Build(prompt="a lighthouse"), Store(tmp_path))
+    store = Store(tmp_path)
+    photo, sketch = store.save_image(b"\xff\xd8 photo", ".jpg"), store.save_image(b"\x89PNG sketch")
+    messages = [
+        Message(role="user", text="a lighthouse", images=[photo]),
+        Message(role="user", text="a tower", images=[sketch]),
+    ]
+    session = Session(Build(prompt="a lighthouse", messages=messages), store)
     workspace = tmp_path / "workspaces" / session.build.id
 
     async def main() -> list[int]:
@@ -129,7 +162,12 @@ def test_holo_gets_the_task_on_stdin_and_stop_ends_its_whole_process_group(tmp_p
 
     pids = asyncio.run(main())
     task = (workspace / "task.txt").read_text()
-    assert task.startswith("# Request\na tower") and "# The build script" in task and task.endswith(session.build.id)
+    assert task.startswith(
+        "# Request\na tower\n\nAttached: `attachment-2.png`, shown below and saved in your workspace."
+    )
+    assert "user: a lighthouse (attached `attachment-1.jpg`)" in task and "# The build script" in task
+    assert task.endswith(f"attachment-2.png{session.build.id}")
+    assert (workspace / "attachment-1.jpg").read_bytes() == b"\xff\xd8 photo"
     assert "No steps yet." in task and (workspace / "build.py").exists()
     assert "`showcase/gothic-cathedral.py`" in task and "`showcase/gothic-cathedral.png`" in task
     assert (workspace / "showcase" / "gothic-cathedral.py").read_text().count('\nstep("') == 9

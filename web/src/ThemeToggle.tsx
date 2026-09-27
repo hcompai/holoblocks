@@ -5,7 +5,7 @@ export function ThemeToggle() {
   const theme = useTheme();
   const label = theme === "dark" ? "Switch to light theme" : "Switch to dark theme";
   return (
-    <button className="theme-toggle" onClick={toggleTheme} title={label} aria-label={label}>
+    <button className="icon-button" onClick={toggleTheme} title={label} aria-label={label}>
       {theme === "dark" ? <SunIcon size={16} weight="bold" /> : <MoonIcon size={16} weight="bold" />}
     </button>
   );

@@ -1,9 +1,9 @@
 import { ArrowsClockwiseIcon } from "@phosphor-icons/react";
-import { useEffect, useRef } from "react";
+import { type RefObject, useEffect, useRef } from "react";
 import { api, GALLERY, type Build, type Palette, type RenderRequest } from "./api";
+import { BlockLoader } from "./BlockLoader";
 import { BlockScene, type View } from "./scene";
 import { useTheme } from "./theme";
-import type { VoxelWorld } from "./voxels";
 
 const VIEWS: { id: View; label: string }[] = [
   { id: "iso", label: "3/4" },
@@ -27,12 +27,17 @@ export function ViewControls({ framing, spin, onFrame, onSpin }: ControlsProps) 
   return (
     <div className="tabs">
       {VIEWS.map((v) => (
-        <button key={v.id} className={framing.view === v.id ? "active" : ""} onClick={() => onFrame({ view: v.id })}>
+        <button
+          key={v.id}
+          className={framing.view === v.id ? "active" : ""}
+          aria-pressed={framing.view === v.id}
+          onClick={() => onFrame({ view: v.id })}
+        >
           {v.label}
         </button>
       ))}
       <span className="tabs-sep" />
-      <button className={spin ? "active" : ""} onClick={() => onSpin(!spin)}>
+      <button className={spin ? "active" : ""} aria-pressed={spin} onClick={() => onSpin(!spin)}>
         <ArrowsClockwiseIcon size={14} weight="bold" />
         Spin
       </button>
@@ -45,19 +50,40 @@ interface Props {
   step: number;
   framing: Framing;
   spin: boolean;
-  /** Whether the library already has a thumbnail for this build; undefined until the library loads. */
-  hasThumbnail: boolean | undefined;
+  /** Whether the library's thumbnail shows the current blocks; undefined until the library loads. */
+  thumbnailFresh: boolean | undefined;
+  onThumbnail: () => void;
   renderRequest: RenderRequest | null;
   palette: Promise<Palette>;
-  onWorld: (world: VoxelWorld | null) => void;
+  /** Block counts by name of what is shown, once meshed. */
+  onCounts: (counts: Map<string, number> | null) => void;
+  scene: RefObject<BlockScene | null>;
+  /** What is opening while the model is not meshed yet. */
+  loading: string | null;
+  /** The model could not be meshed. */
+  failed: boolean;
+  onFailed: (failed: boolean) => void;
 }
 
-export function Viewer({ build, step, framing, spin, hasThumbnail, renderRequest, palette, onWorld }: Props) {
+export function Viewer(props: Props) {
+  const {
+    build,
+    step,
+    framing,
+    spin,
+    thumbnailFresh,
+    onThumbnail,
+    renderRequest,
+    palette,
+    onCounts,
+    scene,
+    loading,
+    failed,
+    onFailed,
+  } = props;
   const container = useRef<HTMLDivElement>(null);
-  const scene = useRef<BlockScene | null>(null);
   const framedBuild = useRef<string | null>(null);
   const thumbnailed = useRef(new Set<string>());
-  const sawBuilding = useRef(new Set<string>());
   const answered = useRef(new Set<string>());
   const width = build?.width ?? 64;
   const depth = build?.depth ?? 64;
@@ -65,7 +91,8 @@ export function Viewer({ build, step, framing, spin, hasThumbnail, renderRequest
 
   useEffect(() => {
     const s = new BlockScene(container.current!, palette);
-    s.onWorld = (w) => onWorld(w);
+    s.onCounts = (counts) => onCounts(counts);
+    s.onFailure = () => onFailed(true);
     scene.current = s;
     return () => s.dispose();
   }, []);
@@ -73,13 +100,13 @@ export function Viewer({ build, step, framing, spin, hasThumbnail, renderRequest
   useEffect(() => {
     const s = scene.current;
     if (!s) return;
+    onFailed(false);
     if (!build) {
       framedBuild.current = null;
       s.show(null);
-      onWorld(null);
+      onCounts(null);
       return;
     }
-    if (build.status === "building") sawBuilding.current.add(build.id);
     s.show(build, step);
     s.ready.then(() => {
       if (!build.boxes.length) return;
@@ -92,15 +119,15 @@ export function Viewer({ build, step, framing, spin, hasThumbnail, renderRequest
 
   useEffect(() => {
     const s = scene.current;
-    if (GALLERY || !s || !build || build.status !== "done" || hasThumbnail === undefined) return;
-    if (step < build.steps.length - 1 || thumbnailed.current.has(build.id)) return;
-    if (hasThumbnail && !sawBuilding.current.has(build.id)) return;
-    thumbnailed.current.add(build.id);
+    if (GALLERY || !s || !build?.boxes.length || build.status !== "done" || thumbnailFresh !== false) return;
+    const version = `${build.id}:${build.updated}`;
+    if (step < build.steps.length - 1 || thumbnailed.current.has(version)) return;
+    thumbnailed.current.add(version);
     s.ready.then(async () => {
       const png = await s.thumbnail();
-      if (png) await api.putThumbnail(build.id, png);
+      if (png && (await api.putThumbnail(build.id, png)).ok) onThumbnail();
     });
-  }, [build?.id, build?.status, step, hasThumbnail]);
+  }, [build?.id, build?.status, build?.updated, step, thumbnailFresh]);
 
   useEffect(() => {
     const s = scene.current;
@@ -123,6 +150,15 @@ export function Viewer({ build, step, framing, spin, hasThumbnail, renderRequest
   return (
     <div className="viewer">
       <div className="viewer-canvas" ref={container} />
+      {failed ? <RenderFailed /> : loading && <BlockLoader label={loading} />}
+    </div>
+  );
+}
+
+export function RenderFailed() {
+  return (
+    <div className="notice" role="alert">
+      <b>Couldn't render this build</b>
     </div>
   );
 }

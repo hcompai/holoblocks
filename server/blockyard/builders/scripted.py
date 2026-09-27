@@ -26,6 +26,8 @@ class Showcase:
 
 
 class ScriptedBuilder:
+    max_images = 0
+
     def __init__(self, showcase: Showcase, delay: float = 0.6):
         self.showcase = showcase
         self.name = showcase.key

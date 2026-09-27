@@ -30,4 +30,5 @@ jobs:
       - working-directory: web
         run: |
           npm ci
+          npm run format:check
           npm run build

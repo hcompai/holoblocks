@@ -4,10 +4,14 @@ from __future__ import annotations
 
 import asyncio
 import os
+import time
 import uuid
+from collections.abc import Sequence
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
+
+import PIL.Image
 
 from blockyard.model import Box, Build, Message, Step
 
@@ -15,6 +19,8 @@ if TYPE_CHECKING:
     from blockyard.renderer import Renderer
 
 DATA = Path(os.environ.get("BLOCKYARD_DATA", Path(__file__).resolve().parents[2] / "data"))
+SMALL_EDGE = 240
+"""The short side of the chat's small images, twice their size on screen."""
 SIDES = ("front", "front-right", "right", "back-right", "back", "back-left", "left", "front-left")
 
 
@@ -37,34 +43,68 @@ class View:
 FOUR_VIEWS = View()
 
 
+class UnknownBuild(LookupError):
+    """A build id that names no build, or could not name one."""
+
+
 class Store:
     def __init__(self, root: Path = DATA):
         self.root = root / "builds"
         self.root.mkdir(parents=True, exist_ok=True)
         self._summaries: dict[str, tuple[int, dict]] = {}
 
+    @staticmethod
+    def _file(folder: Path, build_id: str, suffix: str) -> Path:
+        """The build's file in `folder`; an id that would point outside it names no build."""
+        base = os.path.join(os.path.abspath(folder), "")
+        path = os.path.normpath(os.path.join(base, f"{build_id}{suffix}"))
+        if not path.startswith(base):
+            raise UnknownBuild(build_id)
+        return Path(path)
+
     def save(self, build: Build) -> None:
-        path = self.root / f"{build.id}.json"
+        path = self._file(self.root, build.id, ".json")
         tmp = path.with_suffix(".tmp")
         tmp.write_text(build.model_dump_json())
         tmp.replace(path)
 
     def thumbnail(self, build_id: str) -> Path:
-        return self.root.parent / "thumbnails" / f"{build_id}.png"
+        return self._file(self.root.parent / "thumbnails", build_id, ".png")
+
+    def thumbnail_version(self, build_id: str) -> int | None:
+        """When the thumbnail was saved, in milliseconds; None when there is none."""
+        path = self.thumbnail(build_id)
+        return path.stat().st_mtime_ns // 1_000_000 if path.exists() else None
 
     @property
     def images(self) -> Path:
         return self.root.parent / "images"
 
-    def save_image(self, png: bytes) -> str:
-        """Keep a render shown in the chat; returns its URL."""
-        name = f"{uuid.uuid4().hex[:12]}.png"
+    def save_image(self, data: bytes, suffix: str = ".png") -> str:
+        """Keep an image shown in the chat, a render or an attachment; returns its URL."""
+        name = f"{uuid.uuid4().hex[:12]}{suffix}"
         self.images.mkdir(parents=True, exist_ok=True)
-        (self.images / name).write_bytes(png)
+        (self.images / name).write_bytes(data)
         return f"/api/images/{name}"
 
+    def small_image(self, name: str) -> Path:
+        """The image as WebP with its short side at most SMALL_EDGE, for the chat; made on first use."""
+        path = self.images / "small" / f"{name}.webp"
+        if not path.exists():
+            with PIL.Image.open(self.images / name) as image:
+                edge = SMALL_EDGE * max(image.size) // min(image.size)
+                image.thumbnail((edge, edge))
+                path.parent.mkdir(exist_ok=True)
+                tmp = path.with_name(f"{uuid.uuid4().hex}.tmp")
+                image.save(tmp, "WEBP", quality=80)
+            tmp.replace(path)
+        return path
+
     def load(self, build_id: str) -> Build | None:
-        path = self.root / f"{build_id}.json"
+        try:
+            path = self._file(self.root, build_id, ".json")
+        except UnknownBuild:
+            return None
         return Build.model_validate_json(path.read_text()) if path.exists() else None
 
     def all(self) -> list[Build]:
@@ -109,8 +149,8 @@ class Session:
         for queue in self.subscribers:
             queue.put_nowait(event)
 
-    async def say(self, text: str, role: str = "assistant", image: str = "") -> None:
-        message = Message(role=role, text=text, image=image)  # type: ignore[arg-type]
+    async def say(self, text: str, role: str = "assistant", images: Sequence[str] = ()) -> None:
+        message = Message(role=role, text=text, images=list(images))  # type: ignore[arg-type]
         self.build.messages.append(message)
         self._publish({"type": "message", "message": message.model_dump()})
 
@@ -121,6 +161,7 @@ class Session:
             b.step = step.index
         self.build.steps.append(step)
         self.build.boxes += boxes
+        self.build.updated = time.time()
         self._publish({"type": "step", "step": step.model_dump(), "boxes": [b.model_dump() for b in boxes]})
         await asyncio.sleep(0)
         return step
@@ -129,6 +170,7 @@ class Session:
         """Keep only the first `steps` steps and their boxes."""
         self.build.steps = self.build.steps[:steps]
         self.build.boxes = [b for b in self.build.boxes if b.step < steps]
+        self.build.updated = time.time()
         self._publish({"type": "rewind", "steps": steps})
 
     def think(self, text: str, reset: bool = False) -> None:
@@ -174,5 +216,7 @@ class Builder(Protocol):
 
     name: str
     label: str
+    max_images: int
+    """How many images a user message may attach."""
 
     async def run(self, session: Session, request: str) -> None: ...

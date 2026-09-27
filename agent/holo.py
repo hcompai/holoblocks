@@ -1,12 +1,16 @@
 """Holo on a Blockyard build: a sagent runner, started by the server with hai's Python, and its chat handler."""
 
 import logging
+import mimetypes
+import os
 import signal
 import sys
 from pathlib import Path
 
 import httpx
 from hai_adapters.langfuse_tracing import flush as langfuse_flush
+from hai_protocols.image.encoding import MediaType
+from hai_protocols.image.serializable_image import SerializableImage
 from sagent.core.events import AnswerEvent, EventHandler, EventRecord, PolicyEvent
 from sagent.utils.builder import build_agent
 
@@ -41,12 +45,23 @@ class Chat(EventHandler):
             LOGGER.warning("Blockyard chat post failed: %s", e)
 
 
+def attachments() -> list[SerializableImage]:
+    """The images the user attached to this request: BLOCKYARD_ATTACHMENTS names them in the workspace."""
+    workspace = Path(os.environ["BLOCKYARD_WORKSPACE"])
+    names = [n for n in os.environ.get("BLOCKYARD_ATTACHMENTS", "").split(os.pathsep) if n]
+    return [
+        SerializableImage.from_bytes((workspace / n).read_bytes(), MediaType(mimetypes.guess_type(n)[0]))
+        for n in names
+    ]
+
+
 def main() -> None:
     """Build the agent from holo.yaml, overridable with key=value arguments, and run the task on stdin."""
     signal.signal(signal.SIGTERM, lambda *_: sys.exit(143))
     agent = build_agent(CONFIG.stem, overrides=sys.argv[1:], config_dir=CONFIG.parent)
+    agent.policy_context["max_completion_tokens"] = agent.policy.llm.base_request.max_completion_tokens
     try:
-        agent(sys.stdin.read())
+        agent([sys.stdin.read(), *attachments()])
     finally:
         for handler in agent.event_bus.handlers:
             handler.flush()

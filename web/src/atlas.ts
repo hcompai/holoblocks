@@ -1,18 +1,19 @@
 import * as THREE from "three";
-import { api, type Palette, type Tex, type TextureSheet } from "./api";
+import { api, type Palette, type Tex, texKey, type TextureSheet } from "./api";
 
 export const TILE = 32;
 /** Gutter of repeated edge texels around each tile, so mipmaps never blend neighbouring tiles. */
 const PAD = 16;
 const CELL = TILE + 2 * PAD;
 
+/** [u0, v0, u1, v1] of a tile. */
+export type UV = [number, number, number, number];
+
 export interface Atlas {
   texture: THREE.Texture;
-  /** [u0, v0, u1, v1] of a tile. */
-  uv(key: string): [number, number, number, number];
+  /** Each texture key's tile, in tile order. */
+  uvs: Map<string, UV>;
 }
-
-export const texKey = (tex: Tex): string => (typeof tex === "string" ? tex : tex.join("|"));
 
 function textureKeys(palette: Palette): Tex[] {
   const seen = new Map<string, Tex>();
@@ -32,22 +33,29 @@ function loadImage(url: string): Promise<HTMLImageElement> {
   });
 }
 
-/** Draw a texture from the sheet, tinted when asked. */
-function drawTile(ctx: CanvasRenderingContext2D, source: CanvasImageSource, [sx, sy, size]: number[], x: number, y: number, tint?: string) {
+/** Draw a texture from the sheet, tinted when asked on `scratch`, a tile-sized canvas. */
+function drawTile(
+  ctx: CanvasRenderingContext2D,
+  scratch: CanvasRenderingContext2D,
+  source: CanvasImageSource,
+  [sx, sy, size]: number[],
+  x: number,
+  y: number,
+  tint?: string,
+) {
   if (!tint) {
     ctx.drawImage(source, sx, sy, size, size, x, y, TILE, TILE);
     return;
   }
-  const tmp = document.createElement("canvas");
-  tmp.width = tmp.height = TILE;
-  const t = tmp.getContext("2d")!;
+  const t = scratch;
+  t.globalCompositeOperation = "copy";
   t.drawImage(source, sx, sy, size, size, 0, 0, TILE, TILE);
   t.globalCompositeOperation = "multiply";
   t.fillStyle = tint;
   t.fillRect(0, 0, TILE, TILE);
   t.globalCompositeOperation = "destination-in";
   t.drawImage(source, sx, sy, size, size, 0, 0, TILE, TILE);
-  ctx.drawImage(tmp, x, y);
+  ctx.drawImage(t.canvas, x, y);
 }
 
 function padTile(ctx: CanvasRenderingContext2D, src: HTMLCanvasElement, x: number, y: number) {
@@ -67,8 +75,11 @@ export function sheetOrigin(sheet: TextureSheet, name: string): [number, number]
 
 export async function buildAtlas(palette: Palette): Promise<Atlas> {
   const [sheet, image] = await Promise.all([api.textureSheet(), loadImage(api.textureSheetUrl)]);
+  const tile = document.createElement("canvas");
+  tile.width = tile.height = TILE;
+  const scratch = tile.getContext("2d")!;
   const draw = (ctx: CanvasRenderingContext2D, name: string, x: number, y: number, tint?: string) =>
-    drawTile(ctx, image, [...sheetOrigin(sheet, name), sheet.tile], x, y, tint);
+    drawTile(ctx, scratch, image, [...sheetOrigin(sheet, name), sheet.tile], x, y, tint);
 
   const keys = textureKeys(palette);
   const columns = Math.ceil(Math.sqrt(keys.length));
@@ -77,11 +88,15 @@ export async function buildAtlas(palette: Palette): Promise<Atlas> {
   canvas.width = columns * CELL;
   canvas.height = rows * CELL;
   const ctx = canvas.getContext("2d")!;
-  const slots = new Map<string, number>();
+  const lo = PAD / CELL;
+  const hi = (PAD + TILE) / CELL;
+  const uvs = new Map<string, UV>();
   keys.forEach((tex, i) => {
-    const x = (i % columns) * CELL + PAD;
-    const y = Math.floor(i / columns) * CELL + PAD;
-    slots.set(texKey(tex), i);
+    const c = i % columns;
+    const r = Math.floor(i / columns);
+    const x = c * CELL + PAD;
+    const y = r * CELL + PAD;
+    uvs.set(texKey(tex), [(c + lo) / columns, 1 - (r + hi) / rows, (c + hi) / columns, 1 - (r + lo) / rows]);
     if (typeof tex === "string") draw(ctx, tex, x, y);
     else if (tex.length === 2) draw(ctx, tex[0], x, y, tex[1]);
     else {
@@ -97,15 +112,5 @@ export async function buildAtlas(palette: Palette): Promise<Atlas> {
   texture.anisotropy = 8;
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.generateMipmaps = true;
-  const lo = PAD / CELL;
-  const hi = (PAD + TILE) / CELL;
-  return {
-    texture,
-    uv(key) {
-      const i = slots.get(key) ?? 0;
-      const c = i % columns;
-      const r = Math.floor(i / columns);
-      return [(c + lo) / columns, 1 - (r + hi) / rows, (c + hi) / columns, 1 - (r + lo) / rows];
-    },
-  };
+  return { texture, uvs };
 }

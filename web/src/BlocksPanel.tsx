@@ -1,10 +1,9 @@
 import { useEffect, useState } from "react";
 import { api, type Palette, type Tex, type TextureSheet } from "./api";
 import { sheetOrigin } from "./atlas";
-import type { VoxelWorld } from "./voxels";
 
 interface Props {
-  world: VoxelWorld | null;
+  counts: Map<string, number> | null;
   palette: Promise<Palette>;
 }
 
@@ -30,7 +29,7 @@ function Swatch({ sheet, name }: { sheet: TextureSheet; name: string }) {
   );
 }
 
-export function BlocksPanel({ world, palette }: Props) {
+export function BlocksPanel({ counts: byName, palette }: Props) {
   const [blocks, setBlocks] = useState<Palette>({});
   const [sheet, setSheet] = useState<TextureSheet | null>(null);
   useEffect(() => {
@@ -38,7 +37,7 @@ export function BlocksPanel({ world, palette }: Props) {
     api.textureSheet().then(setSheet);
   }, [palette]);
 
-  const counts = world ? [...world.counts().entries()].sort((a, b) => b[1] - a[1]) : [];
+  const counts = byName ? [...byName.entries()].sort((a, b) => b[1] - a[1]) : [];
   const total = counts.reduce((n, [, c]) => n + c, 0);
 
   return (
@@ -66,7 +65,7 @@ export function BlocksPanel({ world, palette }: Props) {
                   {tex && sheet && <Swatch sheet={sheet} name={tex} />}
                   {name.replaceAll("_", " ")}
                 </td>
-                <td className="muted">{name}</td>
+                <td className="id">{name}</td>
               </tr>
             );
           })}

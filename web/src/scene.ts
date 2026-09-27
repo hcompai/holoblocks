@@ -2,8 +2,9 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import type { Box, Palette, RenderRequest } from "./api";
 import { type Atlas, buildAtlas } from "./atlas";
+import type { MeshFailure, MeshReply, MeshRequest, MesherSetup } from "./mesher";
 import type { Theme } from "./theme";
-import { buildMeshes, makeMaterials, type Materials, VoxelWorld } from "./voxels";
+import { type Kind, packBoxes } from "./voxels";
 
 export type View = "iso" | "isoBack" | "front" | "top";
 
@@ -53,8 +54,8 @@ function clippingPlanes(box: THREE.Box3): THREE.Plane[] {
 }
 
 const SKIES: Record<Theme, { zenith: number; horizon: number; ground: number }> = {
-  light: { zenith: 0xc9d0dd, horizon: 0xf4f5f8, ground: 0xe4e7ee },
-  dark: { zenith: 0x0a0a0a, horizon: 0x262626, ground: 0x070707 },
+  light: { zenith: 0x95a1b8, horizon: 0xe7e9ef, ground: 0xc6ccda },
+  dark: { zenith: 0x161616, horizon: 0x2a2a2a, ground: 0x121212 },
 };
 
 function skyDome(): THREE.Mesh<THREE.SphereGeometry, THREE.ShaderMaterial> {
@@ -80,6 +81,7 @@ function skyDome(): THREE.Mesh<THREE.SphereGeometry, THREE.ShaderMaterial> {
         vec3 up = mix(horizon, zenith, pow(clamp(h, 0.0, 1.0), 0.6));
         vec3 down = mix(horizon, ground, pow(clamp(-h, 0.0, 1.0), 0.35));
         gl_FragColor = vec4(h >= 0.0 ? up : down, 1.0);
+        #include <colorspace_fragment>
       }`,
   });
   const dome = new THREE.Mesh(new THREE.SphereGeometry(3000, 32, 16), material);
@@ -87,6 +89,56 @@ function skyDome(): THREE.Mesh<THREE.SphereGeometry, THREE.ShaderMaterial> {
   dome.renderOrder = -1;
   return dome;
 }
+
+type Materials = Record<Kind, THREE.Material>;
+
+function makeMaterials(atlas: Atlas): Materials {
+  const map = atlas.texture;
+  return {
+    opaque: new THREE.MeshLambertMaterial({ map, vertexColors: true }),
+    cutout: new THREE.MeshLambertMaterial({ map, vertexColors: true, alphaTest: 0.5, side: THREE.DoubleSide }),
+    transparent: new THREE.MeshLambertMaterial({
+      map,
+      vertexColors: true,
+      transparent: true,
+      opacity: 0.85,
+      depthWrite: false,
+    }),
+  };
+}
+
+/** A meshed site: one mesh per material kind, the points that bound its views, the blocks' bounds, and block counts by name. */
+interface Model {
+  group: THREE.Group;
+  outline: Float32Array;
+  bounds: THREE.Box3 | null;
+  counts: Map<string, number>;
+}
+
+function toModel({ meshes, outline, counts, bounds }: MeshReply, materials: Materials): Model {
+  const group = new THREE.Group();
+  for (const { kind, positions, normals, uvs, colors, indices } of meshes) {
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+    geometry.setAttribute("normal", new THREE.BufferAttribute(normals, 3));
+    geometry.setAttribute("uv", new THREE.BufferAttribute(uvs, 2));
+    geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+    geometry.setIndex(new THREE.BufferAttribute(indices, 1));
+    const mesh = new THREE.Mesh(geometry, materials[kind]);
+    mesh.renderOrder = kind === "transparent" ? 2 : kind === "cutout" ? 1 : 0;
+    mesh.receiveShadow = true;
+    mesh.castShadow = kind !== "transparent";
+    group.add(mesh);
+  }
+  return { group, outline, bounds: bounds && new THREE.Box3().setFromArray(bounds), counts };
+}
+
+const disposeModel = (model: Model) => model.group.traverse((o) => o instanceof THREE.Mesh && o.geometry.dispose());
+
+const logged = (error: unknown) => {
+  console.error(error);
+  return null;
+};
 
 const LIGHTS: [number, number, number, number, number][] = [
   [-6, 10, 8, 2.2, 0xfff4e0],
@@ -103,23 +155,33 @@ export class BlockScene {
   private theme: Theme = "dark";
   private camera = new THREE.PerspectiveCamera(35, 1, 0.1, 5000);
   private controls: OrbitControls;
-  private meshes: THREE.Group | null = null;
-  private atlas: Atlas | null = null;
+  private model: Model | null = null;
   private materials: Materials | null = null;
   private lights: THREE.DirectionalLight[] = [];
   private sun!: THREE.DirectionalLight;
-  private palette: Palette | null = null;
   private site: Site | null = null;
   private step = Infinity;
-  private world: VoxelWorld | null = null;
   private resizeObserver: ResizeObserver;
   private frame = 0;
   private dirty = true;
+  private worker: Worker | null = null;
+  private setup: MesherSetup | null = null;
+  /** Set when a crashed worker was replaced, until the new one replies; a second crash leaves meshing down. */
+  private respawned = false;
+  private jobs = new Map<number, { resolve: (reply: MeshReply) => void; reject: (error: Error) => void }>();
+  private lastJob = 0;
+  /** Bumped by every remesh, so a mesh that lands after a newer one was asked for is dropped. */
+  private version = 0;
+  private meshing = false;
+  private meshed = Promise.resolve();
+  private settle: (() => void) | null = null;
+  private loaded: Promise<void>;
+  /** Whether the site last asked for could not be meshed. */
+  private failed = false;
   /** Set once the user orbits or zooms, so live framing stops fighting them. */
   userMoved = false;
-  /** Resolves once textures are loaded and the first world can be meshed. */
-  ready: Promise<void>;
-  onWorld: ((world: VoxelWorld) => void) | null = null;
+  onCounts: ((counts: Map<string, number>) => void) | null = null;
+  onFailure: (() => void) | null = null;
 
   constructor(
     private container: HTMLElement,
@@ -134,7 +196,6 @@ export class BlockScene {
     this.scene.add(new THREE.AmbientLight(0xffffff, 0.8));
     this.scene.add(new THREE.HemisphereLight(0xdfe8ff, 0x8a7a66, 0.6));
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.shadowMap.autoUpdate = false;
     for (const [x, y, z, intensity, color] of LIGHTS) {
       const light = new THREE.DirectionalLight(color, intensity);
@@ -154,10 +215,12 @@ export class BlockScene {
     this.controls.addEventListener("start", () => (this.userMoved = true));
     this.controls.autoRotateSpeed = 1.2;
 
-    this.ready = palette.then(async (p) => {
-      this.palette = p;
-      this.atlas = await buildAtlas(p);
-      this.materials = makeMaterials(this.atlas);
+    this.spawn();
+    this.loaded = palette.then(async (p) => {
+      const atlas = await buildAtlas(p);
+      this.setup = { palette: p, uvs: atlas.uvs };
+      this.worker?.postMessage(this.setup);
+      this.materials = makeMaterials(atlas);
       this.remesh();
     });
 
@@ -174,7 +237,13 @@ export class BlockScene {
     tick();
   }
 
+  /** Resolves once the scene shows the site and step last asked for. */
+  get ready(): Promise<void> {
+    return this.loaded.then(() => this.meshed);
+  }
+
   dispose() {
+    this.worker?.terminate();
     cancelAnimationFrame(this.frame);
     this.resizeObserver.disconnect();
     this.controls.dispose();
@@ -199,27 +268,80 @@ export class BlockScene {
   }
 
   private remesh() {
-    if (this.meshes) {
-      this.scene.remove(this.meshes);
-      this.meshes.traverse((o) => o instanceof THREE.Mesh && o.geometry.dispose());
-      this.meshes = null;
+    this.version++;
+    if (!this.settle) this.meshed = new Promise((resolve) => (this.settle = resolve));
+    if (!this.site || !this.meshing) void this.request();
+  }
+
+  /** Meshes the latest site and step, one mesh in flight at a time, and shows it unless a newer one was asked for meanwhile. */
+  private async request(): Promise<void> {
+    const { site, step, version, materials } = this;
+    if (!materials) return;
+    let model: Model | null = null;
+    if (site) {
+      this.meshing = true;
+      model = await this.mesh(site, step, materials).catch(logged);
+      this.meshing = false;
+      if (version !== this.version) {
+        if (model) disposeModel(model);
+        return this.request();
+      }
+      if (model) this.aimLights(site.width, site.height, site.depth);
     }
-    this.world = null;
+    const old = this.model;
+    this.put(model);
+    if (old) disposeModel(old);
+    this.failed = !!site && !model;
+    if (model) this.onCounts?.(model.counts);
+    if (this.failed) this.onFailure?.();
+    this.settle?.();
+    this.settle = null;
+  }
+
+  private mesh(site: Site, step: number, materials: Materials): Promise<Model> {
+    const worker = this.worker;
+    if (!worker) return Promise.reject(new Error("The mesher is down"));
+    const id = ++this.lastJob;
+    const { blocks, boxes } = packBoxes(site.boxes, step);
+    const request: MeshRequest = { id, width: site.width, height: site.height, depth: site.depth, blocks, boxes };
+    worker.postMessage(request, [boxes.buffer]);
+    return new Promise<MeshReply>((resolve, reject) => this.jobs.set(id, { resolve, reject })).then((reply) =>
+      toModel(reply, materials),
+    );
+  }
+
+  private spawn() {
+    const worker = new Worker(new URL("./mesher.ts", import.meta.url), { type: "module" });
+    worker.onmessage = ({ data }: MessageEvent<MeshReply | MeshFailure>) => {
+      const job = this.jobs.get(data.id);
+      this.jobs.delete(data.id);
+      this.respawned = false;
+      if ("error" in data) job?.reject(new Error(data.error));
+      else job?.resolve(data);
+    };
+    worker.onerror = (e) => this.crash(e.message);
+    worker.onmessageerror = () => this.crash("unreadable reply");
+    if (this.setup) worker.postMessage(this.setup);
+    this.worker = worker;
+  }
+
+  /** Fails the meshes in flight and replaces the worker, once until the new one replies. */
+  private crash(reason: string) {
+    this.worker?.terminate();
+    this.worker = null;
+    for (const job of this.jobs.values()) job.reject(new Error(`The mesher crashed: ${reason}`));
+    this.jobs.clear();
+    if (this.respawned) return;
+    this.respawned = true;
+    this.spawn();
+  }
+
+  private put(model: Model | null) {
+    if (this.model) this.scene.remove(this.model.group);
+    if (model) this.scene.add(model.group);
+    this.model = model;
     this.dirty = true;
     this.renderer.shadowMap.needsUpdate = true;
-    if (!this.site || !this.palette || !this.atlas || !this.materials) return;
-    const { width, height, depth, boxes } = this.site;
-    this.world = new VoxelWorld(width, height, depth, this.palette);
-    this.world.apply(boxes, this.step);
-    this.meshes = buildMeshes(this.world, this.atlas, this.materials);
-    this.meshes.traverse((o) => {
-      if (!(o instanceof THREE.Mesh)) return;
-      o.receiveShadow = true;
-      o.castShadow = !(o.material as THREE.Material).transparent;
-    });
-    this.scene.add(this.meshes);
-    this.aimLights(width, height, depth);
-    this.onWorld?.(this.world);
   }
 
   private aimLights(width: number, height: number, depth: number) {
@@ -230,7 +352,11 @@ export class BlockScene {
     this.fog.far = span * 6.5;
     for (const [i, light] of this.lights.entries()) {
       const [x, y, z] = LIGHTS[i];
-      light.position.set(x, y, z).normalize().multiplyScalar(reach * 2).add(center);
+      light.position
+        .set(x, y, z)
+        .normalize()
+        .multiplyScalar(reach * 2)
+        .add(center);
       light.target.position.copy(center);
     }
     const cam = this.sun.shadow.camera;
@@ -267,7 +393,7 @@ export class BlockScene {
   frameView(view: View | THREE.Vector3, width: number, depth: number, focus?: THREE.Box3) {
     const box =
       focus ??
-      this.world?.bounds() ??
+      this.model?.bounds ??
       new THREE.Box3(
         new THREE.Vector3(width * 0.25, 0, depth * 0.25),
         new THREE.Vector3(width * 0.75, 12, depth * 0.75),
@@ -279,11 +405,10 @@ export class BlockScene {
     const up = new THREE.Vector3().setFromMatrixColumn(basis, 1);
     const tanV = Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2)) * FRAME_FILL;
     const tanH = tanV * this.camera.aspect;
-    const outline = focus ? [corners(focus)] : this.outline(box);
+    const outline = focus ? corners(focus) : this.outline(box);
     const p = new THREE.Vector3();
     const each = (visit: (p: THREE.Vector3) => void) => {
-      for (const positions of outline)
-        for (let i = 0; i < positions.length; i += 3) visit(p.fromArray(positions, i).sub(center));
+      for (let i = 0; i < outline.length; i += 3) visit(p.fromArray(outline, i).sub(center));
     };
     const fit = () => {
       let distance = 0;
@@ -311,11 +436,9 @@ export class BlockScene {
     this.dirty = true;
   }
 
-  /** Vertex positions the frame must hold: the meshed blocks, or the corners of `box` before anything is meshed. */
-  private outline(box: THREE.Box3): ArrayLike<number>[] {
-    const arrays: ArrayLike<number>[] = [];
-    this.meshes?.traverse((o) => o instanceof THREE.Mesh && arrays.push(o.geometry.attributes.position.array));
-    return arrays.length ? arrays : [corners(box)];
+  /** Points the frame must hold: the model's outline, or the corners of `box` before anything is meshed. */
+  private outline(box: THREE.Box3): ArrayLike<number> {
+    return this.model?.outline.length ? this.model.outline : corners(box);
   }
 
   /** Square renders of the model, or only the blocks inside `focus`, into a 2D canvas over `sky`, or transparent; the user's view is left untouched. */
@@ -328,18 +451,23 @@ export class BlockScene {
     zoom = 1,
   ) {
     await this.ready;
+    if (this.failed) return null;
+    const { site, step, materials } = this;
+    let full: Model | null = null;
+    if (site && materials && site.boxes.some((b) => b.step > step)) {
+      full = await this.mesh(site, Infinity, materials).catch(logged);
+      if (!full) return null;
+    }
+    const shown = this.model;
+    if (full) this.put(full);
     const { position, near, far } = this.camera;
-    const saved = { position: position.clone(), target: this.controls.target.clone(), near, far, step: this.step };
+    const saved = { position: position.clone(), target: this.controls.target.clone(), near, far };
     const pixelRatio = this.renderer.getPixelRatio();
     const canvas = document.createElement("canvas");
     canvas.width = size * columns;
     canvas.height = size * Math.ceil(tiles.length / columns);
     const ctx = canvas.getContext("2d")!;
 
-    if (this.step !== Infinity) {
-      this.step = Infinity;
-      this.remesh();
-    }
     if (sky) this.paintSky(sky);
     this.dome.visible = !!sky && !focus;
     this.scene.fog = sky && !focus ? this.fog : null;
@@ -348,8 +476,8 @@ export class BlockScene {
     this.renderer.setSize(size * 2, size * 2, false);
     this.camera.aspect = 1;
     this.camera.zoom = zoom;
-    const width = this.site?.width ?? 64;
-    const depth = this.site?.depth ?? 64;
+    const width = site?.width ?? 64;
+    const depth = site?.depth ?? 64;
     for (const tile of tiles) {
       this.frameView(tile.view, width, depth, focus);
       this.renderer.render(this.scene, this.camera);
@@ -367,9 +495,9 @@ export class BlockScene {
       }
     }
 
-    if (saved.step !== Infinity) {
-      this.step = saved.step;
-      this.remesh();
+    if (full) {
+      this.put(shown);
+      disposeModel(full);
     }
     this.dome.visible = true;
     this.scene.fog = this.fog;
@@ -386,6 +514,21 @@ export class BlockScene {
     return new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
   }
 
+  /** What the viewer shows now, at `scale` times its pixel size. */
+  image(scale = 2): Promise<Blob | null> {
+    const ratio = this.renderer.getPixelRatio();
+    this.renderer.setPixelRatio(ratio * scale);
+    this.renderer.render(this.scene, this.camera);
+    const source = this.renderer.domElement;
+    const canvas = document.createElement("canvas");
+    canvas.width = source.width;
+    canvas.height = source.height;
+    canvas.getContext("2d")!.drawImage(source, 0, 0);
+    this.renderer.setPixelRatio(ratio);
+    this.resize();
+    return new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+  }
+
   thumbnail(size = 320): Promise<Blob | null> {
     return this.offscreen(size, [{ view: "iso", x: 0, y: 0 }], null);
   }
@@ -396,7 +539,12 @@ export class BlockScene {
       ? new THREE.Box3(new THREE.Vector3(box[0], box[1], box[2]), new THREE.Vector3(box[3] + 1, box[4] + 1, box[5] + 1))
       : undefined;
     if (angle === null) {
-      const tiles = SHEET.map((s, i) => ({ view: s.view, label: s.label, x: (i % 2) * size, y: Math.floor(i / 2) * size }));
+      const tiles = SHEET.map((s, i) => ({
+        view: s.view,
+        label: s.label,
+        x: (i % 2) * size,
+        y: Math.floor(i / 2) * size,
+      }));
       return this.offscreen(size, tiles, "dark", 2, focus, zoom);
     }
     const around = THREE.MathUtils.degToRad(angle);

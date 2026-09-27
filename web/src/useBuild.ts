@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, GALLERY, type Build, type BuildEvent, type RenderRequest } from "./api";
+import { api, GALLERY, HttpError, type Build, type BuildEvent, type RenderRequest } from "./api";
 
 const THINKING_CHARS = 1500;
 
@@ -7,8 +7,8 @@ function apply(build: Build, event: BuildEvent): Build {
   switch (event.type) {
     case "hello":
     case "build": {
-      const { name, prompt, builder, status, created, width, depth, height } = event.build;
-      return { ...build, name, prompt, builder, status, created, width, depth, height };
+      const { name, prompt, builder, status, created, updated, width, depth, height } = event.build;
+      return { ...build, name, prompt, builder, status, created, updated, width, depth, height };
     }
     case "message":
       if (build.messages.some((m) => m.at === event.message.at && m.text === event.message.text)) return build;
@@ -34,49 +34,64 @@ export interface LiveBuild {
   thinking: string;
   /** The latest render the builder asked a viewer for. */
   renderRequest: RenderRequest | null;
+  /** Why the build could not be opened; null while it loads or once it has. */
+  error: string | null;
 }
+
+const failure = (e: unknown) =>
+  e instanceof HttpError && e.status === 404 ? "Build not found" : "Couldn't load this build";
 
 /** The open build, kept live by its event stream; events that arrive before the first fetch are replayed on it. */
 export function useBuild(id: string | null): LiveBuild {
   const [build, setBuild] = useState<Build | null>(null);
   const [thinking, setThinking] = useState("");
   const [renderRequest, setRenderRequest] = useState<RenderRequest | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     setBuild(null);
     setThinking("");
     setRenderRequest(null);
+    setError(null);
     if (!id) return;
-    if (GALLERY) {
-      let active = true;
-      api.build(id).then((fetched) => active && setBuild(fetched), console.error);
-      return () => {
-        active = false;
-      };
-    }
+    let active = true;
     let pending: BuildEvent[] | null = [];
     let current: Build | null = null;
-    const source = api.events(id);
-    source.onmessage = (e) => {
-      const event = JSON.parse(e.data) as BuildEvent;
-      if (event.type === "thinking") {
-        setThinking((t) => (event.reset ? "" : t + event.text).slice(-THINKING_CHARS));
-        return;
-      }
-      if (event.type === "render") {
-        setRenderRequest(event);
-        return;
-      }
-      if (pending) pending.push(event);
-      else if (current) setBuild((current = apply(current, event)));
+    const source = GALLERY ? null : api.events(id);
+    if (source)
+      source.onmessage = (e) => {
+        if (!active) return;
+        const event = JSON.parse(e.data) as BuildEvent;
+        if (event.type === "thinking") {
+          setThinking((t) => (event.reset ? "" : t + event.text).slice(-THINKING_CHARS));
+          return;
+        }
+        if (event.type === "render") {
+          setRenderRequest(event);
+          return;
+        }
+        if (pending) pending.push(event);
+        else if (current) setBuild((current = apply(current, event)));
+      };
+    api.build(id).then(
+      (fetched) => {
+        if (!active) return;
+        current = (pending ?? []).reduce(apply, fetched);
+        pending = null;
+        setBuild(current);
+      },
+      (e) => {
+        if (!active) return;
+        console.error(e);
+        source?.close();
+        setError(failure(e));
+      },
+    );
+    return () => {
+      active = false;
+      source?.close();
     };
-    api.build(id).then((fetched) => {
-      current = (pending ?? []).reduce(apply, fetched);
-      pending = null;
-      setBuild(current);
-    });
-    return () => source.close();
   }, [id]);
 
-  return { build, thinking, renderRequest };
+  return { build, thinking, renderRequest, error };
 }

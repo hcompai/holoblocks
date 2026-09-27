@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import time
 import uuid
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class Box(BaseModel):
@@ -37,8 +37,19 @@ class Step(BaseModel):
 class Message(BaseModel):
     role: Literal["user", "assistant", "system", "tool"]
     text: str
-    image: str = ""
+    images: list[str] = []
+    """URLs: the images a user attached, or the render shown with a tool note."""
     at: float = Field(default_factory=time.time)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _single_image(cls, data: Any) -> Any:
+        """Builds saved with one `image` per message still load."""
+        if isinstance(data, dict) and "image" in data:
+            data = dict(data)
+            image = data.pop("image")
+            data.setdefault("images", [image] if image else [])
+        return data
 
 
 class Build(BaseModel):
@@ -50,6 +61,8 @@ class Build(BaseModel):
     depth: int = 128
     height: int = 100
     created: float = Field(default_factory=time.time)
+    updated: float = 0
+    """When the blocks last changed; 0 when unknown."""
     status: Literal["idle", "building", "done", "error"] = "idle"
     boxes: list[Box] = []
     steps: list[Step] = []
@@ -64,6 +77,7 @@ class Build(BaseModel):
             "builder": self.builder,
             "status": self.status,
             "created": self.created,
+            "updated": self.updated,
             "boxes": len(self.boxes),
             "steps": len(self.steps),
             "width": self.width,

@@ -1,6 +1,5 @@
-import * as THREE from "three";
-import type { BlockInfo, Box, Palette, Tex } from "./api";
-import { type Atlas, texKey } from "./atlas";
+import { type BlockInfo, type Box, type Palette, type Tex, texKey } from "./api";
+import type { UV } from "./atlas";
 
 export interface State {
   name: string;
@@ -56,13 +55,16 @@ export class VoxelWorld {
     return this.states[this.ids[this.at(x, y, z)]];
   }
 
-  apply(boxes: Box[], maxStep = Infinity) {
-    for (const b of boxes) {
-      if (b.step > maxStep) continue;
-      const id = this.id(b.block);
-      const x0 = Math.max(b.x0, 0), x1 = Math.min(b.x1, this.width - 1);
-      const y0 = Math.max(b.y0, 0), y1 = Math.min(b.y1, this.height - 1);
-      const z0 = Math.max(b.z0, 0), z1 = Math.min(b.z1, this.depth - 1);
+  apply({ blocks, boxes }: PackedBoxes) {
+    const ids = blocks.map((block) => this.id(block));
+    for (let i = 0; i < boxes.length; i += 7) {
+      const id = ids[boxes[i + 6]];
+      const x0 = Math.max(boxes[i], 0),
+        x1 = Math.min(boxes[i + 3], this.width - 1);
+      const y0 = Math.max(boxes[i + 1], 0),
+        y1 = Math.min(boxes[i + 4], this.height - 1);
+      const z0 = Math.max(boxes[i + 2], 0),
+        z1 = Math.min(boxes[i + 5], this.depth - 1);
       for (let y = y0; y <= y1; y++)
         for (let z = z0; z <= z1; z++) this.ids.fill(id, this.at(x0, y, z), this.at(x1, y, z) + 1);
     }
@@ -80,8 +82,8 @@ export class VoxelWorld {
     return out;
   }
 
-  /** Bounding box of every block, or null. */
-  bounds(): THREE.Box3 | null {
+  /** Bounding box of every block as [x0, y0, z0, x1, y1, z1], or null. */
+  bounds(): number[] | null {
     const lo = [this.width, this.height, this.depth];
     const hi = [-1, -1, -1];
     for (let y = 0; y < this.height; y++)
@@ -96,12 +98,39 @@ export class VoxelWorld {
           if (z > hi[2]) hi[2] = z;
         }
     if (hi[0] < 0) return null;
-    return new THREE.Box3(new THREE.Vector3(lo[0], lo[1], lo[2]), new THREE.Vector3(hi[0] + 1, hi[1] + 1, hi[2] + 1));
+    return [lo[0], lo[1], lo[2], hi[0] + 1, hi[1] + 1, hi[2] + 1];
   }
 }
 
+/** Boxes as block names and [x0, y0, z0, x1, y1, z1, block index] runs, cheap to hand to a worker. */
+export interface PackedBoxes {
+  blocks: string[];
+  boxes: Int32Array;
+}
+
+export function packBoxes(boxes: Box[], maxStep = Infinity): PackedBoxes {
+  const index = new Map<string, number>();
+  const flat = new Int32Array(boxes.length * 7);
+  let n = 0;
+  for (const b of boxes) {
+    if (b.step > maxStep) continue;
+    let i = index.get(b.block);
+    if (i === undefined) index.set(b.block, (i = index.size));
+    flat.set([b.x0, b.y0, b.z0, b.x1, b.y1, b.z1, i], n);
+    n += 7;
+  }
+  return { blocks: [...index.keys()], boxes: flat.subarray(0, n) };
+}
+
 type Dir = 0 | 1 | 2 | 3 | 4 | 5; // +x -x +y -y +z -z
-const NORMALS: [number, number, number][] = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
+const NORMALS: [number, number, number][] = [
+  [1, 0, 0],
+  [-1, 0, 0],
+  [0, 1, 0],
+  [0, -1, 0],
+  [0, 0, 1],
+  [0, 0, -1],
+];
 const TANGENTS: { u: [number, number, number]; v: [number, number, number] }[] = [
   { u: [0, 0, -1], v: [0, 1, 0] },
   { u: [0, 0, 1], v: [0, 1, 0] },
@@ -123,9 +152,12 @@ const isFullOpaque = (s: State) =>
   !s.info.transparent &&
   !s.info.cutout &&
   !s.info.liquid &&
-  ((s.info.shape ?? "cube") === "cube" || s.info.shape === "log" || (s.info.shape === "slab" && s.props.type === "double"));
+  ((s.info.shape ?? "cube") === "cube" ||
+    s.info.shape === "log" ||
+    (s.info.shape === "slab" && s.props.type === "double"));
 
-const connects = (s: State, kinds: string[]) => isFullOpaque(s) || (s !== AIR && kinds.includes(s.info.shape ?? "cube"));
+const connects = (s: State, kinds: string[]) =>
+  isFullOpaque(s) || (s !== AIR && kinds.includes(s.info.shape ?? "cube"));
 
 function faceTex(state: State, dir: Dir): Tex {
   const tex = state.info.tex;
@@ -147,7 +179,11 @@ function shapeBoxes(world: VoxelWorld, s: State, x: number, y: number, z: number
   const n = (dx: number, dz: number) => world.get(x + dx, y, z + dz);
   switch (shape) {
     case "slab":
-      return s.props.type === "top" ? [[0, 8, 0, 16, 16, 16]] : s.props.type === "double" ? [FULL] : [[0, 0, 0, 16, 8, 16]];
+      return s.props.type === "top"
+        ? [[0, 8, 0, 16, 16, 16]]
+        : s.props.type === "double"
+          ? [FULL]
+          : [[0, 0, 0, 16, 8, 16]];
     case "stairs": {
       const top = s.props.half === "top";
       const base: Box16 = top ? [0, 8, 0, 16, 16, 16] : [0, 0, 0, 16, 8, 16];
@@ -187,7 +223,10 @@ function shapeBoxes(world: VoxelWorld, s: State, x: number, y: number, z: number
     case "torch":
       return [[7, 0, 7, 9, 10, 9]];
     case "lantern":
-      return [[5, 0, 5, 11, 7, 11], [6, 7, 6, 10, 9, 10]];
+      return [
+        [5, 0, 5, 11, 7, 11],
+        [6, 7, 6, 10, 9, 10],
+      ];
     case "carpet":
       return [[0, 0, 0, 16, 1, 16]];
     case "rod":
@@ -218,144 +257,231 @@ function shapeBoxes(world: VoxelWorld, s: State, x: number, y: number, z: number
   }
 }
 
+const INITIAL_VERTICES = 4096;
+
 class Buffers {
-  positions: number[] = [];
-  normals: number[] = [];
-  uvs: number[] = [];
-  colors: number[] = [];
-  indices: number[] = [];
+  positions = new Float32Array(3 * INITIAL_VERTICES);
+  normals = new Float32Array(3 * INITIAL_VERTICES);
+  uvs = new Float32Array(2 * INITIAL_VERTICES);
+  colors = new Float32Array(3 * INITIAL_VERTICES);
+  indices = new Uint32Array((6 * INITIAL_VERTICES) / 4);
+  vertices = 0;
+  quads = 0;
 
-  quad(p: number[][], n: [number, number, number], uv: number[][], brightness: number[]) {
-    const base = this.positions.length / 3;
+  /** Appends a quad from its corners `p` and texture coordinates `uv`, flattened, facing `n`, with corner brightness `b`. */
+  quad(p: ArrayLike<number>, n: ArrayLike<number>, uv: ArrayLike<number>, b: ArrayLike<number>) {
+    if (3 * (this.vertices + 4) > this.positions.length) this.grow();
+    const base = this.vertices;
     for (let i = 0; i < 4; i++) {
-      this.positions.push(...p[i]);
-      this.normals.push(...n);
-      this.uvs.push(...uv[i]);
-      this.colors.push(brightness[i], brightness[i], brightness[i]);
+      const v = base + i;
+      for (let k = 0; k < 3; k++) {
+        this.positions[3 * v + k] = p[3 * i + k];
+        this.normals[3 * v + k] = n[k];
+        this.colors[3 * v + k] = b[i];
+      }
+      this.uvs[2 * v] = uv[2 * i];
+      this.uvs[2 * v + 1] = uv[2 * i + 1];
     }
-    this.indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
+    const q = 6 * this.quads;
+    this.indices[q] = this.indices[q + 3] = base;
+    this.indices[q + 1] = base + 1;
+    this.indices[q + 2] = this.indices[q + 4] = base + 2;
+    this.indices[q + 5] = base + 3;
+    this.vertices += 4;
+    this.quads++;
   }
 
-  geometry(): THREE.BufferGeometry {
-    const g = new THREE.BufferGeometry();
-    g.setAttribute("position", new THREE.Float32BufferAttribute(this.positions, 3));
-    g.setAttribute("normal", new THREE.Float32BufferAttribute(this.normals, 3));
-    g.setAttribute("uv", new THREE.Float32BufferAttribute(this.uvs, 2));
-    g.setAttribute("color", new THREE.Float32BufferAttribute(this.colors, 3));
-    g.setIndex(this.indices);
-    return g;
+  private grow() {
+    const grown = <T extends Float32Array<ArrayBuffer> | Uint32Array<ArrayBuffer>>(a: T, make: (n: number) => T) => {
+      const b = make(2 * a.length);
+      b.set(a);
+      return b;
+    };
+    const float = (n: number) => new Float32Array(n);
+    this.positions = grown(this.positions, float);
+    this.normals = grown(this.normals, float);
+    this.uvs = grown(this.uvs, float);
+    this.colors = grown(this.colors, float);
+    this.indices = grown(this.indices, (n) => new Uint32Array(n));
+  }
+
+  data(kind: Kind): MeshData {
+    const n = this.vertices;
+    return {
+      kind,
+      positions: this.positions.slice(0, 3 * n),
+      normals: this.normals.slice(0, 3 * n),
+      uvs: this.uvs.slice(0, 2 * n),
+      colors: this.colors.slice(0, 3 * n),
+      indices: this.indices.slice(0, 6 * this.quads),
+    };
   }
 }
 
-export interface Materials {
-  opaque: THREE.Material;
-  cutout: THREE.Material;
-  transparent: THREE.Material;
+export type Kind = "opaque" | "cutout" | "transparent";
+
+/** One material kind's vertex attributes and triangles. */
+export interface MeshData {
+  kind: Kind;
+  positions: Float32Array<ArrayBuffer>;
+  normals: Float32Array<ArrayBuffer>;
+  uvs: Float32Array<ArrayBuffer>;
+  colors: Float32Array<ArrayBuffer>;
+  indices: Uint32Array<ArrayBuffer>;
 }
 
-export function makeMaterials(atlas: Atlas): Materials {
-  const map = atlas.texture;
-  return {
-    opaque: new THREE.MeshLambertMaterial({ map, vertexColors: true }),
-    cutout: new THREE.MeshLambertMaterial({ map, vertexColors: true, alphaTest: 0.5, side: THREE.DoubleSide }),
-    transparent: new THREE.MeshLambertMaterial({ map, vertexColors: true, transparent: true, opacity: 0.85, depthWrite: false }),
-  };
-}
+const CROSS_NORMALS = [
+  [0.7, 0, -0.7],
+  [-0.7, 0, -0.7],
+];
 
-/** One mesh per material kind for everything in the world. */
-export function buildMeshes(world: VoxelWorld, atlas: Atlas, materials: Materials): THREE.Group {
+/** One mesh per material kind for everything in the world, textured from the atlas `uvs`. */
+export function meshWorld(world: VoxelWorld, uvs: Map<string, UV>): MeshData[] {
   const buffers = { opaque: new Buffers(), cutout: new Buffers(), transparent: new Buffers() };
-  const { width, height, depth } = world;
+  const { width, height, depth, ids, states } = world;
+  const firstTile = uvs.values().next().value!;
+  const opaque = Uint8Array.from(states, (s) => (isFullOpaque(s) ? 1 : 0));
+  const tiles = states.map((s) => NORMALS.map((_, dir) => uvs.get(texKey(faceTex(s, dir as Dir))) ?? firstTile));
+  const inside = (x: number, y: number, z: number) =>
+    x >= 0 && y >= 0 && z >= 0 && x < width && y < height && z < depth;
+  const occluder = (x: number, y: number, z: number) => (inside(x, y, z) ? opaque[ids[world.at(x, y, z)]] : 0);
 
-  const occluder = (x: number, y: number, z: number) => (isFullOpaque(world.get(x, y, z)) ? 1 : 0);
+  const cell = new Float64Array(3);
+  const lo = new Float64Array(3);
+  const hi = new Float64Array(3);
+  const corners = new Float64Array(12);
+  const uv = new Float64Array(8);
+  const brightness = new Float64Array(4);
+  const frac = (axis: number[], corner: number) => {
+    const k = axis[0] ? 0 : axis[1] ? 1 : 2;
+    const p = corners[3 * corner + k];
+    return axis[k] > 0 ? p - cell[k] : cell[k] + 1 - p;
+  };
 
-  const emit = (
-    kind: keyof Materials,
-    s: State,
-    x: number,
-    y: number,
-    z: number,
-    box: Box16,
-    dir: Dir,
-    ao: boolean,
-  ) => {
-    const [ax, ay, az, bx, by, bz] = box.map((v) => v / 16);
-    const lo = [x + ax, y + ay, z + az];
-    const hi = [x + bx, y + by, z + bz];
+  const emit = (buffer: Buffers, s: State, tile: UV, box: Box16, dir: Dir, ao: boolean) => {
+    for (let k = 0; k < 3; k++) {
+      lo[k] = cell[k] + box[k] / 16;
+      hi[k] = cell[k] + box[k + 3] / 16;
+    }
     const n = NORMALS[dir];
     const { u, v } = TANGENTS[dir];
-    const origin = [0, 1, 2].map((k) => (n[k] > 0 ? hi[k] : n[k] < 0 ? lo[k] : u[k] < 0 || v[k] < 0 ? hi[k] : lo[k]));
-    const size = [0, 1, 2].map((k) => hi[k] - lo[k]);
-    const uLen = Math.abs(u[0] * size[0] + u[1] * size[1] + u[2] * size[2]);
-    const vLen = Math.abs(v[0] * size[0] + v[1] * size[1] + v[2] * size[2]);
-    const p0 = origin;
-    const p1 = origin.map((c, k) => c + u[k] * uLen);
-    const p2 = origin.map((c, k) => c + u[k] * uLen + v[k] * vLen);
-    const p3 = origin.map((c, k) => c + v[k] * vLen);
-    const frac = (axis: [number, number, number], p: number[]) => {
-      const k = axis.findIndex((c) => c !== 0);
-      const cell = [x, y, z][k];
-      return axis[k] > 0 ? p[k] - cell : cell + 1 - p[k];
-    };
-    const [tu0, tv0, tu1, tv1] = atlas.uv(texKey(faceTex(s, dir)));
-    let fu0 = frac(u, p0), fu1 = frac(u, p1), fv0 = frac(v, p0), fv1 = frac(v, p3);
-    if (s.info.shape === "rod") [fu0, fu1, fv0, fv1] = [0, 0.25, 0, 1];
-    const U = (f: number) => tu0 + (tu1 - tu0) * f;
-    const V = (f: number) => tv0 + (tv1 - tv0) * f;
-    const uv = [[U(fu0), V(fv0)], [U(fu1), V(fv0)], [U(fu1), V(fv1)], [U(fu0), V(fv1)]];
-    const shade = SHADE[dir];
-    let brightness = [shade, shade, shade, shade];
-    if (ao) {
-      const nx = x + n[0], ny = y + n[1], nz = z + n[2];
-      brightness = [p0, p1, p2, p3].map((p) => {
-        const d = [0, 1, 2].map((k) => (p[k] === lo[k] ? -1 : 1));
-        const s1 = occluder(nx + (u[0] ? d[0] : 0), ny + (u[1] ? d[1] : 0), nz + (u[2] ? d[2] : 0));
-        const s2 = occluder(nx + (v[0] ? d[0] : 0), ny + (v[1] ? d[1] : 0), nz + (v[2] ? d[2] : 0));
-        const c = occluder(nx + (n[0] ? 0 : d[0]), ny + (n[1] ? 0 : d[1]), nz + (n[2] ? 0 : d[2]));
-        return shade * AO_LEVELS[s1 && s2 ? 0 : 3 - (s1 + s2 + c)];
-      });
+    const uLen = Math.abs(u[0] * (hi[0] - lo[0]) + u[1] * (hi[1] - lo[1]) + u[2] * (hi[2] - lo[2]));
+    const vLen = Math.abs(v[0] * (hi[0] - lo[0]) + v[1] * (hi[1] - lo[1]) + v[2] * (hi[2] - lo[2]));
+    for (let k = 0; k < 3; k++) {
+      const o = n[k] > 0 ? hi[k] : n[k] < 0 ? lo[k] : u[k] < 0 || v[k] < 0 ? hi[k] : lo[k];
+      corners[k] = o;
+      corners[3 + k] = o + u[k] * uLen;
+      corners[6 + k] = o + u[k] * uLen + v[k] * vLen;
+      corners[9 + k] = o + v[k] * vLen;
     }
-    buffers[kind].quad([p0, p1, p2, p3], n, uv, brightness);
+    const rod = s.info.shape === "rod";
+    const fu0 = rod ? 0 : frac(u, 0);
+    const fu1 = rod ? 0.25 : frac(u, 1);
+    const fv0 = rod ? 0 : frac(v, 0);
+    const fv1 = rod ? 1 : frac(v, 3);
+    const U = (f: number) => tile[0] + (tile[2] - tile[0]) * f;
+    const V = (f: number) => tile[1] + (tile[3] - tile[1]) * f;
+    uv[0] = U(fu0);
+    uv[1] = V(fv0);
+    uv[2] = U(fu1);
+    uv[3] = V(fv0);
+    uv[4] = U(fu1);
+    uv[5] = V(fv1);
+    uv[6] = U(fu0);
+    uv[7] = V(fv1);
+    const shade = SHADE[dir];
+    brightness.fill(shade);
+    if (ao) {
+      const nx = cell[0] + n[0],
+        ny = cell[1] + n[1],
+        nz = cell[2] + n[2];
+      for (let i = 0; i < 4; i++) {
+        const d0 = corners[3 * i] === lo[0] ? -1 : 1;
+        const d1 = corners[3 * i + 1] === lo[1] ? -1 : 1;
+        const d2 = corners[3 * i + 2] === lo[2] ? -1 : 1;
+        const s1 = occluder(nx + (u[0] ? d0 : 0), ny + (u[1] ? d1 : 0), nz + (u[2] ? d2 : 0));
+        const s2 = occluder(nx + (v[0] ? d0 : 0), ny + (v[1] ? d1 : 0), nz + (v[2] ? d2 : 0));
+        const c = occluder(nx + (n[0] ? 0 : d0), ny + (n[1] ? 0 : d1), nz + (n[2] ? 0 : d2));
+        brightness[i] = shade * AO_LEVELS[s1 && s2 ? 0 : 3 - (s1 + s2 + c)];
+      }
+    }
+    buffer.quad(corners, n, uv, brightness);
   };
 
-  const cross = (kind: keyof Materials, s: State, x: number, y: number, z: number) => {
-    const [tu0, tv0, tu1, tv1] = atlas.uv(texKey(faceTex(s, 4)));
-    const uv = [[tu0, tv0], [tu1, tv0], [tu1, tv1], [tu0, tv1]];
-    const b = [0.9, 0.9, 0.9, 0.9];
-    buffers[kind].quad([[x, y, z], [x + 1, y, z + 1], [x + 1, y + 1, z + 1], [x, y + 1, z]], [0.7, 0, -0.7], uv, b);
-    buffers[kind].quad([[x + 1, y, z], [x, y, z + 1], [x, y + 1, z + 1], [x + 1, y + 1, z]], [-0.7, 0, -0.7], uv, b);
+  const cross = (buffer: Buffers, tile: UV, x: number, y: number, z: number) => {
+    uv.set([tile[0], tile[1], tile[2], tile[1], tile[2], tile[3], tile[0], tile[3]]);
+    brightness.fill(0.9);
+    corners.set([x, y, z, x + 1, y, z + 1, x + 1, y + 1, z + 1, x, y + 1, z]);
+    buffer.quad(corners, CROSS_NORMALS[0], uv, brightness);
+    corners.set([x + 1, y, z, x, y, z + 1, x, y + 1, z + 1, x + 1, y + 1, z]);
+    buffer.quad(corners, CROSS_NORMALS[1], uv, brightness);
   };
 
   for (let y = 0; y < height; y++)
     for (let z = 0; z < depth; z++)
       for (let x = 0; x < width; x++) {
-        const s = world.states[world.ids[world.at(x, y, z)]];
+        const id = ids[world.at(x, y, z)];
+        const s = states[id];
         if (s === AIR) continue;
-        const kind: keyof Materials = s.info.transparent ? "transparent" : s.info.cutout ? "cutout" : "opaque";
+        const buffer = buffers[s.info.transparent ? "transparent" : s.info.cutout ? "cutout" : "opaque"];
         const shape = s.info.shape ?? "cube";
         if (shape === "cross") {
-          cross(kind, s, x, y, z);
+          cross(buffer, tiles[id][4], x, y, z);
           continue;
         }
+        cell[0] = x;
+        cell[1] = y;
+        cell[2] = z;
         const boxes = shapeBoxes(world, s, x, y, z);
         const full = boxes.length === 1 && boxes[0] === FULL;
+        const mergesSame = s.info.transparent || s.info.cutout;
         for (const box of boxes)
           for (let dir = 0 as Dir; dir < 6; dir++) {
             const n = NORMALS[dir];
-            const neighbour = world.get(x + n[0], y + n[1], z + n[2]);
+            const nx = x + n[0],
+              ny = y + n[1],
+              nz = z + n[2];
+            const neighbour = inside(nx, ny, nz) ? ids[world.at(nx, ny, nz)] : 0;
             const flush = box[FACE_EDGE[dir]] === (dir % 2 === 0 ? 16 : 0);
-            const same = neighbour.name === s.name && (s.info.transparent || s.info.cutout);
-            if (flush && (isFullOpaque(neighbour) || same)) continue;
-            emit(kind, s, x, y, z, box, dir as Dir, full);
+            if (flush && (opaque[neighbour] || (mergesSame && states[neighbour].name === s.name))) continue;
+            emit(buffer, s, tiles[id][dir], box, dir as Dir, full);
           }
       }
 
-  const group = new THREE.Group();
-  for (const kind of ["opaque", "cutout", "transparent"] as const) {
-    if (!buffers[kind].indices.length) continue;
-    const mesh = new THREE.Mesh(buffers[kind].geometry(), materials[kind]);
-    mesh.renderOrder = kind === "transparent" ? 2 : kind === "cutout" ? 1 : 0;
-    group.add(mesh);
+  return (["opaque", "cutout", "transparent"] as const)
+    .filter((kind) => buffers[kind].quads)
+    .map((kind) => buffers[kind].data(kind));
+}
+
+/** Of the meshes' vertices, those ending a run along x, y and z: they include every corner of the convex hull, so any view that fits them fits the model. */
+export function outline(meshes: MeshData[]): Float32Array<ArrayBuffer> {
+  let points = new Float32Array(meshes.reduce((n, m) => n + m.positions.length, 0));
+  let n = 0;
+  for (const m of meshes) {
+    points.set(m.positions, n);
+    n += m.positions.length;
   }
-  return group;
+  for (const axis of [1, 0, 2]) points = runEnds(points, axis);
+  return points;
+}
+
+/** Points that are the lowest or highest along `axis` among those sharing their other two coordinates, all multiples of 1/16. */
+function runEnds(points: Float32Array<ArrayBuffer>, axis: number): Float32Array<ArrayBuffer> {
+  const [a, b] = [0, 1, 2].filter((k) => k !== axis);
+  const ends = new Map<number, [number, number]>();
+  for (let i = 0; i < points.length; i += 3) {
+    const key = Math.round(points[i + a] * 16) * 65536 + Math.round(points[i + b] * 16);
+    const run = ends.get(key);
+    if (!run) ends.set(key, [i, i]);
+    else if (points[i + axis] < points[run[0] + axis]) run[0] = i;
+    else if (points[i + axis] > points[run[1] + axis]) run[1] = i;
+  }
+  const out = new Float32Array(6 * ends.size);
+  let n = 0;
+  for (const [low, high] of ends.values())
+    for (const i of low === high ? [low] : [low, high]) {
+      out.set(points.subarray(i, i + 3), n);
+      n += 3;
+    }
+  return out.slice(0, n);
 }

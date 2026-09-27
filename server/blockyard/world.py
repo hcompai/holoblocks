@@ -64,6 +64,35 @@ class World:
         raw.pop(AIR, None)
         return Counter({self.palette[i]: n for i, n in raw.items()})
 
+    def floating(self) -> list[list[tuple[int, int, int]]]:
+        """Groups of blocks with no chain of blocks down to y=0, largest first.
+
+        Blocks touching by a face, an edge or a corner count as joined, so stair roofs climbing diagonally hold.
+        """
+        w, h, d, layer, cells = self.width, self.height, self.depth, self.width * self.depth, self.cells
+        seen = bytearray(len(cells))
+        around = [(dx, dy, dz) for dx in (-1, 0, 1) for dy in (-1, 0, 1) for dz in (-1, 0, 1) if dx or dy or dz]
+
+        def spread(start: list[int]) -> list[int]:
+            for o in start:
+                seen[o] = 1
+            group, stack = list(start), list(start)
+            while stack:
+                o = stack.pop()
+                x, y, z = o % w, o // layer, o // w % d
+                for dx, dy, dz in around:
+                    if 0 <= x + dx < w and 0 <= y + dy < h and 0 <= z + dz < d:
+                        n = o + dx + dz * w + dy * layer
+                        if cells[n] != AIR and not seen[n]:
+                            seen[n] = 1
+                            group.append(n)
+                            stack.append(n)
+            return group
+
+        spread([o for o in range(layer) if cells[o] != AIR])
+        groups = [spread([o]) for o in range(layer, len(cells)) if cells[o] != AIR and not seen[o]]
+        return [[(o % w, o // layer, o // w % d) for o in g] for g in sorted(groups, key=len, reverse=True)]
+
     def bounds(self) -> tuple[tuple[int, int, int], tuple[int, int, int]] | None:
         """Extents of the non-air blocks, or None when there are none."""
         lo, hi = [self.width, self.height, self.depth], [-1, -1, -1]

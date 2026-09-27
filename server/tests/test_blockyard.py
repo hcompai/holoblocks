@@ -1,14 +1,17 @@
 import asyncio
 import gzip
+import io
 import json
 
+import PIL.Image
 import pytest
+from fastapi.testclient import TestClient
 
 from blockyard import blocks, gallery, script
 from blockyard.builders.scripted import ScriptedBuilder
 from blockyard.builders.showcases import SHOWCASES
-from blockyard.model import Box, Build
-from blockyard.session import Session, Store
+from blockyard.model import Box, Build, Message
+from blockyard.session import Session, Store, UnknownBuild
 from blockyard.workbench import Workbench
 
 
@@ -49,6 +52,17 @@ def test_later_steps_overwrite_earlier_ones(bench):
         bench.run_script('step("Base")\nfill(0, 1, 0, 3, 1, 3, "stone")\nstep("Cover")\nset(1, 1, 1, "oak_planks")')
     )
     assert bench.world().get(1, 1, 1) == "oak_planks" and bench.world().get(0, 1, 0) == "stone"
+
+
+def test_blocks_joined_to_nothing_on_the_ground_are_reported_as_floating(bench):
+    result = asyncio.run(
+        bench.run_script(
+            'step("Tower")\nfill(0, 0, 0, 0, 5, 0, "stone")\nset(1, 5, 0, "lantern")\n'
+            'step("Island")\nfill(5, 4, 5, 8, 4, 8, "grass_block")'
+        )
+    )
+    assert "step 'Island': 16 blocks float" in result.text and "`blocks look 5 4 5 8 4 8`" in result.text
+    assert "Tower" not in result.text.split("Steps:")[0] and result.problems == 1
 
 
 LAND = """
@@ -109,13 +123,23 @@ def test_gallery_exports_the_latest_showcase_runs_with_everything_the_viewer_rea
     store = Store(tmp_path / "data")
     key = SHOWCASES[0].key
     stone = Box(x0=0, y0=0, z0=0, x1=1, y1=1, z1=1, block="stone", step=0)
-    old, new = Build(builder=key, status="done", created=1), Build(builder=key, status="done", created=2, boxes=[stone])
-    for build in (old, new, Build(builder="holo", status="done", created=3)):
+    png = io.BytesIO()
+    PIL.Image.new("RGBA", (896, 896), "gray").save(png, "PNG")
+    render = Message(role="tool", text="Ran the script", images=[store.save_image(png.getvalue())])
+    old = Build(builder=key, status="done", created=1)
+    new = Build(builder=key, status="done", created=2, boxes=[stone], messages=[render])
+    holo, listed = Build(builder="holo", status="done", created=3), Build(builder="holo", status="done", created=4)
+    for build in (old, new, holo, listed):
         store.save(build)
-    assert gallery.showcase_ids(store) == [new.id]
+    assert gallery.default_ids(store) == [new.id]
+    (tmp_path / "data" / "gallery.txt").write_text(f"{listed.id}\n")
+    assert gallery.default_ids(store) == [new.id, listed.id]
     out = gallery.export(store, [new.id], tmp_path / "site")
     assert [b["id"] for b in json.loads((out / "builds.json").read_text())] == [new.id]
-    assert Build.model_validate_json((out / "builds" / f"{new.id}.json").read_text()).boxes == [stone]
+    exported = Build.model_validate_json((out / "builds" / f"{new.id}.json").read_text())
+    assert exported.boxes == [stone]
+    name = exported.messages[0].images[0].removeprefix("/gallery/images/")
+    assert PIL.Image.open(out / "images" / "small" / f"{name}.webp").size == (240, 240)
     assert gzip.decompress((out / "builds" / f"{new.id}.schem").read_bytes()).startswith(b"\x0a\x00\x09Schematic")
     assert "stone" in json.loads((out / "blocks.json").read_text())
 
@@ -130,3 +154,17 @@ def test_a_viewer_that_opens_late_still_answers_the_waiting_render(tmp_path):
         return await waiting
 
     assert asyncio.run(main()) == b"png"
+
+
+def test_a_build_id_that_could_leave_the_store_names_no_build(tmp_path, monkeypatch):
+    from blockyard import app as app_module
+
+    store = Store(tmp_path / "data")
+    (tmp_path / "data" / "leak.json").write_text(Build().model_dump_json())
+    assert store.load("../leak") is None
+    with pytest.raises(UnknownBuild):
+        store.thumbnail("../leak")
+    monkeypatch.setattr(app_module, "store", store)
+    with TestClient(app_module.app) as http:
+        assert http.get("/api/builds/..leak/thumbnail.png").status_code == 404
+        assert http.get("/api/builds/..leak").status_code == 404

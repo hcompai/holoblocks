@@ -1,9 +1,8 @@
-import { ArrowUpIcon, StopIcon } from "@phosphor-icons/react";
-import { useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { ArrowUpIcon, PlusIcon, StopIcon, XIcon } from "@phosphor-icons/react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { api, GALLERY, type Build, type BuilderInfo } from "./api";
+import { api, GALLERY, HttpError, type Build, type BuilderInfo } from "./api";
 
 const SUGGESTIONS = [
   {
@@ -33,25 +32,105 @@ const SUGGESTIONS = [
   },
 ];
 
-interface Props {
-  build: Build | null;
-  thinking: string;
-  onCreate: (prompt: string, builder: string) => void;
-  onSay: (text: string) => void;
+const WAITING_LINES = [
+  "Laying the first stones",
+  "Studying the photos",
+  "Measuring proportions",
+  "Sketching the massing",
+  "Setting the roofline",
+  "Mixing the palette",
+  "Squinting at the render",
+  "Walking around the model",
+  "Checking every join",
+  "Hunting for holes",
+  "Counting windows",
+  "Stacking blocks",
+  "Weighing the silhouette",
+  "Shaping the ground",
+  "Stepping back for a look",
+];
+const WAITING_MS = 4000;
+const RENDER_PX = 240;
+const ATTACHMENT_PX = 96;
+const MAX_EDGE = 1568;
+const IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp"];
+
+/** The image as a data URL, scaled down to MAX_EDGE on its long side: PNG stays PNG, the rest becomes JPEG. */
+async function shrink(file: File): Promise<string> {
+  const bitmap = await createImageBitmap(file);
+  const scale = Math.min(1, MAX_EDGE / Math.max(bitmap.width, bitmap.height));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(bitmap.width * scale);
+  canvas.height = Math.round(bitmap.height * scale);
+  const context = canvas.getContext("2d")!;
+  const png = file.type === "image/png";
+  if (!png) {
+    context.fillStyle = "#ffffff";
+    context.fillRect(0, 0, canvas.width, canvas.height);
+  }
+  context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  bitmap.close();
+  return canvas.toDataURL(png ? "image/png" : "image/jpeg", 0.9);
 }
 
-export function ChatPanel({ build, thinking, onCreate, onSay }: Props) {
+function failure(e: unknown): string {
+  if (!(e instanceof HttpError)) return "the server is unreachable";
+  try {
+    const { detail } = JSON.parse(e.text);
+    if (typeof detail === "string") return detail;
+  } catch {}
+  return `the server answered ${e.status}`;
+}
+
+function nextLine(current: number): number {
+  const next = Math.floor(Math.random() * (WAITING_LINES.length - 1));
+  return next >= current ? next + 1 : next;
+}
+
+function Waiting() {
+  const [line, setLine] = useState(() => Math.floor(Math.random() * WAITING_LINES.length));
+  useEffect(() => {
+    const timer = setInterval(() => setLine(nextLine), WAITING_MS);
+    return () => clearInterval(timer);
+  }, []);
+  return (
+    <span key={line} className="shimmer">
+      {WAITING_LINES[line]}
+    </span>
+  );
+}
+
+interface Props {
+  /** The open build's id, set before the build itself has loaded. */
+  buildId: string | null;
+  build: Build | null;
+  /** The open build could not be loaded. */
+  loadFailed: boolean;
+  thinking: string;
+  hidden: boolean;
+  onCreate: (prompt: string, builder: string, images: string[]) => Promise<void>;
+}
+
+export function ChatPanel({ buildId, build, loadFailed, thinking, hidden, onCreate }: Props) {
   const [text, setText] = useState("");
-  const [mode, setMode] = useState<"change" | "new">("change");
+  const [images, setImages] = useState<string[]>([]);
+  const [dropping, setDropping] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [failed, setFailed] = useState<string | null>(null);
   const [builders, setBuilders] = useState<BuilderInfo[]>([]);
   const [builder, setBuilder] = useState("");
   const [zoomed, setZoomed] = useState<string | null>(null);
   const pickable = builders.filter((b) => !b.showcase);
+  const maxImages = builders.find((b) => b.name === (buildId ? build?.builder : builder))?.max_images ?? 0;
   const log = useRef<HTMLDivElement>(null);
   const thought = useRef<HTMLDivElement>(null);
   const composer = useRef<HTMLTextAreaElement>(null);
+  const picker = useRef<HTMLInputElement>(null);
+  const lightbox = useRef<HTMLDialogElement>(null);
+  const opener = useRef<HTMLElement | null>(null);
   const busy = build?.status === "building";
-  const target = build && mode === "change" ? "change" : "new";
+  const ready = !!(text.trim() || images.length) && !sending && (!buildId || (!!build && !busy));
+  const scrolledFor = useRef<string | null>(null);
 
   useEffect(() => {
     api.builders().then((list) => {
@@ -61,35 +140,63 @@ export function ChatPanel({ build, thinking, onCreate, onSay }: Props) {
   }, []);
 
   useEffect(() => {
-    log.current?.scrollTo({ top: log.current.scrollHeight, behavior: "smooth" });
-  }, [build?.messages.length, busy]);
+    if (hidden) return;
+    const jump = scrolledFor.current !== (build?.id ?? null);
+    scrolledFor.current = build?.id ?? null;
+    log.current?.scrollTo({ top: log.current.scrollHeight, behavior: jump ? "instant" : "smooth" });
+  }, [build?.id, build?.messages.length, busy, hidden]);
+
+  useEffect(() => setFailed(null), [buildId]);
 
   useEffect(() => {
     thought.current?.scrollTo({ top: thought.current.scrollHeight });
   }, [thinking]);
 
   useEffect(() => {
-    if (!zoomed) return;
-    const close = (e: KeyboardEvent) => e.key === "Escape" && setZoomed(null);
-    window.addEventListener("keydown", close);
-    return () => window.removeEventListener("keydown", close);
-  }, [zoomed]);
+    if (!buildId) composer.current?.focus();
+  }, [buildId]);
 
-  const send = (value = text) => {
-    const prompt = value.trim();
-    if (!prompt || (busy && target === "change")) return;
-    if (target === "change") onSay(prompt);
-    else onCreate(prompt, builder);
-    setText("");
-    setMode("change");
+  useLayoutEffect(() => {
+    const area = composer.current;
+    if (!area) return;
+    area.style.height = "auto";
+    area.style.height = `${area.scrollHeight + area.offsetHeight - area.clientHeight}px`;
+  }, [text]);
+
+  const zoom = (src: string, from: HTMLElement) => {
+    opener.current = from;
+    setZoomed(src);
+    lightbox.current?.showModal();
   };
 
-  const who = builders.find((b) => b.name === (build?.builder ?? builder))?.label ?? build?.builder ?? "Builder";
+  const attach = async (files: Iterable<File>) => {
+    const picked = [...files].filter((f) => IMAGE_TYPES.includes(f.type)).slice(0, maxImages - images.length);
+    const shrunk = await Promise.allSettled(picked.map(shrink));
+    const urls = shrunk.flatMap((r) => (r.status === "fulfilled" ? [r.value] : []));
+    setImages((list) => [...list, ...urls].slice(0, maxImages));
+  };
+
+  const send = async () => {
+    if (!ready) return;
+    const prompt = text.trim();
+    setSending(true);
+    setFailed(null);
+    try {
+      if (buildId) await api.say(buildId, prompt, images);
+      else await onCreate(prompt, builder, images);
+      setText("");
+      setImages([]);
+    } catch (e) {
+      setFailed(`Couldn't send: ${failure(e)}.`);
+    } finally {
+      setSending(false);
+    }
+  };
 
   return (
-    <div className="chat">
+    <div className="chat" hidden={hidden}>
       <div className="chat-log" ref={log}>
-        {!build ? (
+        {!buildId ? (
           <div className="chat-intro">
             <h2>What should we build?</h2>
             <p>Describe a structure. The builder writes it in code, block by block, while you watch it rise.</p>
@@ -113,8 +220,26 @@ export function ChatPanel({ build, thinking, onCreate, onSay }: Props) {
             )}
           </div>
         ) : (
-          build.messages.map((m) => (
-            <div key={`${m.at}-${m.role}`} className={`msg ${m.role}`}>
+          build?.messages.map((m) => (
+            <div
+              key={`${m.at}-${m.role}`}
+              className={`msg ${m.role} ${m.role === "system" && m.text.startsWith("Builder failed") ? "error" : ""}`}
+            >
+              {m.role === "user" && m.images.length > 0 && (
+                <div className="msg-attachments">
+                  {m.images.map((src) => (
+                    <button key={src} title="Open the image" onClick={(e) => zoom(src, e.currentTarget)}>
+                      <img
+                        src={api.smallImageUrl(src)}
+                        alt="Attached image"
+                        loading="lazy"
+                        width={ATTACHMENT_PX}
+                        height={ATTACHMENT_PX}
+                      />
+                    </button>
+                  ))}
+                </div>
+              )}
               {m.role === "assistant" ? (
                 <div className="markdown">
                   <Markdown remarkPlugins={[remarkGfm]}>{m.text}</Markdown>
@@ -122,19 +247,30 @@ export function ChatPanel({ build, thinking, onCreate, onSay }: Props) {
               ) : (
                 m.text
               )}
-              {m.image && (
-                <button className="msg-render" title="Open the render" onClick={() => setZoomed(m.image!)}>
-                  <img src={m.image} alt="Render" loading="lazy" />
-                </button>
-              )}
+              {m.role !== "user" &&
+                m.images.map((src) => (
+                  <button
+                    key={src}
+                    className="msg-render"
+                    title="Open the render"
+                    onClick={(e) => zoom(src, e.currentTarget)}
+                  >
+                    <img
+                      src={api.smallImageUrl(src)}
+                      alt="Render"
+                      loading="lazy"
+                      width={RENDER_PX}
+                      height={RENDER_PX}
+                    />
+                  </button>
+                ))}
             </div>
           ))
         )}
         {busy && (
           <div className="msg assistant thinking">
             <div className="thinking-head">
-              <span className="pulse" />
-              {who} is {thinking ? "thinking" : "working"}…
+              <Waiting />
             </div>
             {thinking && (
               <div className="thinking-text" ref={thought}>
@@ -144,30 +280,118 @@ export function ChatPanel({ build, thinking, onCreate, onSay }: Props) {
           </div>
         )}
       </div>
-      {zoomed &&
-        createPortal(
-          <div className="lightbox" onClick={() => setZoomed(null)}>
-            <img src={zoomed} alt="Render" />
-          </div>,
-          document.body,
-        )}
+      <dialog
+        ref={lightbox}
+        className="lightbox"
+        aria-label="Image preview"
+        onClick={() => lightbox.current?.close()}
+        onClose={() => {
+          setZoomed(null);
+          opener.current?.focus();
+        }}
+      >
+        {zoomed && <img src={zoomed} alt="" />}
+        <form method="dialog">
+          <button className="round-button lightbox-close" aria-label="Close" title="Close">
+            <XIcon size={16} weight="bold" />
+          </button>
+        </form>
+      </dialog>
+      {failed && (
+        <p className="chat-error" role="alert">
+          {failed}
+        </p>
+      )}
       {GALLERY ? (
         <p className="gallery-note">Read-only gallery. New builds run in the local app.</p>
-      ) : (
-        <div className="composer">
-          <div className="modes">
-            {build && (
-              <>
-                <button className={mode === "change" ? "active" : ""} onClick={() => setMode("change")}>
-                  Change this build
-                </button>
-                <button className={mode === "new" ? "active" : ""} onClick={() => setMode("new")}>
-                  Start a new build
-                </button>
-              </>
-            )}
-            {target === "new" && pickable.length > 1 && (
-              <select className="builder-select" value={builder} onChange={(e) => setBuilder(e.target.value)}>
+      ) : loadFailed ? null : (
+        <div
+          className={`composer ${dropping ? "dropping" : ""}`}
+          onClick={(e) => e.target === e.currentTarget && composer.current?.focus()}
+          onDragOver={(e) => {
+            if (!e.dataTransfer.types.includes("Files")) return;
+            e.preventDefault();
+            setDropping(true);
+          }}
+          onDragLeave={(e) => {
+            if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDropping(false);
+          }}
+          onDrop={(e) => {
+            e.preventDefault();
+            setDropping(false);
+            attach(e.dataTransfer.files);
+          }}
+        >
+          {images.length > 0 && (
+            <div className="attachments">
+              {images.map((src, i) => (
+                <div key={i} className="attachment">
+                  <button
+                    className="attachment-open"
+                    title="Open the image"
+                    onClick={(e) => zoom(src, e.currentTarget)}
+                  >
+                    <img src={src} alt={`Attached image ${i + 1}`} />
+                  </button>
+                  <button
+                    className="attachment-remove"
+                    aria-label={`Remove image ${i + 1}`}
+                    onClick={() => setImages((list) => list.filter((_, j) => j !== i))}
+                  >
+                    <XIcon size={10} weight="bold" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+          <textarea
+            ref={composer}
+            rows={2}
+            value={text}
+            aria-label={buildId ? "Change this build" : "Describe a new build"}
+            placeholder={buildId ? "Describe how to change it…" : "Describe what to build…"}
+            onChange={(e) => setText(e.target.value)}
+            onPaste={(e) => {
+              const files = [...e.clipboardData.files].filter((f) => IMAGE_TYPES.includes(f.type));
+              if (!files.length) return;
+              e.preventDefault();
+              attach(files);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+                e.preventDefault();
+                send();
+              }
+            }}
+          />
+          <div className="composer-tools">
+            <button
+              className="round-button attach"
+              aria-label="Attach images"
+              title={`Attach images (up to ${maxImages})`}
+              disabled={images.length >= maxImages}
+              onClick={() => picker.current?.click()}
+            >
+              <PlusIcon size={16} weight="bold" />
+            </button>
+            <input
+              ref={picker}
+              type="file"
+              accept={IMAGE_TYPES.join(",")}
+              multiple
+              hidden
+              onChange={(e) => {
+                attach(e.target.files ?? []);
+                e.target.value = "";
+              }}
+            />
+            {!buildId && pickable.length > 1 && (
+              <select
+                className="builder-select"
+                aria-label="Builder"
+                value={builder}
+                onChange={(e) => setBuilder(e.target.value)}
+              >
                 {pickable.map((b) => (
                   <option key={b.name} value={b.name}>
                     {b.label}
@@ -176,27 +400,18 @@ export function ChatPanel({ build, thinking, onCreate, onSay }: Props) {
               </select>
             )}
           </div>
-          <textarea
-            ref={composer}
-            value={text}
-            placeholder={target === "change" ? "Describe how to change it…" : "Describe what to build…"}
-            onChange={(e) => setText(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                send();
-              }
-            }}
-          />
-          {busy && build && target === "change" ? (
-            <button className="send stop" onClick={() => api.stop(build.id)}>
+          {busy && build ? (
+            <button
+              className="round-button send stop"
+              aria-label="Stop"
+              title="Stop"
+              onClick={() => api.stop(build.id)}
+            >
               <StopIcon size={14} weight="fill" />
-              Stop
             </button>
           ) : (
-            <button className="send" disabled={!text.trim()} onClick={() => send()}>
-              Send
-              <ArrowUpIcon size={14} weight="bold" />
+            <button className="round-button send" aria-label="Send" title="Send" disabled={!ready} onClick={send}>
+              <ArrowUpIcon size={16} weight="bold" />
             </button>
           )}
         </div>

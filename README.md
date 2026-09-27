@@ -43,7 +43,7 @@ browser tabs <── steps, renders ──>  blockyard server  ── starts ─
                                             └────── HTTP tools API ─────┘
 ```
 
-- Holo is a sagent Forest agent with the managed sandbox tools (`shell`, `write_file`, `search_replace`, ...). It writes `build.py` in plain Python: `step`, `fill`, `set`, `clear` to place blocks, WorldEdit-style patterns (`"70%stone_bricks,30%andesite"`) anywhere a block goes, and `get`, `replace`, `overlay` to read and rework what is placed, with its own functions for roofs, towers, trees and land; `random` is seeded per step, so every run builds the same model. It runs `blocks run`, which rebuilds the model on the server from the first changed step and prints the problems by line. `blocks look` renders the four views or one view from any angle and zoom. For references it has `web_search` (Linkup pages, then image URLs) and `view_image`: it downloads the photos it wants into the workspace and looks at them, all through the build. Renders reach Holo through `@@attach PATH` lines, which the shell tool swaps for the image in the same result.
+- Holo is a sagent Forest agent with the managed sandbox tools (`shell`, `write_file`, `search_replace`, ...). It writes `build.py` in plain Python: `step`, `fill`, `set`, `clear` to place blocks, WorldEdit-style patterns (`"70%stone_bricks,30%andesite"`) anywhere a block goes, and `get`, `replace`, `overlay` to read and rework what is placed, with its own functions for roofs, towers, trees and land; `random` is seeded per step, so every run builds the same model. It runs `blocks run`, which rebuilds the model on the server from the first changed step and prints the problems by line, including any blocks that float. `blocks look` renders the four views or one view from any angle and zoom. For references it has `web_search` (Linkup pages, then image URLs) and `view_image`: it downloads the photos it wants into the workspace and looks at them, all through the build. Renders reach Holo through `@@attach PATH` lines, which the shell tool swaps for the image in the same result.
 - Renders come from a hidden Chromium tab the server keeps on each build asking for them, so Holo sees its model with no tab open; without that browser, an open viewer on the build answers instead.
 - sagent comes from a local hai checkout recent enough for Linkup's `include_images`: set `HAI_ROOT` to it, with its venv synced (`cd hai && uv sync`).
 
@@ -69,10 +69,11 @@ calls as Holo's, each step told by the comment above it. Holo gets a copy of bot
 from. To replay one, pick it in the builder menu under a new chat and send any prompt.
 
 ```bash
-scripts/deploy-gallery.sh --preview           # or --prod; ships the latest run of each showcase
+scripts/deploy-gallery.sh --preview           # or --prod; ships the latest run of each showcase, then data/gallery.txt
 ```
 
-Open each showcase once in the app to refresh its thumbnail before deploying.
+To ship a Holo build, add its id to `data/gallery.txt` (one per line). The gallery shows each build with its chat,
+read-only. Open each build once in the app to refresh its thumbnail before deploying.
 
 ## Blocks
 

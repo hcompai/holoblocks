@@ -1,5 +1,5 @@
 import { PauseIcon, PlayIcon, SkipBackIcon, SkipForwardIcon } from "@phosphor-icons/react";
-import type { CSSProperties } from "react";
+import { type CSSProperties, useEffect } from "react";
 import type { Build } from "./api";
 
 export const SPEEDS = [0.5, 1, 2, 4];
@@ -18,27 +18,40 @@ export function Timeline({ build, step, playing, speed, onStep, onPlay, onSpeed 
   const steps = build?.steps ?? [];
   const last = steps.length - 1;
   const current = Math.min(step, last);
-  const finished = build?.status !== "building" && current === last;
-  const label = !steps.length
-    ? "No steps yet"
-    : finished
-      ? "Finished model"
-      : `Step ${current + 1} of ${steps.length}: ${steps[current]?.title ?? ""}`;
+  const finished = build?.status === "done" && steps.length > 0 && current === last;
+  const label = !build
+    ? "Loading…"
+    : !steps.length
+      ? "No steps yet"
+      : finished
+        ? "Finished model"
+        : `Step ${current + 1} of ${steps.length}: ${steps[current]?.title ?? ""}`;
+  const status =
+    build?.status === "building" ? "Building…" : build?.status === "error" ? "Failed" : finished ? "Finished" : "";
+
+  const toggle = () => {
+    if (!playing && current >= last) onStep(0);
+    onPlay(!playing);
+  };
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== " " || e.repeat || e.ctrlKey || e.metaKey || e.altKey || steps.length < 2) return;
+      if (e.target instanceof Element && e.target.closest("input, textarea, select, button, a, [contenteditable]"))
+        return;
+      e.preventDefault();
+      toggle();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
 
   return (
     <div className="timeline">
       <button className="icon" disabled={!steps.length} onClick={() => onStep(0)} title="First step">
         <SkipBackIcon size={16} weight="fill" />
       </button>
-      <button
-        className="play"
-        disabled={steps.length < 2}
-        onClick={() => {
-          if (!playing && current >= last) onStep(0);
-          onPlay(!playing);
-        }}
-        title={playing ? "Pause" : "Play"}
-      >
+      <button className="play" disabled={steps.length < 2} onClick={toggle} title={playing ? "Pause" : "Play"}>
         {playing ? <PauseIcon size={14} weight="fill" /> : <PlayIcon size={14} weight="fill" />}
       </button>
       <button className="icon" disabled={current >= last} onClick={() => onStep(last)} title="Last step">
@@ -46,7 +59,7 @@ export function Timeline({ build, step, playing, speed, onStep, onPlay, onSpeed 
       </button>
       <div className="speeds">
         {SPEEDS.map((s) => (
-          <button key={s} className={s === speed ? "active" : ""} onClick={() => onSpeed(s)}>
+          <button key={s} className={s === speed ? "active" : ""} aria-pressed={s === speed} onClick={() => onSpeed(s)}>
             {s}×
           </button>
         ))}
@@ -54,12 +67,15 @@ export function Timeline({ build, step, playing, speed, onStep, onPlay, onSpeed 
       <div className="scrub">
         <div className="scrub-label">
           <b>{label}</b>
-          <span>
-            {current + 1}/{steps.length} steps
-          </span>
+          {build && (
+            <span>
+              {current + 1}/{steps.length} steps
+            </span>
+          )}
         </div>
         <input
           type="range"
+          aria-label="Step"
           min={0}
           max={Math.max(last, 0)}
           value={Math.max(current, 0)}
@@ -68,7 +84,7 @@ export function Timeline({ build, step, playing, speed, onStep, onPlay, onSpeed 
           style={{ "--fill": `${last > 0 ? (current / last) * 100 : 0}%` } as CSSProperties}
         />
       </div>
-      <span className={`status ${build?.status ?? "idle"}`}>{build?.status === "building" ? "Building…" : finished ? "Finished" : ""}</span>
+      <span aria-live="polite">{status && <span className={`status ${build?.status ?? "idle"}`}>{status}</span>}</span>
     </div>
   );
 }
