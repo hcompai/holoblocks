@@ -1031,6 +1031,10 @@ main {
   inset: 0;
 }
 
+#root > .loader {
+  height: 100dvh;
+}
+
 .loader {
   --cube: 44px;
   display: flex;
