@@ -1,4 +1,4 @@
-import { PauseIcon, PlayIcon, SkipBackIcon, SkipForwardIcon } from "@phosphor-icons/react";
+import { FilmStripIcon, PauseIcon, PlayIcon, SkipBackIcon, SkipForwardIcon } from "@phosphor-icons/react";
 import { type CSSProperties, useEffect } from "react";
 import type { Build } from "./model";
 
@@ -12,9 +12,10 @@ interface Props {
   onStep: (step: number) => void;
   onPlay: (playing: boolean) => void;
   onSpeed: (speed: number) => void;
+  onShare: () => void;
 }
 
-export function Timeline({ build, step, playing, speed, onStep, onPlay, onSpeed }: Props) {
+export function Timeline({ build, step, playing, speed, onStep, onPlay, onSpeed, onShare }: Props) {
   const steps = build?.steps ?? [];
   const last = steps.length - 1;
   const current = Math.min(step, last);
@@ -39,6 +40,7 @@ export function Timeline({ build, step, playing, speed, onStep, onPlay, onSpeed 
       if (e.key !== " " || e.repeat || e.ctrlKey || e.metaKey || e.altKey || steps.length < 2) return;
       if (e.target instanceof Element && e.target.closest("input, textarea, select, button, a, [contenteditable]"))
         return;
+      if (document.querySelector("dialog[open]")) return;
       e.preventDefault();
       toggle();
     };
@@ -85,6 +87,9 @@ export function Timeline({ build, step, playing, speed, onStep, onPlay, onSpeed 
         />
       </div>
       <span aria-live="polite">{status && <span className={`status ${build?.status ?? "idle"}`}>{status}</span>}</span>
+      <button className="timeline-export" onClick={onShare} disabled={!build?.boxes.length}>
+        <FilmStripIcon size={16} /> Share a GIF
+      </button>
     </div>
   );
 }

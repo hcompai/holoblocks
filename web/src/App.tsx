@@ -6,10 +6,11 @@ import { BlocksPanel } from "./BlocksPanel";
 import { ChatPanel } from "./ChatPanel";
 import { CodePanel } from "./CodePanel";
 import { DownloadMenu } from "./DownloadMenu";
+import { FilmExport } from "./FilmExport";
 import { Gallery } from "./Gallery";
 import { LibraryPanel } from "./LibraryPanel";
 import { library, remember, thumbnail } from "./library";
-import { PALETTE, type BuildSummary } from "./model";
+import { PALETTE, type Build, type BuildSummary } from "./model";
 import type { BlockScene } from "./scene";
 import { schematic } from "./schematic";
 import { ThemeToggle } from "./ThemeToggle";
@@ -59,6 +60,7 @@ export default function App() {
   const [renderFailed, setRenderFailed] = useState(false);
   const [framing, setFraming] = useState<Framing>({ view: "iso" });
   const [spin, setSpin] = useState(false);
+  const [filmBuild, setFilmBuild] = useState<Build | null>(null);
   const palette = useMemo(() => Promise.resolve(PALETTE), []);
   const scene = useRef<BlockScene | null>(null);
   const last = (build?.steps.length ?? 0) - 1;
@@ -352,10 +354,12 @@ export default function App() {
                 setPlaying(p);
               }}
               onSpeed={setSpeed}
+              onShare={() => setFilmBuild(build)}
             />
           )}
         </div>
       </main>
+      {filmBuild && <FilmExport build={filmBuild} onClose={() => setFilmBuild(null)} />}
     </div>
   );
 }

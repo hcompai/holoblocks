@@ -136,7 +136,14 @@ function toModel({ meshes, outline, counts, bounds }: MeshReply, materials: Mate
   return { group, outline, bounds: bounds && new THREE.Box3().setFromArray(bounds), counts };
 }
 
-const disposeModel = (model: Model) => model.group.traverse((o) => o instanceof THREE.Mesh && o.geometry.dispose());
+const disposeModel = ({ group }: Pick<Model, "group">) =>
+  group.traverse((o) => o instanceof THREE.Mesh && o.geometry.dispose());
+
+/** A mesh a caller shows in its own shots, with how many blocks it holds. */
+export interface Staged {
+  group: THREE.Group;
+  blocks: number;
+}
 
 const logged = (error: unknown) => {
   console.error(error);
@@ -560,6 +567,36 @@ export class BlockScene {
 
   thumbnail(size = 320): Promise<Blob | null> {
     return this.offscreen(size, [{ view: "iso", x: 0, y: 0 }], null);
+  }
+
+  /** A hidden mesh of `site` up to `step` beside the model shown, lit for the site; null when it cannot be meshed. */
+  async stage(site: Site, step: number): Promise<Staged | null> {
+    await this.loaded;
+    const model = this.materials && (await this.mesh(site, step, this.materials).catch(logged));
+    if (!model) return null;
+    this.aimLights(site.width, site.height, site.depth);
+    model.group.visible = false;
+    this.scene.add(model.group);
+    return { group: model.group, blocks: [...model.counts.values()].reduce((a, b) => a + b, 0) };
+  }
+
+  unstage(staged: Staged) {
+    this.scene.remove(staged.group);
+    disposeModel(staged);
+  }
+
+  /** Draw the scene from `camera` into a `width` × `height` buffer, with fresh shadows and each material's clipping. */
+  shoot(camera: THREE.Camera, width: number, height: number): HTMLCanvasElement {
+    if (this.renderer.getContext().isContextLost()) throw new Error("The WebGL context was lost.");
+    const { width: w, height: h } = this.renderer.domElement;
+    if (w !== width || h !== height || this.renderer.getPixelRatio() !== 1) {
+      this.renderer.setPixelRatio(1);
+      this.renderer.setSize(width, height, false);
+    }
+    this.renderer.localClippingEnabled = true;
+    this.renderer.shadowMap.needsUpdate = true;
+    this.renderer.render(this.scene, camera);
+    return this.renderer.domElement;
   }
 
   /** What a builder asked to see: one large view from its camera, the four labelled views, or one large view from its angle and pitch, of the model or only of the blocks in its box. */
