@@ -40,7 +40,7 @@ export const POST = route(async (request) => {
   const keep = async (name: string, data: Buffer, type: string) => {
     const url = await save(id, name, data, type);
     written.push(url);
-    return `${url}?v=${at}`;
+    return url;
   };
   const published: Published = {
     id,

@@ -18,11 +18,6 @@ import {
 
 const THUMBNAIL = /^data:image\/(webp|png|jpeg);base64,([A-Za-z0-9+/=]+)$/;
 const MAX_THUMBNAIL = 512 * 1024;
-
-/** Republishing overwrites a build's files in place: its URLs carry the time, past the Blob CDN's cache. */
-const versioned = (url: string, at: number) => `${url}?v=${at}`;
-const bare = (url: string) => url.split("?")[0];
-
 function buildId(value: unknown): string {
   if (typeof value !== "string" || !ID.test(value)) throw new Refusal(400, "No such build.");
   return value;
@@ -79,6 +74,7 @@ export const POST = route(async (request) => {
   if (previous && previous.owner !== user.id) throw new Refusal(403, "Only its author can publish a build.");
 
   const before = await files(id);
+  const at = Math.floor(Date.now() / 1000);
   const written: string[] = [];
   const keep = async (name: string, data: Blob | Buffer, type: string) => {
     const url = await save(id, name, data, type);
@@ -87,8 +83,7 @@ export const POST = route(async (request) => {
   };
   const build = await snapshot(id, key, given.edits, (name, image) => keep(name, image, image.type || "image/png"));
   const coverUrl = cover ? await keep(`thumbnail.${cover.type.split("/")[1]}`, cover.data, cover.type) : null;
-  if (!cover && previous?.thumbnail) written.push(bare(previous.thumbnail));
-  const at = Math.floor(Date.now() / 1000);
+  if (!cover && previous?.thumbnail) written.push(previous.thumbnail);
   const published: Published = {
     id,
     name: build.name,
@@ -97,8 +92,8 @@ export const POST = route(async (request) => {
     author: user.name,
     owner: user.id,
     published: at,
-    thumbnail: coverUrl ? versioned(coverUrl, at) : (previous?.thumbnail ?? null),
-    build: versioned(await keep("build.json.gz", gzipSync(JSON.stringify(build)), "application/gzip"), at),
+    thumbnail: coverUrl ?? previous?.thumbnail ?? null,
+    build: await keep("build.json.gz", gzipSync(JSON.stringify(build)), "application/gzip"),
   };
   await enter(published, before, written);
   return Response.json(published, { status: 201 });
