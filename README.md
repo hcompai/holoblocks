@@ -7,9 +7,14 @@
 
 ![Blockyard showing the gothic cathedral](docs/blockyard.jpg)
 
-- **Chat** to describe a build, with photos if you like. Holo writes a Python build script on a hosted Workstation, and every revision it shares appears in 3D.
+Live at [blocks.hcompany.ai](https://blocks.hcompany.ai), for H Company Google accounts.
+
+- **Chat** to describe a build, with photos if you like. Holo writes a Python build script on a hosted Workstation, and every revision it shares appears in 3D. What Holo does now shows under its last message, then folds into it.
 - **Every block is checked** against a ~750-block palette and clipped to the 128x128 site, 100 blocks tall.
-- **Replay** the steps, read each step's code, browse the blocks, download a WorldEdit `.schem` or a PNG.
+- **Replay** the steps, read each step's code, browse the blocks, download a WorldEdit `.schem` or a PNG, share a GIF of the build rising (8 to 30 seconds).
+- **Edit** by hand: choose **Edit**, click a block, Shift-drag a box around the blocks you see, then move, replace or delete them, or right-click a face to place the block in hand; undo, redo and reset. Edits are saved in this browser per build and revision, and publishing includes them. The **?** button or key lists every shortcut.
+- **Walk** through the build: choose **Walk**, click the model, then WASD and the mouse. Space jumps, Space twice flies, Esc leaves.
+- **Publish** a build to the Library's Public section, **remix** any build (Holo starts from an exact copy: the build's own script, or a replay of its blocks), **import** a model file, **copy** a link that previews the build.
 - **Follow up** on a finished build for an hour; **Stop** makes Holo wrap up with an answer, and the build stays open.
 
 ## How it works
@@ -22,9 +27,9 @@ browser: this web app                  Agents API (agp.eu.hcompany.ai)          
 ```
 
 - The app talks to the Agents API with the `hai-agents` SDK (`web/src/agent.ts`). A build is a session of the agent `blockyard`; the Library lists them, and the browser keeps each one's name, step count and thumbnail in localStorage.
-- The first message attaches the toolkit, `web/public/blockyard.tgz`: the `blocks` CLI, its Python package, the palette and the showcases with their renders. Holo's first call runs `.blockyard/setup.sh`, which installs it.
-- Holo writes `build.py` in plain Python: `step`, `fill`, `set`, `clear` to place blocks, WorldEdit-style patterns (`"70%stone_bricks,30%andesite"`) anywhere a block goes, and `get`, `replace`, `overlay` to rework what is placed. `blocks run` rebuilds the model from the first changed step, prints the problems by line, notes floating blocks and writes `model.json.gz`. Holo shares it with `share_files`; the browser downloads it and shows it.
-- `look` is a custom tool: the browser renders the shared revision on your GPU and returns the image. Keep the tab open while Holo builds; it waits for the render.
+- The first message attaches the toolkit, `web/public/blockyard.tgz`: the `blocks` CLI, its Python package, the palette and the showcases with their renders. Holo's first call runs `.blockyard/setup.sh`, which installs it; a second call waits for the first. `BLOCKYARD_MINUTES`, the session's time limit, starts the clock each `blocks run` reports: past 80%, Holo finishes the change in hand and answers.
+- Holo writes `build.py` in plain Python: `step`, `fill`, `set`, `clear` to place blocks, WorldEdit-style patterns (`"70%stone_bricks,30%andesite"`) anywhere a block goes, and `get`, `replace`, `overlay` to rework what is placed. `blocks run` rebuilds the model from the first changed step, prints the problems by line, notes floating blocks and writes `model.json.gz`, with the script that rebuilt it. Holo shares it with `share_files`; the browser downloads it and shows it.
+- `look` is a custom tool: any open Blockyard tab renders the shared revision on its GPU, off screen, and returns the image, whichever build it shows. Keep a tab open while Holo builds (the page warns before closing); a `look` left unanswered for long can lose the Workstation (seen after ten minutes), and the session ends: remix it to keep building.
 
 ## Run
 
@@ -33,10 +38,28 @@ cd server && uv sync && cd ..
 server/.venv/bin/python scripts/pack-toolkit.py        # web/public/blockyard.tgz
 server/.venv/bin/blockyard-gallery web/public          # the showcases, into web/public/gallery
 cd web && npm install
-VITE_HAI_API_KEY=$(grep '^HAI_API_KEY=' ~/code/hai/.env | cut -d= -f2- | tr -d '"') npm run dev   # http://localhost:5173
+vercel link --yes --scope h-company --project blockyard && vercel env pull .env.local   # the server's secrets
+npm run dev                                                                            # http://127.0.0.1:5173
 ```
 
-Needs Node 20+. Without `VITE_HAI_API_KEY`, the app shows the showcases only.
+Needs Node 20+. Blockyard is open to H Company: everything sits behind a sign-in with an `@hcompany.ai` Google account on the H portal.
+
+## Accounts and the public library
+
+```
+browser ──same tab──▶ portal ──Google──▶ portal sets its access token cookie
+portal ──redirect──▶ GET /api/session: who is it? mint a 30-day "Blockyard <email> <time>" key ──▶ back where the user was
+browser ──key──▶ Agents API (Holo builds, sessions listed per user)
+browser ──POST /api/builds (pass + key)──▶ snapshot of the session ──▶ Vercel Blob (public)
+signed in ──GET /api/builds──▶ the public library
+```
+
+- `web/api/` holds the Vercel functions; `web/scripts/build-api.mjs` bundles them, and `npm run dev` serves them too. Deployed, `/?public=<id>` and `/?showcase=<id>` go to `/api/preview`: the app's page, with that build's name, step count, author and cover in its link preview.
+- The portal's cookie never reaches a local dev server, so there the portal sends a one-time code instead (PKCE, RFC 8252); it only redirects to `127.0.0.1`, where `localhost` forwards.
+- Signing in again revokes the previous key. The key lives in the browser's local storage; the pass, signed with `BLOCKYARD_SECRET`, names its holder to the functions.
+- Publishing copies the session's model (with this browser's edits, which drop its script), transcript and images, so a public build stands on its own. Only its author can publish or unpublish a build; the emails in `BLOCKYARD_ADMINS` can unpublish any.
+- An imported build has no session, so it lives only in the library: **Make private** moves its entry to `private/<owner>/`, listed and opened only for its owner; its files keep their unguessable public URLs, so a shared link still opens it. **Delete** removes its entry and files.
+- Server environment: `BLOCKYARD_SECRET`, `BLOCKYARD_ADMINS`, and `BLOB_READ_WRITE_TOKEN` from the `blockyard-library` Blob store.
 
 | To change | Edit |
 | --- | --- |
@@ -57,9 +80,10 @@ Bag End is printed in full in its prompt as the worked example.
 scripts/deploy.sh --preview                   # or --prod
 ```
 
-`deploy.sh` packs the toolkit, exports the showcases into `web/public/gallery`, builds the app, screenshots each
-showcase as its thumbnail and deploys it to the Vercel project `blockyard`. The bundle is public, so it is built
-without an API key: the site shows the showcases, and building needs sign-in, which is not wired yet.
+Every push to main that passes CI deploys to production (the `deploy` job in `.github/workflows/ci.yml`, secret
+`VERCEL_TOKEN`); or deploy from a laptop as above. `deploy.sh` packs the toolkit, exports the showcases into
+`web/public/gallery`, builds the app and its functions, screenshots each showcase as its thumbnail and deploys them to
+the Vercel project `blockyard`. The bundle is public: it never carries an API key.
 
 ## Blocks
 
@@ -74,6 +98,6 @@ cd server && uv run pytest -q && uv run ruff check . && cd ..
 cd web && npm ci && npx playwright install chromium && npm test && npm run build
 ```
 
-The server tests run the toolkit offline. The browser tests mock the Agents API and render real geometry: a build that
-shares models and asks for renders, a new build with a photo, a follow-up and Stop, the Library, a showcase and the
-`.schem` download.
+The server tests run the toolkit offline. The browser tests mock the Agents API and the library and render real
+geometry: a build that shares models and asks for renders, a new build with a photo, a follow-up and Stop, the
+Library, publishing, remixes, imports, link previews, sign-in, edits, walking and the GIF export.
