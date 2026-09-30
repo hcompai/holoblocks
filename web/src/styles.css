@@ -1352,6 +1352,18 @@ main {
   white-space: nowrap;
 }
 
+@media (max-width: 1024px) {
+  .timeline {
+    flex-wrap: wrap;
+  }
+
+  .timeline .scrub {
+    flex-basis: 100%;
+    order: 1;
+    margin-left: 0;
+  }
+}
+
 .film-dialog {
   width: min(960px, calc(100vw - 32px));
   max-height: calc(100dvh - 32px);

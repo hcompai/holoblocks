@@ -37,7 +37,7 @@ const CAPTION_MIN_S = 0.9;
 const FADE_S = 0.25;
 /** Lifts the rising cut just above a layer's top faces, so they are drawn once. */
 const CUT = 0.001;
-const CAP = "#57504a";
+const CAP = "#6f5b49";
 
 interface Pose {
   position: THREE.Vector3;
