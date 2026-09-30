@@ -73,13 +73,29 @@ export interface BuildSummary {
 }
 
 export function unpack(model: Model): Omit<Build, "id" | "status" | "messages" | "open"> {
-  const { blocks: names, boxes: packed, ...rest } = model;
+  const { blocks, boxes, ...rest } = model;
+  return { ...rest, boxes: unpackBoxes({ blocks, boxes }) };
+}
+
+export function unpackBoxes({ blocks: names, boxes: packed }: Pick<Model, "blocks" | "boxes">): Box[] {
   const boxes: Box[] = [];
   for (let i = 0; i < packed.length; i += 8) {
     const [x0, y0, z0, x1, y1, z1, block, step] = packed.slice(i, i + 8);
     boxes.push({ x0, y0, z0, x1, y1, z1, block: names[block], step });
   }
-  return { ...rest, boxes };
+  return boxes;
+}
+
+/** Boxes packed as in model.json.gz. */
+export function pack(boxes: Box[]): Pick<Model, "blocks" | "boxes"> {
+  const index = new Map<string, number>();
+  const packed: number[] = [];
+  for (const b of boxes) {
+    let i = index.get(b.block);
+    if (i === undefined) index.set(b.block, (i = index.size));
+    packed.push(b.x0, b.y0, b.z0, b.x1, b.y1, b.z1, i, b.step);
+  }
+  return { blocks: [...index.keys()], boxes: packed };
 }
 
 /** A builder asking the viewer for its views of a revision, or of the blocks inside `box` (x0 y0 z0 x1 y1 z1): one view from a camera at `eye` (x y z) looking at the middle when set, else the four views when `angle` is null, else one view from `angle` degrees around (0 front, 90 right) and `pitch` degrees up. */
