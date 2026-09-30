@@ -548,7 +548,7 @@ export class BlockScene {
     if (this.failed) return null;
     const { step, materials } = this;
     let full: Model | null = null;
-    if (site && materials && (site !== this.site || site.boxes.some((b) => b.step > step))) {
+    if (site && materials && (site.boxes !== this.site?.boxes || site.boxes.some((b) => b.step > step))) {
       full = await this.mesh(site, Infinity, materials).catch(logged);
       if (!full) return null;
     }

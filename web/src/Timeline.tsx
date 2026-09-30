@@ -12,9 +12,11 @@ interface Props {
   onStep: (step: number) => void;
   onPlay: (playing: boolean) => void;
   onSpeed: (speed: number) => void;
+  /** Whether Space plays and pauses; walking takes Space to jump and fly. */
+  spaceKey: boolean;
 }
 
-export function Timeline({ build, step, playing, speed, onStep, onPlay, onSpeed }: Props) {
+export function Timeline({ build, step, playing, speed, onStep, onPlay, onSpeed, spaceKey }: Props) {
   const steps = build?.steps ?? [];
   const last = steps.length - 1;
   const current = Math.min(step, last);
@@ -36,6 +38,7 @@ export function Timeline({ build, step, playing, speed, onStep, onPlay, onSpeed 
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (!spaceKey) return;
       if (e.key !== " " || e.repeat || e.ctrlKey || e.metaKey || e.altKey || steps.length < 2) return;
       if (e.target instanceof Element && e.target.closest("input, textarea, select, button, a, [contenteditable]"))
         return;

@@ -76,7 +76,7 @@ export function applyEdits<M extends VoxelModel>(model: M, edits: Edit[]): M {
   const edited = model.steps ? model.steps.length : last + 1;
   const boxes = [...packed];
   const changed = [...before.keys()].filter((i) => grid[i] !== before.get(i)).sort((a, b) => a - b);
-  for (let k = 0; k < changed.length; ) {
+  for (let k = 0; k < changed.length;) {
     const start = changed[k];
     const v = grid[start];
     let end = start;

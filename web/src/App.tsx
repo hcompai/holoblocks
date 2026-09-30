@@ -6,6 +6,7 @@ import { BlocksPanel } from "./BlocksPanel";
 import { ChatPanel } from "./ChatPanel";
 import { CodePanel } from "./CodePanel";
 import { DownloadMenu } from "./DownloadMenu";
+import { useEdits } from "./edits";
 import { Gallery } from "./Gallery";
 import { LibraryPanel } from "./LibraryPanel";
 import { library, remember, thumbnail } from "./library";
@@ -15,7 +16,7 @@ import { schematic } from "./schematic";
 import { ThemeToggle } from "./ThemeToggle";
 import { Timeline } from "./Timeline";
 import { type BuildRef, useBuild } from "./useBuild";
-import { type Framing, RenderFailed, ViewControls, Viewer } from "./Viewer";
+import { type Framing, type Mode, RenderFailed, ViewControls, Viewer } from "./Viewer";
 
 const STEP_MS = 900;
 const TITLE = document.title;
@@ -45,7 +46,11 @@ function save(blob: Blob, name: string) {
 export default function App() {
   const [ref, setRef] = useState<BuildRef | null>(urlRef);
   const buildId = ref?.id ?? null;
-  const { build, thinking, renderRequest, error, syncError, answer } = useBuild(ref);
+  const { build: live, thinking, renderRequest, error, syncError, answer } = useBuild(ref);
+  const edits = useEdits(live);
+  /** The build as shown, with this browser's hand edits. */
+  const build = edits.build;
+  const [mode, setMode] = useState<Mode>("view");
   const [builds, setBuilds] = useState<BuildSummary[] | null>(null);
   const [buildsFailed, setBuildsFailed] = useState(false);
   const [left, setLeft] = useState<"chat" | "library">(unavailable ? "library" : "chat");
@@ -84,8 +89,19 @@ export default function App() {
     document.title = buildId && name ? name : TITLE;
   }, [buildId, name]);
 
+  useEffect(() => {
+    if (mode === "edit" && !edits.editable) setMode("view");
+  }, [mode, edits.editable]);
+
+  useEffect(() => {
+    if (mode !== "edit") return;
+    setPlaying(false);
+    setFollowing(true);
+  }, [mode, edits.edits]);
+
   const show = useCallback((next: BuildRef | null) => {
     setRef(next);
+    setMode("view");
     setStep(Infinity);
     setFollowing(true);
     setPlaying(false);
@@ -258,7 +274,7 @@ export default function App() {
         )}
         <ChatPanel
           buildId={buildId}
-          build={build}
+          build={live}
           loadFailed={!!error}
           thinking={thinking}
           hidden={left !== "chat"}
@@ -288,20 +304,36 @@ export default function App() {
                   aria-selected={center === t.id}
                   className={center === t.id ? "active" : ""}
                   disabled={t.id !== "model" && !build}
-                  onClick={() => setCenter(t.id)}
+                  onClick={() => {
+                    setCenter(t.id);
+                    if (t.id !== "model") setMode("view");
+                  }}
                 >
                   {t.label}
                 </button>
               ))}
             </div>
             {center === "model" && !error && (
-              <ViewControls framing={framing} spin={spin} onFrame={setFraming} onSpin={setSpin} />
+              <ViewControls
+                framing={framing}
+                spin={spin}
+                mode={mode}
+                canEdit={edits.editable && hasBlocks}
+                canWalk={hasBlocks}
+                onFrame={(next) => {
+                  if (mode === "walk") setMode("view");
+                  setFraming(next);
+                }}
+                onSpin={setSpin}
+                onMode={setMode}
+              />
             )}
           </div>
           <div className="stage">
             <div className={center === "model" ? "pane" : "pane hidden"}>
               <Viewer
                 build={build}
+                builder={live}
                 step={visibleStep}
                 framing={framing}
                 spin={spin}
@@ -315,6 +347,9 @@ export default function App() {
                 loading={buildId && !counts && !error ? opening : null}
                 failed={renderFailed}
                 onFailed={setRenderFailed}
+                mode={mode}
+                edits={edits}
+                onMode={setMode}
               />
               {build && !build.boxes.length && build.status !== "building" && (
                 <div className="notice">Nothing built yet</div>
@@ -352,6 +387,7 @@ export default function App() {
                 setPlaying(p);
               }}
               onSpeed={setSpeed}
+              spaceKey={mode !== "walk"}
             />
           )}
         </div>
