@@ -132,7 +132,9 @@ function follow(id: string, signal: AbortSignal, notify: Listener, displayed: ()
     set({
       build: {
         ...model,
-        name: named(model) ? model.name : (card(id)?.name ?? model.name),
+        name: named(model)
+          ? model.name
+          : card(id)?.name || transcript.messages.find((m) => m.role === "user")?.text.slice(0, 60) || model.name,
         id,
         status: buildStatus(session),
         messages: shown(end ? [...transcript.messages, end] : transcript.messages),

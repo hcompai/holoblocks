@@ -243,6 +243,9 @@ export function ChatPanel(props: Props) {
           const el = e.currentTarget;
           pinned.current = el.scrollHeight - el.scrollTop - el.clientHeight < PINNED_PX;
         }}
+        onLoadCapture={(e) => {
+          if (pinned.current) e.currentTarget.scrollTo({ top: e.currentTarget.scrollHeight });
+        }}
       >
         {!buildId ? (
           <div className="chat-intro">

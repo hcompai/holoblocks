@@ -79,7 +79,7 @@ test("a new build sends the toolkit and the photos; Stop makes Holo answer and t
   const composer = page.getByPlaceholder("Describe what to build…");
   const prompt = "Le Mont-Saint-Michel à marée haute";
   await composer.fill(prompt);
-  await page.locator('input[type="file"]').setInputFiles(PHOTO);
+  await page.locator('.chat input[type="file"]').setInputFiles(PHOTO);
   const send = page.getByRole("button", { name: "Send", exact: true });
   await send.click();
   await expect(page.getByText("The platform is unavailable.")).toBeVisible();
@@ -96,7 +96,8 @@ test("a new build sends the toolkit and the photos; Stop makes Holo answer and t
   });
   expect(session.agent.tools.map((t: { name: string }) => t.name)).toEqual(["look"]);
   expect(session.agent.instructions).not.toMatch(/\{\{\w+\}\}/);
-  const [first] = agp.posted("/messages");
+  expect(agp.posted("/messages")).toHaveLength(0);
+  const [first] = session.messages;
   expect(first.message).toBe(prompt);
   expect(first.images).toEqual([expect.stringMatching(/^data:image\/png;base64,/)]);
   expect(first.files.map((f: { name: string }) => f.name)).toEqual([
@@ -114,16 +115,18 @@ test("a new build sends the toolkit and the photos; Stop makes Holo answer and t
 
   await page.getByPlaceholder("Describe how to change it…").fill("Add the causeway");
   await send.click();
-  await expect.poll(() => agp.posted("/messages")).toHaveLength(2);
-  expect(agp.posted("/messages")[1]).toMatchObject({ message: "Add the causeway", files: [] });
+  await expect.poll(() => agp.posted("/messages")).toHaveLength(1);
+  expect(agp.posted("/messages")[0]).toMatchObject({ message: "Add the causeway", files: [] });
 
   agp.crash("new-build", "Session 27289a90 is not running (status: failed)");
   await expect(page.locator(".msg").last()).toHaveText(
     "The build stopped: Session 27289a90 is not running (status: failed)",
   );
+  await expect(page.getByText("This build's session has ended: remix it to keep building.")).toBeVisible();
+  await expect(page.getByPlaceholder("Describe how to change it…")).toHaveCount(0);
 });
 
-test("the library lists my builds by the names Holo gave them, then the showcases, which download as .schem", async ({
+test("the library shows my builds by the names Holo gave them; showcases under Public, which download as .schem", async ({
   page,
 }) => {
   const showcase = { ...model(), id: "hut", name: "Hut" };
@@ -137,17 +140,19 @@ test("the library lists my builds by the names Holo gave them, then the showcase
     ),
   );
   await page.goto("/");
-  await page.getByRole("tab", { name: "Library" }).click();
-  const cards = page.locator(".library button");
-  await expect(cards).toHaveCount(2);
-  await expect(cards.nth(0)).toContainText("Hollowbough");
-  await expect(cards.nth(0)).toContainText("7 steps");
-  await expect(cards.nth(1)).toContainText("Hut");
-  await cards.nth(1).click();
+  await page.getByRole("button", { name: "Library" }).click();
+  await expect(page).toHaveURL(/\?library$/);
+  const mine = page.getByRole("region", { name: "Mine" }).locator(".gallery-card");
+  await expect(mine).toHaveCount(1);
+  await expect(mine).toContainText("Hollowbough");
+  await expect(mine).toContainText("7 steps");
+  const everyone = page.getByRole("region", { name: "Public" }).locator(".gallery-card");
+  await expect(everyone).toHaveCount(1);
+  await everyone.click();
   await expect(page).toHaveURL(/\?showcase=hut$/);
+  await expect(page.locator(".library-page")).toHaveCount(0);
   await shown(page, showcase.revision);
-  await page.getByRole("tab", { name: "Chat" }).click();
-  await expect(page.getByText("A showcase from the gallery.")).toBeVisible();
+  await expect(page.getByText("A showcase from the gallery: remix it to make your own.")).toBeVisible();
 
   await page.getByRole("button", { name: "Download" }).click();
   const [download] = await Promise.all([
@@ -158,4 +163,66 @@ test("the library lists my builds by the names Holo gave them, then the showcase
   const nbt = gunzipSync(readFileSync((await download.path())!));
   expect(nbt.subarray(0, 12).toString("latin1")).toBe("\x0a\x00\x09Schematic");
   expect(nbt.includes("minecraft:oak_planks")).toBe(true);
+});
+
+test("Holo's work shows as what it does now, then folds under its message", async ({ page }) => {
+  await site(page);
+  const agp = await platform(page);
+  const run = { tool_name: "shell", args: { command: "blocks run" }, id: "run" };
+  agp.session("work");
+  agp.say("work", "A tower");
+  agp.now += 1000;
+  agp.step("work", "", "The walls need a first course.", [run]);
+  await page.goto("/?build=work");
+  const live = page.locator(".msg.live");
+  await expect(live).toContainText("Building the model");
+
+  agp.result("work", run);
+  await expect(live).toContainText("Thinking");
+
+  agp.now += 95_000;
+  agp.step("work", "Built a tower.", "It stands.");
+  agp.answer("work", "Built a tower.");
+  const holo = page.locator(".msg.assistant");
+  await expect(holo).toHaveCount(1);
+  await expect(live).toHaveCount(0);
+  await expect(holo.locator("summary")).toHaveText("Worked for 1m 36s");
+  await holo.locator("summary").click();
+  await expect(holo.locator(".work-steps")).toContainText("The walls need a first course.");
+  await expect(holo.locator(".work-action")).toHaveText(["Building the model"]);
+});
+
+test("Holo keeps getting its renders while the user browses other builds", async ({ page }) => {
+  const showcase = { ...model(), id: "hut", name: "Hut" };
+  await site(page, [showcase]);
+  const agp = await platform(page);
+  const hut = model("0a1b2c3d4e5f");
+  agp.session("live");
+  agp.share("live", hut);
+  await page.goto("/?build=live");
+  await shown(page, hut.revision);
+  await page.getByRole("button", { name: "Library" }).click();
+  await page.getByRole("region", { name: "Public" }).locator(".gallery-card").click();
+  await shown(page, showcase.revision);
+
+  agp.look("live", "away", { angle: 180 });
+  await expect.poll(() => agp.posted("/tool_results")).toHaveLength(1);
+  const [caption, image] = agp.posted("/tool_results")[0].result;
+  expect(caption).toMatch(`Revision ${hut.revision.slice(0, 8)}`);
+  expect(image).toMatch(/^data:image\/(png|jpeg);base64,/);
+});
+
+test("a lost connection says so until the platform answers again", async ({ page }) => {
+  await site(page);
+  const agp = await platform(page);
+  const hut = model();
+  agp.session("live");
+  agp.share("live", hut);
+  await page.goto("/?build=live");
+  await shown(page, hut.revision);
+  agp.offline = true;
+  const lost = page.getByRole("status").filter({ hasText: "Reconnecting…" });
+  await expect(lost).toBeVisible();
+  agp.offline = false;
+  await expect(lost).toHaveCount(0);
 });

@@ -1,4 +1,4 @@
-import blocks from "../../server/blockyard/blocks.json";
+import blocks from "../../server/blockyard/blocks.json" with { type: "json" };
 
 export interface Box {
   x0: number;
