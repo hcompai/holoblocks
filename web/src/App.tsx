@@ -10,6 +10,7 @@ import { CodePanel } from "./CodePanel";
 import { CopyLink } from "./CopyLink";
 import { DeleteButton } from "./DeleteButton";
 import { DownloadMenu } from "./DownloadMenu";
+import { FilmExport } from "./FilmExport";
 import { ImportBuild } from "./ImportBuild";
 import { library, publish, remember, setPrivate, type Shelf, thumbnail, unpublish } from "./library";
 import { LibraryPage } from "./LibraryPage";
@@ -76,6 +77,7 @@ export default function App({ account }: { account: Account }) {
   const [renderFailed, setRenderFailed] = useState(false);
   const [framing, setFraming] = useState<Framing>({ view: "iso" });
   const [spin, setSpin] = useState(false);
+  const [filmBuild, setFilmBuild] = useState<Build | null>(null);
   const palette = useMemo(() => Promise.resolve(PALETTE), []);
   const scene = useRef<BlockScene | null>(null);
   const last = (build?.steps.length ?? 0) - 1;
@@ -408,6 +410,7 @@ export default function App({ account }: { account: Account }) {
                 setPlaying(p);
               }}
               onSpeed={setSpeed}
+              onShare={() => setFilmBuild(build)}
             />
           )}
         </div>
@@ -434,6 +437,7 @@ export default function App({ account }: { account: Account }) {
           />
         )}
       </main>
+      {filmBuild && <FilmExport build={filmBuild} onClose={() => setFilmBuild(null)} />}
     </div>
   );
 }
