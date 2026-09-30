@@ -1,7 +1,11 @@
-import { fileFromBlob, HaiAgentsClient, HaiAgentsEnvironment, type HaiAgents } from "hai-agents";
+import { fileFromBlob, HaiAgentsClient, type HaiAgents } from "hai-agents";
 import prompt from "../../agent/holo.md?raw";
+import { expired, key } from "./account";
+import { H } from "./hosts";
+import type { Build } from "./model";
+import { script } from "./remix";
+import { AGENT } from "./session";
 
-export const AGENT = "blockyard";
 const MODEL = "holo4-27b";
 const MAX_STEPS = 300;
 const MAX_TIME_S = 3 * 3600;
@@ -10,20 +14,22 @@ const IDLE_TIMEOUT_S = 3600;
 const TOOLKIT = "/blockyard.tgz";
 const DOWNLOAD_S = 60;
 
-const API_KEY: string | undefined = import.meta.env.VITE_HAI_API_KEY;
-
-/** Why builds cannot run from this page, or null when they can. */
-export const unavailable = API_KEY ? null : "Set VITE_HAI_API_KEY to build with Holo.";
+/** A call to the Agents API; a refused key signs the user out. */
+async function call(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const response = await fetch(input, init);
+  if (response.status === 401) expired();
+  return response;
+}
 
 export const client = new HaiAgentsClient({
-  environment: HaiAgentsEnvironment.Eu,
-  apiKey: API_KEY ?? "",
+  environment: H.agents,
+  apiKey: key,
   headers: { "X-HCompany-Client-Name": AGENT },
   // Safari sends the SDK's User-Agent in CORS preflights, and the Agents API does not allow it.
   fetch: (input, init) => {
     const headers = new Headers(init?.headers);
     headers.delete("User-Agent");
-    return fetch(input, { ...init, headers });
+    return call(input, { ...init, headers });
   },
 });
 
@@ -70,7 +76,8 @@ const LOOK: HaiAgents.ToolDefinition = {
 function agent(): HaiAgents.Agent {
   const instructions = prompt
     .replace("{{date}}", new Date().toISOString().slice(0, 10))
-    .replace("{{max_steps}}", String(MAX_STEPS));
+    .replace("{{max_steps}}", String(MAX_STEPS))
+    .replaceAll("{{max_minutes}}", String(MAX_TIME_S / 60));
   return {
     name: AGENT,
     description: "Designs Minecraft structures in code, step by step, in Blockyard.",
@@ -81,39 +88,45 @@ function agent(): HaiAgents.Agent {
   };
 }
 
+/** A message with the `attached` files, then its photos, named apart so later photos never overwrite earlier ones. */
 async function message(
   text: string,
   photos: string[],
-  toolkit: boolean,
+  attached: Record<string, Blob>,
 ): Promise<HaiAgents.UserMessageEvent & { type: "user_message" }> {
   const sent = Date.now().toString(36);
   const blobs = await Promise.all(photos.map((src) => fetch(src).then((r) => r.blob())));
-  const files = await Promise.all(
-    blobs.map((blob, i) => fileFromBlob(blob, `photo-${sent}-${i + 1}.${blob.type === "image/png" ? "png" : "jpg"}`)),
-  );
-  if (toolkit) {
-    const response = await fetch(TOOLKIT);
-    if (!response.ok) throw new Error("The Blockyard toolkit is missing from this site.");
-    files.unshift(await fileFromBlob(await response.blob(), "blockyard.tgz"));
-  }
+  const files = await Promise.all([
+    ...Object.entries(attached).map(([name, blob]) => fileFromBlob(blob, name)),
+    ...blobs.map((blob, i) =>
+      fileFromBlob(blob, `photo-${sent}-${i + 1}.${blob.type === "image/png" ? "png" : "jpg"}`),
+    ),
+  ]);
   return { type: "user_message", message: text, images: photos, files };
 }
 
-/** Start a build; the session starts empty, then takes the first message with the toolkit and the photos. */
-export async function create(text: string, photos: string[]): Promise<string> {
-  const first = await message(text, photos, true);
+/** Start a build; the session starts empty, then takes the first message with the toolkit, `attached` and the photos. */
+export async function create(text: string, photos: string[], attached: Record<string, Blob> = {}): Promise<string> {
+  const toolkit = await fetch(TOOLKIT);
+  if (!toolkit.ok) throw new Error("The Blockyard toolkit is missing from this site.");
+  const first = await message(text, photos, { "blockyard.tgz": await toolkit.blob(), ...attached });
   const session = await client.startSession({
     agent: agent(),
     maxSteps: MAX_STEPS,
     maxTimeS: MAX_TIME_S,
     idleTimeoutS: IDLE_TIMEOUT_S,
+    deleteAfterMin: null,
   });
   await session.sendMessage(first);
   return session.id;
 }
 
+/** Start a build from an exact copy of `build`, which Holo then changes as `text` asks. */
+export const remix = (build: Build, text: string, photos: string[]) =>
+  create(text, photos, { "remix.py": new Blob([script(build)], { type: "text/x-python" }) });
+
 export async function say(id: string, text: string, photos: string[]) {
-  await client.session(id).sendMessage(await message(text, photos, false));
+  await client.session(id).sendMessage(await message(text, photos, {}));
 }
 
 /** Holo ends its current step and answers; the session stays open for the next message. */
@@ -128,8 +141,8 @@ export async function sessions(): Promise<HaiAgents.SessionSummary[]> {
 /** An attachment or image the platform serves behind the API key. */
 export async function download(url: string, signal?: AbortSignal): Promise<Blob> {
   const timeout = AbortSignal.timeout(DOWNLOAD_S * 1000);
-  const response = await fetch(url, {
-    headers: { Authorization: `Bearer ${API_KEY}` },
+  const response = await call(url, {
+    headers: { Authorization: `Bearer ${key()}` },
     signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
   });
   if (!response.ok) throw new Error(`Could not download ${url} (HTTP ${response.status})`);

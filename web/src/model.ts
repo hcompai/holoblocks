@@ -17,11 +17,20 @@ export interface Step {
   code: string;
 }
 
+/** What the builder reasoned and did before a message, step by step. */
+export interface Work {
+  /** In ms since the epoch. */
+  start: number;
+  end: number;
+  steps: { reasoning: string; actions: string[] }[];
+}
+
 export interface Message {
   role: "user" | "assistant" | "system" | "tool";
   text: string;
   /** URLs: the images a user attached, or the render shown with a look. */
   images: string[];
+  work?: Work;
 }
 
 export type Status = "building" | "done" | "error";
@@ -38,6 +47,8 @@ export interface Model {
   steps: Step[];
   blocks: string[];
   boxes: number[];
+  /** The build script that rebuilds these boxes exactly; empty when none does, as after hand edits. */
+  script?: string;
 }
 
 export const EMPTY_MODEL: Model = {
@@ -52,6 +63,12 @@ export const EMPTY_MODEL: Model = {
   boxes: [],
 };
 
+/** A finished build as the library keeps it: a showcase in the gallery, or a build published to the library. */
+export interface Shared extends Model {
+  status: Status;
+  messages: Message[];
+}
+
 export interface Build extends Omit<Model, "blocks" | "boxes"> {
   id: string;
   boxes: Box[];
@@ -61,15 +78,25 @@ export interface Build extends Omit<Model, "blocks" | "boxes"> {
   open: boolean;
 }
 
+/** Where a build is read from: a session of the signed-in user, the public library, or the showcases. */
+export type Source = "session" | "public" | "showcase";
+
 export interface BuildSummary {
   id: string;
   name: string;
   prompt: string;
   status: Status;
+  /** In seconds. */
   created: number;
   steps: number | null;
   thumbnail: string | null;
-  showcase: boolean;
+  source: Source;
+  /** Who published it, for public builds. */
+  author: string | null;
+  /** The author's user id, for public builds. */
+  owner: string | null;
+  /** Listed to its owner only: a library build they made private. */
+  private?: boolean;
 }
 
 export function unpack(model: Model): Omit<Build, "id" | "status" | "messages" | "open"> {

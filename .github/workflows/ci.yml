@@ -56,3 +56,31 @@ jobs:
           name: browser-test-results
           path: web/test-results/
           retention-days: 7
+
+  deploy:
+    needs: [server, web]
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    environment:
+      name: production
+      url: https://blocks.hcompany.ai
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: team_IU7YWZ6TFEyn6wR3s7Dd7uEH
+      VERCEL_PROJECT_ID: prj_vc11JR6zOv7gpGGTBy7uBCWy6cDq
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - working-directory: server
+        run: uv sync --locked
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - working-directory: web
+        run: npm ci && npx playwright install --with-deps chromium && npm install --global vercel@60
+      - run: scripts/deploy.sh --prod

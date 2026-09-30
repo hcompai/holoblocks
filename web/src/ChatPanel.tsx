@@ -1,8 +1,9 @@
-import { ArrowUpIcon, PlusIcon, StopIcon, XIcon } from "@phosphor-icons/react";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { ArrowUpIcon, PlusIcon, ShuffleIcon, StopIcon, XIcon } from "@phosphor-icons/react";
+import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import type { Build } from "./model";
+import type { Build, Work } from "./model";
+import type { Activity } from "./session";
 
 const SUGGESTIONS = [
   {
@@ -32,24 +33,12 @@ const SUGGESTIONS = [
   },
 ];
 
-const WAITING_LINES = [
-  "Laying the first stones",
-  "Studying the photos",
-  "Measuring proportions",
-  "Sketching the massing",
-  "Setting the roofline",
-  "Mixing the palette",
-  "Squinting at the render",
-  "Walking around the model",
-  "Checking every join",
-  "Hunting for holes",
-  "Counting windows",
-  "Stacking blocks",
-  "Weighing the silhouette",
-  "Shaping the ground",
-  "Stepping back for a look",
-];
-const WAITING_MS = 4000;
+const WHO = "Holo";
+const PINNED_PX = 80;
+/** How long a live label stays before the next one replaces it, so quick steps never flicker. */
+const DWELL_MS = 900;
+/** How long a phase lasts before the chat shows its clock. */
+const CLOCK_MS = 5000;
 const RENDER_PX = 240;
 const ATTACHMENT_PX = 96;
 const MAX_EDGE = 1568;
@@ -76,21 +65,84 @@ async function shrink(file: File): Promise<string> {
 
 const failure = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
-function nextLine(current: number): number {
-  const next = Math.floor(Math.random() * (WAITING_LINES.length - 1));
-  return next >= current ? next + 1 : next;
+function duration(ms: number): string {
+  const s = Math.max(1, Math.round(ms / 1000));
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  return m < 60 ? `${m}m ${s % 60}s` : `${Math.floor(m / 60)}h ${m % 60}m`;
 }
 
-function Waiting() {
-  const [line, setLine] = useState(() => Math.floor(Math.random() * WAITING_LINES.length));
+const clock = (ms: number) => {
+  const s = Math.floor(ms / 1000);
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+};
+
+/** `label`, held for at least `DWELL_MS` before it changes. */
+function useSteady(label: string): string {
+  const [shown, setShown] = useState(label);
+  const changed = useRef(0);
   useEffect(() => {
-    const timer = setInterval(() => setLine(nextLine), WAITING_MS);
+    if (label === shown) return;
+    const timer = setTimeout(
+      () => {
+        changed.current = Date.now();
+        setShown(label);
+      },
+      Math.max(0, changed.current + DWELL_MS - Date.now()),
+    );
+    return () => clearTimeout(timer);
+  }, [label, shown]);
+  return shown;
+}
+
+function useNow(): number {
+  const [now, setNow] = useState(Date.now);
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
   }, []);
+  return now;
+}
+
+/** The builder's steps, drawn only while open: a long build reasons for pages. */
+function WorkLog({ work, summary }: { work: Work; summary: ReactNode }) {
+  const [open, setOpen] = useState(false);
   return (
-    <span key={line} className="shimmer">
-      {WAITING_LINES[line]}
+    <details className="work" onToggle={(e) => setOpen(e.currentTarget.open)}>
+      <summary>{summary}</summary>
+      {open && (
+        <ol className="work-steps">
+          {work.steps.map((s, i) => (
+            <li key={i}>
+              {s.reasoning && <p>{s.reasoning}</p>}
+              {s.actions.map((a, j) => (
+                <span key={j} className="work-action">
+                  {a}
+                </span>
+              ))}
+            </li>
+          ))}
+        </ol>
+      )}
+    </details>
+  );
+}
+
+function Live({ activity }: { activity: Activity }) {
+  const label = useSteady(activity.label);
+  const elapsed = useNow() - activity.since;
+  const head = (
+    <span className="live-head">
+      <span key={label} className="shimmer">
+        {label}
+      </span>
+      {elapsed >= CLOCK_MS && <span className="live-clock">{clock(elapsed)}</span>}
     </span>
+  );
+  return (
+    <div className="msg assistant live" title={`${WHO} is working`}>
+      {activity.work ? <WorkLog work={activity.work} summary={head} /> : head}
+    </div>
   );
 }
 
@@ -100,18 +152,20 @@ interface Props {
   build: Build | null;
   /** The open build could not be loaded. */
   loadFailed: boolean;
-  thinking: string;
-  hidden: boolean;
+  activity: Activity | null;
   /** Why no message can be sent here, or null when one can. */
   closed: string | null;
   onCreate: (prompt: string, images: string[]) => Promise<void>;
   onSay: (text: string, images: string[]) => Promise<void>;
   onStop: () => Promise<void>;
+  /** Start a new build from a copy of this closed one, changed as asked. */
+  onRemix: (text: string, images: string[]) => Promise<void>;
 }
 
 export function ChatPanel(props: Props) {
-  const { buildId, build, loadFailed, thinking, hidden, closed, onCreate, onSay, onStop } = props;
+  const { buildId, build, loadFailed, activity, closed, onCreate, onSay, onStop, onRemix } = props;
   const [text, setText] = useState("");
+  const [remixing, setRemixing] = useState(false);
   const [images, setImages] = useState<string[]>([]);
   const [dropping, setDropping] = useState(false);
   const [sending, setSending] = useState(false);
@@ -119,13 +173,14 @@ export function ChatPanel(props: Props) {
   const [failed, setFailed] = useState<string | null>(null);
   const [zoomed, setZoomed] = useState<string | null>(null);
   const log = useRef<HTMLDivElement>(null);
-  const thought = useRef<HTMLDivElement>(null);
+  /** Whether the log sits at its end, so new lines scroll it and reading earlier ones is left alone. */
+  const pinned = useRef(true);
   const composer = useRef<HTMLTextAreaElement>(null);
   const picker = useRef<HTMLInputElement>(null);
   const lightbox = useRef<HTMLDialogElement>(null);
   const opener = useRef<HTMLElement | null>(null);
   const busy = build?.status === "building";
-  const ready = !!(text.trim() || images.length) && !sending && (!buildId || (!!build && !busy));
+  const ready = !!(text.trim() || images.length) && !sending && (remixing || !buildId || (!!build && !busy));
   const scrolledFor = useRef<string | null>(null);
 
   useEffect(() => {
@@ -133,17 +188,11 @@ export function ChatPanel(props: Props) {
   }, [busy]);
 
   useEffect(() => {
-    if (hidden) return;
     const jump = scrolledFor.current !== (build?.id ?? null);
     scrolledFor.current = build?.id ?? null;
-    log.current?.scrollTo({ top: log.current.scrollHeight, behavior: jump ? "instant" : "smooth" });
-  }, [build?.id, build?.messages.length, busy, hidden]);
-
-  useEffect(() => setFailed(null), [buildId]);
-
-  useEffect(() => {
-    thought.current?.scrollTo({ top: thought.current.scrollHeight });
-  }, [thinking]);
+    if (jump) pinned.current = true;
+    if (pinned.current) log.current?.scrollTo({ top: log.current.scrollHeight, behavior: jump ? "instant" : "smooth" });
+  }, [build?.id, build?.messages.length, busy]);
 
   useEffect(() => {
     if (!buildId) composer.current?.focus();
@@ -175,7 +224,7 @@ export function ChatPanel(props: Props) {
     setSending(true);
     setFailed(null);
     try {
-      await (buildId ? onSay(prompt, images) : onCreate(prompt, images));
+      await (remixing ? onRemix : buildId ? onSay : onCreate)(prompt, images);
       setText("");
       setImages([]);
     } catch (e) {
@@ -186,8 +235,15 @@ export function ChatPanel(props: Props) {
   };
 
   return (
-    <div className="chat" hidden={hidden}>
-      <div className="chat-log" ref={log}>
+    <div className="chat">
+      <div
+        className="chat-log"
+        ref={log}
+        onScroll={(e) => {
+          const el = e.currentTarget;
+          pinned.current = el.scrollHeight - el.scrollTop - el.clientHeight < PINNED_PX;
+        }}
+      >
         {!buildId ? (
           <div className="chat-intro">
             <h2>What should we build?</h2>
@@ -217,6 +273,7 @@ export function ChatPanel(props: Props) {
               key={i}
               className={`msg ${m.role} ${m.role === "system" && m.text.startsWith("The build stopped") ? "error" : ""}`}
             >
+              {m.work && <WorkLog work={m.work} summary={`Worked for ${duration(m.work.end - m.work.start)}`} />}
               {m.role === "user" && m.images.length > 0 && (
                 <div className="msg-attachments">
                   {m.images.map((src) => (
@@ -243,18 +300,7 @@ export function ChatPanel(props: Props) {
             </div>
           ))
         )}
-        {busy && (
-          <div className="msg assistant thinking">
-            <div className="thinking-head">
-              <Waiting />
-            </div>
-            {thinking && (
-              <div className="thinking-text markdown" ref={thought}>
-                <Markdown remarkPlugins={[remarkGfm]}>{thinking}</Markdown>
-              </div>
-            )}
-          </div>
-        )}
+        {busy && activity && <Live activity={activity} />}
       </div>
       <dialog
         ref={lightbox}
@@ -278,8 +324,15 @@ export function ChatPanel(props: Props) {
           {failed}
         </p>
       )}
-      {closed ? (
-        <p className="gallery-note">{closed}</p>
+      {closed && !remixing ? (
+        <div className="gallery-note">
+          <p>{closed}</p>
+          {!!build?.boxes.length && (
+            <button onClick={() => setRemixing(true)} title="Start your own build from a copy of this one">
+              <ShuffleIcon size={14} weight="bold" /> Remix
+            </button>
+          )}
+        </div>
       ) : loadFailed ? null : (
         <div
           className={`composer ${dropping ? "dropping" : ""}`}
@@ -324,8 +377,15 @@ export function ChatPanel(props: Props) {
             ref={composer}
             rows={2}
             value={text}
-            aria-label={buildId ? "Change this build" : "Describe a new build"}
-            placeholder={buildId ? "Describe how to change it…" : "Describe what to build…"}
+            autoFocus={remixing}
+            aria-label={remixing ? "Remix this build" : buildId ? "Change this build" : "Describe a new build"}
+            placeholder={
+              remixing
+                ? `What should ${WHO} change?`
+                : buildId
+                  ? "Describe how to change it…"
+                  : "Describe what to build…"
+            }
             onChange={(e) => setText(e.target.value)}
             onPaste={(e) => {
               const files = [...e.clipboardData.files].filter((f) => IMAGE_TYPES.includes(f.type));
