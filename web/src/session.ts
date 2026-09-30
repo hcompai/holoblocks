@@ -28,6 +28,8 @@ export interface Transcript {
   /** `look` calls awaiting a render, with how many models were shared when each was made. */
   looks: { call: HaiAgents.ToolRequest; shared: number }[];
   error: string | null;
+  /** The session crashed: its workstation is gone, so every later message crashes too. */
+  crashed: boolean;
 }
 
 export const EMPTY_TRANSCRIPT: Transcript = {
@@ -40,6 +42,7 @@ export const EMPTY_TRANSCRIPT: Transcript = {
   model: null,
   looks: [],
   error: null,
+  crashed: false,
 };
 
 /** An image in event content as a URL: inline ones as data URLs, stored ones as platform URLs that need the API key. */
@@ -134,7 +137,8 @@ function step(t: Transcript, event: HaiAgents.SessionEvent): Transcript {
       return { ...t, messages: [...t.messages.slice(0, -1), { ...last, work }], work: fresh };
     }
     case "error_event": {
-      if (data.origin === "crash") return say({ role: "system", text: `The build stopped: ${data.error}`, images: [] });
+      if (data.origin === "crash")
+        return { ...say({ role: "system", text: `The build stopped: ${data.error}`, images: [] }), crashed: true };
       const settled = data.toolReq ? settle(data.toolReq) : t;
       if (data.toolReq?.toolName !== "look") return settled;
       return { ...settled, messages: [...settled.messages, { role: "system", text: data.error, images: [] }] };

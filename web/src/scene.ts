@@ -537,7 +537,7 @@ export class BlockScene {
     return this.model?.outline.length ? this.model.outline : corners(box);
   }
 
-  /** Square renders of the whole `site`, or only its blocks inside `focus`, into a 2D canvas over `sky`, or transparent; the user's view is left untouched. */
+  /** Square renders of the whole model, or only its blocks inside `focus`, into a 2D canvas over `sky`, or transparent; the user's view is left untouched. */
   private async offscreen(
     size: number,
     tiles: (({ view: View | THREE.Vector3 } | { eye: THREE.Vector3; pitch: number }) & {
@@ -549,13 +549,12 @@ export class BlockScene {
     columns = 1,
     focus?: THREE.Box3,
     zoom = 1,
-    site = this.site,
   ) {
     await this.ready;
     if (this.failed) return null;
-    const { step, materials } = this;
+    const { site, step, materials } = this;
     let full: Model | null = null;
-    if (site && materials && (site.boxes !== this.site?.boxes || site.boxes.some((b) => b.step > step))) {
+    if (site && materials && site.boxes.some((b) => b.step > step)) {
       full = await this.mesh(site, Infinity, materials).catch(logged);
       if (!full) return null;
     }
@@ -854,8 +853,8 @@ export class BlockScene {
     return this.renderer.domElement;
   }
 
-  /** What a builder asked to see of `site`: one large view from its camera, the four labelled views, or one large view from its angle and pitch, of the model or only of the blocks in its box. */
-  look({ box, angle, pitch, zoom, eye }: RenderRequest, site = this.site, size = 448): Promise<Blob | null> {
+  /** What a builder asked to see: one large view from its camera, the four labelled views, or one large view from its angle and pitch, of the model or only of the blocks in its box. */
+  look({ box, angle, pitch, zoom, eye }: RenderRequest, size = 448): Promise<Blob | null> {
     const focus = box
       ? new THREE.Box3(new THREE.Vector3(box[0], box[1], box[2]), new THREE.Vector3(box[3] + 1, box[4] + 1, box[5] + 1))
       : undefined;
@@ -863,7 +862,7 @@ export class BlockScene {
       const tilt = pitch ? `, ${Math.abs(pitch)}° ${pitch > 0 ? "down" : "up"}` : "";
       const label = `from x ${eye[0]}, y ${eye[1]}, z ${eye[2]}${tilt}${zoom === 1 ? "" : `, ${zoom}× zoom`}`;
       const tile = { eye: new THREE.Vector3(eye[0], eye[1], eye[2]), pitch, label, x: 0, y: 0 };
-      return this.offscreen(size * 2, [tile], "dark", 1, focus, zoom, site);
+      return this.offscreen(size * 2, [tile], "dark", 1, focus, zoom);
     }
     if (angle === null) {
       const tiles = SHEET.map((s, i) => ({
@@ -872,12 +871,12 @@ export class BlockScene {
         x: (i % 2) * size,
         y: Math.floor(i / 2) * size,
       }));
-      return this.offscreen(size, tiles, "dark", 2, focus, zoom, site);
+      return this.offscreen(size, tiles, "dark", 2, focus, zoom);
     }
     const around = THREE.MathUtils.degToRad(angle);
     const up = THREE.MathUtils.degToRad(Math.min(pitch, 89.9));
     const view = new THREE.Vector3(Math.sin(around) * Math.cos(up), Math.sin(up), Math.cos(around) * Math.cos(up));
     const label = `${angle}° around, ${pitch}° up${zoom === 1 ? "" : `, ${zoom}× zoom`}`;
-    return this.offscreen(size * 2, [{ view, label, x: 0, y: 0 }], "dark", 1, focus, zoom, site);
+    return this.offscreen(size * 2, [{ view, label, x: 0, y: 0 }], "dark", 1, focus, zoom);
   }
 }
