@@ -1,5 +1,6 @@
 import { type BlockInfo, type Box, type Palette, type Tex, texKey } from "./model";
 import type { UV } from "./atlas";
+import type { Solid } from "./walker";
 
 export interface State {
   name: string;
@@ -279,6 +280,78 @@ function shapeBoxes(world: VoxelWorld, s: State, x: number, y: number, z: number
     default:
       return [s.info.liquid ? [0, 0, 0, 16, 14, 16] : FULL];
   }
+}
+
+/** Shapes walked through: plants, flames, vines, doors and ladders; liquids too. */
+const PASSABLE = new Set(["cross", "tall_cross", "torch", "face", "door", "ladder"]);
+/** Shapes that stand a block and a half tall to a walker, so it cannot jump over them. */
+const RAISED = new Set(["fence", "wall"]);
+
+/** What a walker bumps into in the cell (x, y, z), in blocks. */
+export function collision(world: VoxelWorld, x: number, y: number, z: number): Solid[] {
+  const s = world.get(x, y, z);
+  const shape = s.info.shape ?? "cube";
+  if (s === AIR || s.info.liquid || PASSABLE.has(shape)) return [];
+  const top = RAISED.has(shape) ? 24 : null;
+  return shapeBoxes(world, s, x, y, z).map(([x0, y0, z0, x1, y1, z1]) => ({
+    min: { x: x + x0 / 16, y: y + y0 / 16, z: z + z0 / 16 },
+    max: { x: x + x1 / 16, y: y + (top ?? y1) / 16, z: z + z1 / 16 },
+  }));
+}
+
+export type Vec3 = [number, number, number];
+
+/** A block a ray hit, or the ground under the site (y -1), and the outward normal of the face it entered by. */
+export interface Hit {
+  cell: Vec3;
+  normal: Vec3;
+  ground: boolean;
+}
+
+/** The first block a ray from `origin` along `direction` hits, else where it meets the ground inside the site. */
+export function raycast(world: VoxelWorld, origin: Vec3, direction: Vec3): Hit | null {
+  const size = [world.width, world.height, world.depth];
+  let [near, far, axis] = [0, Infinity, -1];
+  for (let k = 0; k < 3; k++) {
+    if (!direction[k]) {
+      if (origin[k] < 0 || origin[k] > size[k]) return ground(world, origin, direction);
+      continue;
+    }
+    const a = -origin[k] / direction[k];
+    const b = (size[k] - origin[k]) / direction[k];
+    if (Math.min(a, b) > near) [near, axis] = [Math.min(a, b), k];
+    far = Math.min(far, Math.max(a, b));
+  }
+  if (near > far) return ground(world, origin, direction);
+  const step = direction.map(Math.sign);
+  const cell = [0, 1, 2].map((k) =>
+    Math.min(Math.max(Math.floor(origin[k] + direction[k] * near), 0), size[k] - 1),
+  ) as Vec3;
+  const next = [0, 1, 2].map((k) =>
+    step[k] ? (cell[k] + (step[k] > 0 ? 1 : 0) - origin[k]) / direction[k] : Infinity,
+  );
+  const delta = direction.map((d) => (d ? Math.abs(1 / d) : Infinity));
+  if (axis < 0) axis = [0, 1, 2].reduce((a, k) => (Math.abs(direction[k]) > Math.abs(direction[a]) ? k : a));
+  for (;;) {
+    if (world.ids[world.at(...cell)]) {
+      const normal: Vec3 = [0, 0, 0];
+      normal[axis] = -step[axis];
+      return { cell, normal, ground: false };
+    }
+    axis = next[0] < next[1] ? (next[0] < next[2] ? 0 : 2) : next[1] < next[2] ? 1 : 2;
+    if (next[axis] > far) return ground(world, origin, direction);
+    cell[axis] += step[axis];
+    next[axis] += delta[axis];
+  }
+}
+
+function ground(world: VoxelWorld, origin: Vec3, direction: Vec3): Hit | null {
+  if (origin[1] <= 0 || direction[1] >= 0) return null;
+  const t = -origin[1] / direction[1];
+  const x = Math.floor(origin[0] + direction[0] * t);
+  const z = Math.floor(origin[2] + direction[2] * t);
+  if (x < 0 || z < 0 || x >= world.width || z >= world.depth) return null;
+  return { cell: [x, -1, z], normal: [0, 1, 0], ground: true };
 }
 
 const INITIAL_VERTICES = 4096;

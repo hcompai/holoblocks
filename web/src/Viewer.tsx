@@ -1,9 +1,20 @@
-import { ArrowsClockwiseIcon } from "@phosphor-icons/react";
+import { ArrowsClockwiseIcon, PencilSimpleIcon, PersonSimpleWalkIcon } from "@phosphor-icons/react";
 import { type RefObject, useEffect, useRef, useState } from "react";
 import { BlockLoader } from "./BlockLoader";
+import { ACTION_KEYS, type Action, blockLabel, EditBar, EditPanel } from "./EditPanel";
+import type { Edits } from "./edits";
 import type { Build, Palette } from "./model";
-import { BlockScene, type View } from "./scene";
+import { BlockScene, typing, type View } from "./scene";
+import { Shortcuts } from "./Shortcuts";
 import { useTheme } from "./theme";
+import type { Hit, Vec3 } from "./voxels";
+import { WalkHud } from "./WalkHud";
+
+/** Hand edits come in bursts; the library tile waits for a pause. */
+const THUMBNAIL_IDLE_MS = 1500;
+/** Pointer travel, in pixels, past which a press is a drag rather than a click. */
+const CLICK_SLOP = 5;
+const NONE: Vec3[] = [];
 
 const VIEWS: { id: View; label: string }[] = [
   { id: "iso", label: "3/4" },
@@ -16,14 +27,22 @@ export interface Framing {
   view: View;
 }
 
+/** Orbit and look, select and change blocks, or walk through the build. */
+export type Mode = "view" | "edit" | "walk";
+
 interface ControlsProps {
   framing: Framing;
   spin: boolean;
+  mode: Mode;
+  canEdit: boolean;
+  canWalk: boolean;
   onFrame: (framing: Framing) => void;
   onSpin: (spin: boolean) => void;
+  onMode: (mode: Mode) => void;
 }
 
-export function ViewControls({ framing, spin, onFrame, onSpin }: ControlsProps) {
+export function ViewControls({ framing, spin, mode, canEdit, canWalk, onFrame, onSpin, onMode }: ControlsProps) {
+  const toggle = (next: Mode) => onMode(mode === next ? "view" : next);
   return (
     <div className="tabs">
       {VIEWS.map((v) => (
@@ -41,11 +60,34 @@ export function ViewControls({ framing, spin, onFrame, onSpin }: ControlsProps) 
         <ArrowsClockwiseIcon size={14} weight="bold" />
         Spin
       </button>
+      <span className="tabs-sep" />
+      <button
+        className={mode === "edit" ? "active" : ""}
+        aria-pressed={mode === "edit"}
+        disabled={!canEdit && mode !== "edit"}
+        title={canEdit ? "Select blocks to replace, move or delete them" : "Blocks can be edited once Holo is done"}
+        onClick={() => toggle("edit")}
+      >
+        <PencilSimpleIcon size={14} weight="bold" />
+        Edit
+      </button>
+      <button
+        className={mode === "walk" ? "active" : ""}
+        aria-pressed={mode === "walk"}
+        disabled={!canWalk && mode !== "walk"}
+        title="Walk through the build: WASD and the mouse"
+        onClick={() => toggle("walk")}
+      >
+        <PersonSimpleWalkIcon size={14} weight="bold" />
+        Walk
+      </button>
+      <Shortcuts />
     </div>
   );
 }
 
 interface Props {
+  /** The build as shown, with this browser's hand edits. */
   build: Build | null;
   step: number;
   framing: Framing;
@@ -61,23 +103,48 @@ interface Props {
   /** The model could not be meshed. */
   failed: boolean;
   onFailed: (failed: boolean) => void;
+  mode: Mode;
+  edits: Edits;
+  onMode: (mode: Mode) => void;
 }
+
+const add = (a: Vec3, b: Vec3): Vec3 => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+const scale = (v: Vec3, by: number): Vec3 => [v[0] * by || 0, v[1] * by || 0, v[2] * by || 0];
 
 export function Viewer(props: Props) {
   const { build, step, framing, spin, onThumbnail, palette, onCounts, scene, loading, failed, onFailed } = props;
+  const { mode, edits, onMode } = props;
   const container = useRef<HTMLDivElement>(null);
   const framedBuild = useRef<string | null>(null);
   const thumbnailed = useRef(new Set<string>());
   const [drawn, setDrawn] = useState<string | null>(null);
+  /** The build drawn at least once; it stays up while its next revision is meshed. */
+  const [opened, setOpened] = useState<string | null>(null);
+  const [used, setUsed] = useState<string[]>([]);
+  const [hand, setHand] = useState<string | null>(null);
+  const [hover, setHover] = useState<Hit | null>(null);
+  const [selected, setSelected] = useState<Vec3[]>(NONE);
+  const [box, setBox] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
+  const [locked, setLocked] = useState(false);
+  const [flying, setFlying] = useState(false);
+  const pointer = useRef<{ x: number; y: number } | null>(null);
+  const hoverFrame = useRef(0);
   const width = build?.width ?? 64;
   const depth = build?.depth ?? 64;
   const last = build ? step >= build.steps.length - 1 : false;
+  const editing = mode === "edit";
+  const held = hand ?? used[0] ?? "stone";
   const theme = useTheme();
 
   useEffect(() => {
     const s = new BlockScene(container.current!, palette);
-    s.onCounts = onCounts;
+    s.onCounts = (counts) => {
+      setUsed([...counts].sort((a, b) => b[1] - a[1]).map(([name]) => name));
+      onCounts(counts);
+    };
     s.onFailure = () => onFailed(true);
+    s.onWalkLock = setLocked;
+    s.onFly = setFlying;
     scene.current = s;
     return () => s.dispose();
   }, []);
@@ -96,7 +163,10 @@ export function Viewer(props: Props) {
     s.show(build, step);
     let current = true;
     s.ready.then(() => {
-      if (current) setDrawn(build.revision);
+      if (current) {
+        setDrawn(build.revision);
+        setOpened(build.id);
+      }
       if (!build.boxes.length) return;
       if (framedBuild.current !== build.id || (build.status === "building" && !s.userMoved)) {
         framedBuild.current = build.id;
@@ -110,20 +180,32 @@ export function Viewer(props: Props) {
 
   useEffect(() => {
     const s = scene.current;
+    if (!s || !selected.length) return;
+    const kept = selected.filter((cell) => s.blockAt(cell) !== "air");
+    if (kept.length !== selected.length) setSelected(kept);
+  }, [build?.boxes, step]);
+
+  useEffect(() => {
+    const s = scene.current;
     if (!s || !build?.boxes.length || build.status !== "done" || !last) return;
     const version = `${build.id}:${build.revision}`;
     if (thumbnailed.current.has(version)) return;
     let current = true;
-    s.ready
-      .then(() => s.thumbnail())
-      .then((png) => {
-        if (!current || !png) return;
-        thumbnailed.current.add(version);
-        onThumbnail(png);
-      })
-      .catch((error) => console.error("Could not make the thumbnail", error));
+    const timer = setTimeout(
+      () =>
+        s.ready
+          .then(() => s.thumbnail())
+          .then((png) => {
+            if (!current || !png) return;
+            thumbnailed.current.add(version);
+            onThumbnail(png);
+          })
+          .catch((error) => console.error("Could not make the thumbnail", error)),
+      THUMBNAIL_IDLE_MS,
+    );
     return () => {
       current = false;
+      clearTimeout(timer);
     };
   }, [build?.id, build?.status, build?.revision, last]);
 
@@ -138,12 +220,208 @@ export function Viewer(props: Props) {
     s.frameView(framing.view, width, depth);
   }, [framing]);
 
+  useEffect(() => {
+    scene.current?.setWalk(mode === "walk");
+    if (mode !== "walk") {
+      setLocked(false);
+      setFlying(false);
+    }
+    if (!editing) {
+      setHover(null);
+      setSelected(NONE);
+      setBox(null);
+    }
+  }, [mode]);
+
+  useEffect(() => setSelected(NONE), [build?.id]);
+
+  useEffect(
+    () => scene.current?.setHighlight(editing && hover && !hover.ground ? hover.cell : null, editing ? selected : NONE),
+    [editing, hover, selected],
+  );
+
+  useEffect(() => {
+    if (mode !== "walk" || locked) return;
+    const leave = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !typing(event)) onMode("view");
+    };
+    window.addEventListener("keydown", leave);
+    return () => window.removeEventListener("keydown", leave);
+  }, [mode, locked]);
+
+  const inside = ([x, y, z]: Vec3) =>
+    !!build && x >= 0 && y >= 0 && z >= 0 && x < build.width && y < build.height && z < build.depth;
+
+  /** Apply `action` to the selected blocks as one edit; moves follow the view, snapped to the build's axes. */
+  const act = (action: Action) => {
+    const s = scene.current;
+    if (!s || !selected.length || !edits.editable) return;
+    if (action === "delete") {
+      edits.push({ kind: "set", cells: selected, block: "air" });
+      setSelected(NONE);
+      return;
+    }
+    const { right, forward } = s.screenAxes();
+    let by: Vec3;
+    if (action === "duplicate") {
+      const axis = right.findIndex(Boolean);
+      const along = selected.map((cell) => cell[axis]);
+      by = scale(right, Math.max(...along) - Math.min(...along) + 1);
+    } else {
+      by = {
+        left: scale(right, -1),
+        right,
+        forward,
+        back: scale(forward, -1),
+        up: [0, 1, 0] as Vec3,
+        down: [0, -1, 0] as Vec3,
+      }[action];
+    }
+    const moved = selected.map((cell) => add(cell, by));
+    if (!moved.every(inside)) return;
+    edits.push({ kind: action === "duplicate" ? "duplicate" : "move", cells: selected, by });
+    setSelected(moved);
+  };
+
+  const pick = (block: string) => {
+    setHand(block);
+    const s = scene.current;
+    const cells = selected.filter((cell) => s?.blockAt(cell) !== block);
+    if (cells.length && edits.editable) edits.push({ kind: "set", cells, block });
+  };
+
+  useEffect(() => {
+    if (!editing) return;
+    const key = (event: KeyboardEvent) => {
+      if (typing(event)) return;
+      if ((event.metaKey || event.ctrlKey) && (event.code === "KeyZ" || event.code === "KeyY")) {
+        event.preventDefault();
+        if (event.code === "KeyY" || event.shiftKey) edits.redo();
+        else edits.undo();
+        return;
+      }
+      if ((event.metaKey || event.ctrlKey) && event.code === "KeyD" && selected.length) {
+        event.preventDefault();
+        act("duplicate");
+        return;
+      }
+      if (event.metaKey || event.ctrlKey || event.altKey || !selected.length) return;
+      if (event.key === "Escape") return setSelected(NONE);
+      const action = ACTION_KEYS[event.key];
+      if (!action) return;
+      event.preventDefault();
+      act(action);
+    };
+    window.addEventListener("keydown", key);
+    return () => window.removeEventListener("keydown", key);
+  });
+
+  const far = (event: React.MouseEvent) => {
+    const start = pointer.current;
+    return !start || Math.hypot(event.clientX - start.x, event.clientY - start.y) > CLICK_SLOP;
+  };
+
+  const pressed = (event: React.PointerEvent) => {
+    pointer.current = { x: event.clientX, y: event.clientY };
+  };
+
+  /** Shift-drag in edit mode draws a selection box instead of orbiting; runs before the camera sees the press. */
+  const boxStart = (event: React.PointerEvent) => {
+    if (!editing || !event.shiftKey || event.button !== 0) return;
+    scene.current?.setOrbit(false);
+    (event.target as Element).setPointerCapture(event.pointerId);
+    setBox({ x0: event.clientX, y0: event.clientY, x1: event.clientX, y1: event.clientY });
+  };
+
+  /** Ends a selection box, or places the block in hand on the face right-clicked. */
+  const released = (event: React.PointerEvent) => {
+    const s = scene.current;
+    if (box) {
+      s?.setOrbit(true);
+      setBox(null);
+      if (Math.hypot(event.clientX - box.x0, event.clientY - box.y0) <= CLICK_SLOP) return;
+      const seen = s?.cellsSeenIn(box.x0, box.y0, event.clientX, event.clientY) ?? [];
+      const all = new Map([...selected, ...seen].map((cell) => [cell.join(), cell]));
+      setSelected([...all.values()]);
+      return;
+    }
+    if (!editing || event.button !== 2 || far(event) || !s || !edits.editable) return;
+    const hit = s.pick(event.clientX, event.clientY);
+    const cell = hit && add(hit.cell, hit.normal);
+    if (cell && inside(cell) && s.blockAt(cell) === "air") edits.push({ kind: "set", cells: [cell], block: held });
+  };
+
+  const hovered = (event: React.PointerEvent) => {
+    if (box) return setBox({ ...box, x1: event.clientX, y1: event.clientY });
+    if (!editing || event.buttons) return;
+    const { clientX, clientY } = event;
+    cancelAnimationFrame(hoverFrame.current);
+    hoverFrame.current = requestAnimationFrame(() => setHover(scene.current?.pick(clientX, clientY) ?? null));
+  };
+
+  const clicked = (event: React.MouseEvent) => {
+    if (mode === "walk") return scene.current?.lockPointer();
+    if (!editing || far(event)) return;
+    const hit = scene.current?.pick(event.clientX, event.clientY);
+    const cell = hit && !hit.ground ? hit.cell : null;
+    if (event.shiftKey || event.metaKey || event.ctrlKey) {
+      if (!cell) return;
+      const others = selected.filter((c) => c.join() !== cell.join());
+      setSelected(others.length < selected.length ? others : [...selected, cell]);
+    } else setSelected(cell ? [cell] : NONE);
+  };
+
+  const names = new Set(selected.map((cell) => scene.current?.blockAt(cell) ?? "air"));
+  const label = selected.length === 1 ? blockLabel([...names][0]) : `${selected.length.toLocaleString()} blocks`;
+  const shown = !!build && opened === build.id && !failed;
+  const pointing = (editing && !!hover && !hover.ground) || (mode === "walk" && !locked);
+
   return (
     <div className="viewer" data-revision={drawn ?? undefined}>
-      <div className="viewer-canvas" ref={container} />
+      <div
+        className="viewer-canvas"
+        ref={container}
+        style={{ cursor: pointing ? "pointer" : undefined }}
+        onPointerDownCapture={boxStart}
+        onPointerDown={pressed}
+        onPointerMove={hovered}
+        onPointerUp={released}
+        onPointerCancel={released}
+        onPointerLeave={() => setHover(null)}
+        onClick={clicked}
+      />
+      {shown && (edits.stale > 0 || edits.hidden > 0) && (
+        <div className="edit-notice" role="status">
+          {edits.stale > 0 ? (
+            <>
+              {edits.stale} edit{edits.stale === 1 ? " was" : "s were"} made on an earlier revision of this build.
+              <button onClick={edits.reset}>Discard</button>
+            </>
+          ) : (
+            `Your ${edits.hidden} edit${edits.hidden === 1 ? " is" : "s are"} hidden while Holo builds.`
+          )}
+        </div>
+      )}
+      {box && <div className="select-box" style={boxStyle(box, container.current)} />}
+      {editing && shown && <EditBar edits={edits} hand={held} used={used} selected={selected.length} onPick={pick} />}
+      {editing && shown && selected.length > 0 && (
+        <EditPanel label={label} onAction={act} onClose={() => setSelected(NONE)} />
+      )}
+      {mode === "walk" && shown && <WalkHud locked={locked} flying={flying} />}
       {failed ? <RenderFailed /> : loading && <BlockLoader label={loading} />}
     </div>
   );
+}
+
+/** The selection box in the viewer's own coordinates. */
+function boxStyle(box: { x0: number; y0: number; x1: number; y1: number }, within: HTMLElement | null) {
+  const origin = within?.getBoundingClientRect() ?? { left: 0, top: 0 };
+  return {
+    left: Math.min(box.x0, box.x1) - origin.left,
+    top: Math.min(box.y0, box.y1) - origin.top,
+    width: Math.abs(box.x1 - box.x0),
+    height: Math.abs(box.y1 - box.y0),
+  };
 }
 
 export function RenderFailed() {

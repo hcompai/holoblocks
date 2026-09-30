@@ -2,7 +2,9 @@ import { HaiAgentsClient, HaiAgentsError, type HaiAgents } from "hai-agents";
 import { H } from "../../src/hosts";
 import { EMPTY_MODEL, type Message, type Model, type Shared } from "../../src/model";
 import { AGENT, EMPTY_TRANSCRIPT, read, readJson, status, type Transcript } from "../../src/session";
+import { applyEdits, type Edit, validEdits } from "../../src/voxelEdits";
 import { Refusal } from "./http";
+import { imported } from "./imported";
 
 /** Chat images kept with a public build; past this, the chat keeps its text only. */
 const MAX_IMAGES = 80;
@@ -76,15 +78,38 @@ async function copied(messages: Message[], key: string, keep: Keep): Promise<Mes
   return messages.map(({ work, ...m }) => ({ ...m, images: m.images.flatMap((src) => urls.get(src) ?? []) }));
 }
 
-/** The caller's finished build as the public sees it: its latest model and its chat. */
-export async function snapshot(id: string, key: string, keep: Keep): Promise<Shared> {
+/** Hand edits as the browser saved them: bound to the revision they were made on. */
+interface Edited {
+  revision: string;
+  edits: Edit[];
+}
+
+function checked(edited: unknown): Edited | null {
+  if (edited == null) return null;
+  const { revision, edits } = edited as Record<string, unknown>;
+  const valid = validEdits(edits);
+  if (typeof revision !== "string" || !valid) throw new Refusal(400, "The edits are malformed.");
+  return valid.length ? { revision, edits: valid } : null;
+}
+
+/** The model with the hand edits applied; its script no longer rebuilds it, so it goes. */
+function withEdits(model: Model, edited: Edited | null): Model {
+  if (!edited) return model;
+  if (edited.revision !== model.revision)
+    throw new Refusal(409, "Your edits are for an earlier revision of the model.");
+  const { blocks, boxes, steps, revision } = imported(applyEdits(model, edited.edits));
+  return { ...model, blocks, boxes, steps, revision, script: "" };
+}
+
+/** The caller's finished build as the public sees it: its latest model with any hand edits, and its chat. */
+export async function snapshot(id: string, key: string, edited: unknown, keep: Keep): Promise<Shared> {
   const agp = platform(key);
   const session = await mine(agp, id);
   const state = status(session.status.status);
   if (state === "building") throw new Refusal(409, "Holo is still building: publish once it answers.");
   const t = await transcript(agp, id);
   if (!t.model) throw new Refusal(409, "Nothing is built yet.");
-  const model = await readJson<Model>(await download(t.model.url, key));
+  const model = withEdits(await readJson<Model>(await download(t.model.url, key)), checked(edited));
   const prompt = t.messages.find((m) => m.role === "user")?.text ?? "";
   const name = model.name !== EMPTY_MODEL.name ? model.name : prompt.slice(0, 60) || model.name;
   return { ...model, name, status: state, messages: await copied(t.messages, key, keep) };

@@ -72,7 +72,7 @@ export const PATCH = route(async (request) => {
 /** Publish the caller's build, as it is now; publishing again replaces it. */
 export const POST = route(async (request) => {
   const { user, key } = holder(request);
-  const given = await body<{ id?: unknown; thumbnail?: unknown }>(request);
+  const given = await body<{ id?: unknown; thumbnail?: unknown; edits?: unknown }>(request);
   const id = buildId(given.id);
   const cover = thumbnail(given.thumbnail);
   const previous = await find(id);
@@ -85,7 +85,7 @@ export const POST = route(async (request) => {
     written.push(url);
     return url;
   };
-  const build = await snapshot(id, key, (name, image) => keep(name, image, image.type || "image/png"));
+  const build = await snapshot(id, key, given.edits, (name, image) => keep(name, image, image.type || "image/png"));
   const coverUrl = cover ? await keep(`thumbnail.${cover.type.split("/")[1]}`, cover.data, cover.type) : null;
   if (!cover && previous?.thumbnail) written.push(bare(previous.thumbnail));
   const at = Math.floor(Date.now() / 1000);

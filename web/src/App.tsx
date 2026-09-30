@@ -10,6 +10,7 @@ import { CodePanel } from "./CodePanel";
 import { CopyLink } from "./CopyLink";
 import { DeleteButton } from "./DeleteButton";
 import { DownloadMenu } from "./DownloadMenu";
+import { useEdits } from "./edits";
 import { FilmExport } from "./FilmExport";
 import { ImportBuild } from "./ImportBuild";
 import { library, publish, remember, setPrivate, type Shelf, thumbnail, unpublish } from "./library";
@@ -22,7 +23,7 @@ import { ThemeToggle } from "./ThemeToggle";
 import { Timeline } from "./Timeline";
 import { type BuildRef, useBuild } from "./useBuild";
 import { useKeeper } from "./useSession";
-import { type Framing, RenderFailed, ViewControls, Viewer } from "./Viewer";
+import { type Framing, type Mode, RenderFailed, ViewControls, Viewer } from "./Viewer";
 
 const STEP_MS = 900;
 const TITLE = document.title;
@@ -64,7 +65,11 @@ export default function App({ account }: { account: Account }) {
   opened.current = ref;
   const [libraryOpen, setLibraryOpen] = useState(urlLibrary);
   const buildId = ref?.id ?? null;
-  const { build, activity, error, syncError } = useBuild(ref);
+  const { build: live, activity, error, syncError } = useBuild(ref);
+  const edits = useEdits(live);
+  /** The build as shown, with this browser's hand edits. */
+  const build = edits.build;
+  const [mode, setMode] = useState<Mode>("view");
   const [builds, setBuilds] = useState<BuildSummary[] | null>(null);
   const [buildsFailed, setBuildsFailed] = useState<Shelf[]>([]);
   const [center, setCenter] = useState<(typeof CENTER_TABS)[number]["id"]>("model");
@@ -122,9 +127,20 @@ export default function App({ account }: { account: Account }) {
     document.title = buildId && name ? `${name} · ${TITLE}` : TITLE;
   }, [buildId, name]);
 
+  useEffect(() => {
+    if (mode === "edit" && !edits.editable) setMode("view");
+  }, [mode, edits.editable]);
+
+  useEffect(() => {
+    if (mode !== "edit") return;
+    setPlaying(false);
+    setFollowing(true);
+  }, [mode, edits.edits]);
+
   const show = useCallback((next: BuildRef | null) => {
     setRef(next);
     setCenter("model");
+    setMode("view");
     setStep(Infinity);
     setFollowing(true);
     setPlaying(false);
@@ -206,7 +222,8 @@ export default function App({ account }: { account: Account }) {
   const publishBuild = async () => {
     if (!build) return;
     const png = await scene.current?.thumbnail();
-    await publish(build.id, png ? await thumbnail(png) : null);
+    const edited = live && edits.edits.length ? { revision: live.revision, edits: edits.edits } : null;
+    await publish(build.id, png ? await thumbnail(png) : null, edited);
     await refreshBuilds();
   };
 
@@ -326,7 +343,7 @@ export default function App({ account }: { account: Account }) {
         <ChatPanel
           key={ref ? `${ref.source}:${ref.id}` : "new"}
           buildId={buildId}
-          build={build}
+          build={live}
           loadFailed={!!error}
           activity={activity}
           closed={closed}
@@ -349,14 +366,29 @@ export default function App({ account }: { account: Account }) {
                   aria-selected={center === t.id}
                   className={center === t.id ? "active" : ""}
                   disabled={t.id !== "model" && !build}
-                  onClick={() => setCenter(t.id)}
+                  onClick={() => {
+                    setCenter(t.id);
+                    if (t.id !== "model") setMode("view");
+                  }}
                 >
                   {t.label}
                 </button>
               ))}
             </div>
             {center === "model" && !error && (
-              <ViewControls framing={framing} spin={spin} onFrame={setFraming} onSpin={setSpin} />
+              <ViewControls
+                framing={framing}
+                spin={spin}
+                mode={mode}
+                canEdit={edits.editable && hasBlocks}
+                canWalk={hasBlocks}
+                onFrame={(next) => {
+                  if (mode === "walk") setMode("view");
+                  setFraming(next);
+                }}
+                onSpin={setSpin}
+                onMode={setMode}
+              />
             )}
           </div>
           <div className="stage">
@@ -373,6 +405,9 @@ export default function App({ account }: { account: Account }) {
                 loading={buildId && !counts && !error ? opening : null}
                 failed={renderFailed}
                 onFailed={setRenderFailed}
+                mode={mode}
+                edits={edits}
+                onMode={setMode}
               />
               {build && !build.boxes.length && build.status !== "building" && (
                 <div className="notice">Nothing built yet</div>
@@ -411,6 +446,7 @@ export default function App({ account }: { account: Account }) {
               }}
               onSpeed={setSpeed}
               onShare={() => setFilmBuild(build)}
+              spaceKey={mode !== "walk"}
             />
           )}
         </div>

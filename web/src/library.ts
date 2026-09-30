@@ -3,6 +3,7 @@ import { sessions } from "./agent";
 import { type Build, type BuildSummary, PALETTE, type Shared, type Status, unpack } from "./model";
 import { BlockScene } from "./scene";
 import { readJson, status } from "./session";
+import type { Edit } from "./voxelEdits";
 
 const GALLERY = "/gallery";
 const API = "/api/builds";
@@ -142,12 +143,12 @@ export async function publicBuild(id: string): Promise<Build> {
   return opened(await readJson<Shared>(await response.blob()), id);
 }
 
-/** Publish a build of the signed-in user as it is now, with a thumbnail. */
-export async function publish(id: string, thumbnail: string | null) {
+/** Publish a build of the signed-in user as it is now, with this browser's hand edits and a thumbnail. */
+export async function publish(id: string, thumbnail: string | null, edits: { revision: string; edits: Edit[] } | null) {
   return api<Published>(API, {
     method: "POST",
     headers: { ...signed(), "Content-Type": "application/json" },
-    body: JSON.stringify({ id, thumbnail }),
+    body: JSON.stringify({ id, thumbnail, edits }),
   });
 }
 
