@@ -138,6 +138,11 @@ header {
   padding: 3px 10px;
 }
 
+.chip.warn {
+  color: #ffffff;
+  background: var(--background-danger);
+}
+
 .chip.pending {
   width: 84px;
   height: 22px;
@@ -742,18 +747,6 @@ aside > .empty {
 .send.stop {
   background: var(--background-danger);
   color: #ffffff;
-}
-
-.builder-select {
-  height: 32px;
-  font: inherit;
-  font-size: 12px;
-  border: 1px solid var(--stroke-strong);
-  border-radius: 999px;
-  padding: 0 10px;
-  color: var(--text-secondary);
-  background: var(--background-card);
-  cursor: pointer;
 }
 
 .gallery-note {

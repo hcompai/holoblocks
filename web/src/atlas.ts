@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { api, type Palette, type Tex, texKey, type TextureSheet } from "./api";
+import { type Palette, type Tex, TEXTURE_SHEET_URL, texKey, textureSheet, type TextureSheet } from "./model";
 
 export const TILE = 32;
 /** Gutter of repeated edge texels around each tile, so mipmaps never blend neighbouring tiles. */
@@ -74,10 +74,11 @@ export function sheetOrigin(sheet: TextureSheet, name: string): [number, number]
 }
 
 export async function buildAtlas(palette: Palette): Promise<Atlas> {
-  const [sheet, image] = await Promise.all([api.textureSheet(), loadImage(api.textureSheetUrl)]);
+  const [sheet, image] = await Promise.all([textureSheet(), loadImage(TEXTURE_SHEET_URL)]);
   const tile = document.createElement("canvas");
   tile.width = tile.height = TILE;
-  const scratch = tile.getContext("2d")!;
+  // The atlas copies each tile's edges onto itself; a GPU canvas reads itself back on every copy.
+  const scratch = tile.getContext("2d", { willReadFrequently: true })!;
   const draw = (ctx: CanvasRenderingContext2D, name: string, x: number, y: number, tint?: string) =>
     drawTile(ctx, scratch, image, [...sheetOrigin(sheet, name), sheet.tile], x, y, tint);
 
@@ -87,7 +88,7 @@ export async function buildAtlas(palette: Palette): Promise<Atlas> {
   const canvas = document.createElement("canvas");
   canvas.width = columns * CELL;
   canvas.height = rows * CELL;
-  const ctx = canvas.getContext("2d")!;
+  const ctx = canvas.getContext("2d", { willReadFrequently: true })!;
   const lo = PAD / CELL;
   const hi = (PAD + TILE) / CELL;
   const uvs = new Map<string, UV>();

@@ -1,97 +1,60 @@
 import { useEffect, useState } from "react";
-import { api, GALLERY, HttpError, type Build, type BuildEvent, type RenderRequest } from "./api";
+import { showcase } from "./library";
+import type { Build, RenderRequest } from "./model";
+import { useSession } from "./useSession";
 
-const THINKING_CHARS = 1500;
-
-function apply(build: Build, event: BuildEvent): Build {
-  switch (event.type) {
-    case "hello":
-    case "build": {
-      const { name, prompt, builder, status, created, updated, width, depth, height } = event.build;
-      return { ...build, name, prompt, builder, status, created, updated, width, depth, height };
-    }
-    case "message":
-      if (build.messages.some((m) => m.at === event.message.at && m.text === event.message.text)) return build;
-      return { ...build, messages: [...build.messages, event.message] };
-    case "step":
-      if (event.step.index < build.steps.length) return build;
-      return { ...build, steps: [...build.steps, event.step], boxes: [...build.boxes, ...event.boxes] };
-    case "rewind":
-      return {
-        ...build,
-        steps: build.steps.slice(0, event.steps),
-        boxes: build.boxes.filter((b) => b.step < event.steps),
-      };
-    case "thinking":
-    case "render":
-      return build;
-  }
+export interface BuildRef {
+  id: string;
+  showcase: boolean;
 }
 
 export interface LiveBuild {
   build: Build | null;
-  /** The tail of the builder's current reasoning, streamed live. */
+  loading: boolean;
   thinking: string;
-  /** The latest render the builder asked a viewer for. */
   renderRequest: RenderRequest | null;
-  /** Why the build could not be opened; null while it loads or once it has. */
   error: string | null;
+  /** A shown model can remain available, but must not be presented as confirmed live. */
+  syncError: string | null;
+  /** Hand the builder the render it asked for, drawn with `blocks` blocks; true once it has it. */
+  answer: (request: RenderRequest, png: Blob, blocks: number) => Promise<boolean>;
 }
 
-const failure = (e: unknown) =>
-  e instanceof HttpError && e.status === 404 ? "Build not found" : "Couldn't load this build";
+const noAnswer = async () => false;
 
-/** The open build, kept live by its event stream; events that arrive before the first fetch are replayed on it. */
-export function useBuild(id: string | null): LiveBuild {
+function useShowcase(id: string | null): LiveBuild {
   const [build, setBuild] = useState<Build | null>(null);
-  const [thinking, setThinking] = useState("");
-  const [renderRequest, setRenderRequest] = useState<RenderRequest | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     setBuild(null);
-    setThinking("");
-    setRenderRequest(null);
     setError(null);
     if (!id) return;
-    let active = true;
-    let pending: BuildEvent[] | null = [];
-    let current: Build | null = null;
-    const source = GALLERY ? null : api.events(id);
-    if (source)
-      source.onmessage = (e) => {
-        if (!active) return;
-        const event = JSON.parse(e.data) as BuildEvent;
-        if (event.type === "thinking") {
-          setThinking((t) => (event.reset ? "" : t + event.text).slice(-THINKING_CHARS));
-          return;
-        }
-        if (event.type === "render") {
-          setRenderRequest(event);
-          return;
-        }
-        if (pending) pending.push(event);
-        else if (current) setBuild((current = apply(current, event)));
-      };
-    api.build(id).then(
-      (fetched) => {
-        if (!active) return;
-        current = (pending ?? []).reduce(apply, fetched);
-        pending = null;
-        setBuild(current);
-      },
-      (e) => {
-        if (!active) return;
-        console.error(e);
-        source?.close();
-        setError(failure(e));
-      },
+    let current = true;
+    showcase(id).then(
+      (shown) => current && setBuild(shown),
+      () => current && setError("Couldn't load this build"),
     );
     return () => {
-      active = false;
-      source?.close();
+      current = false;
     };
   }, [id]);
 
-  return { build, thinking, renderRequest, error };
+  const shown = build?.id === id ? build : null;
+  return {
+    build: shown,
+    loading: id !== null && !shown && !error,
+    thinking: "",
+    renderRequest: null,
+    error,
+    syncError: null,
+    answer: noAnswer,
+  };
+}
+
+/** A showcase from the static gallery, or a session read live from the Agents API. */
+export function useBuild(ref: BuildRef | null): LiveBuild {
+  const shown = useShowcase(ref?.showcase ? ref.id : null);
+  const live = useSession(ref && !ref.showcase ? ref.id : null);
+  return ref?.showcase ? shown : live;
 }

@@ -1,4 +1,4 @@
-import { api, type BuildSummary } from "./api";
+import type { BuildSummary } from "./model";
 
 interface Props {
   builds: BuildSummary[] | null;
@@ -43,7 +43,7 @@ export function LibraryPanel({ builds, failed, onRetry, activeId, onOpen }: Prop
       {builds.map((b) => (
         <button key={b.id} className={`card ${b.id === activeId ? "active" : ""}`} onClick={() => onOpen(b.id)}>
           {b.thumbnail != null ? (
-            <img className="thumb" src={api.thumbnailUrl(b.id, b.thumbnail)} alt="" loading="lazy" decoding="async" />
+            <img className="thumb" src={b.thumbnail} alt="" loading="lazy" decoding="async" />
           ) : (
             <div className="thumb">{b.name.slice(0, 1).toUpperCase()}</div>
           )}
@@ -51,7 +51,9 @@ export function LibraryPanel({ builds, failed, onRetry, activeId, onOpen }: Prop
             <b>{b.name}</b>
             <span className="muted">{b.prompt}</span>
             <span className="muted small">
-              {b.steps} steps{b.status === "building" ? " · building…" : ""}
+              {[b.steps !== null && `${b.steps} steps`, b.status === "building" && "building…"]
+                .filter(Boolean)
+                .join(" · ")}
             </span>
           </div>
         </button>

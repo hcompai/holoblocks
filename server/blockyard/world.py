@@ -1,10 +1,7 @@
-"""The voxel grid a build's boxes resolve to: counts, extents and the .schem export."""
+"""The voxel grid a build's boxes resolve to: counts, extents and floating blocks."""
 
 from __future__ import annotations
 
-import gzip
-import io
-import struct
 from array import array
 from collections import Counter
 
@@ -105,84 +102,3 @@ class World:
             lo = [min(lo[0], x), min(lo[1], y), min(lo[2], z)]
             hi = [max(hi[0], x), max(hi[1], y), max(hi[2], z)]
         return None if hi[0] < 0 else (tuple(lo), tuple(hi))  # type: ignore[return-value]
-
-    def schematic(self) -> bytes:
-        """Sponge schematic v2 (gzip NBT), the format WorldEdit and FAWE paste."""
-        bounds = self.bounds()
-        if bounds is None:
-            (x0, y0, z0), (x1, y1, z1) = (0, 0, 0), (0, 0, 0)
-        else:
-            (x0, y0, z0), (x1, y1, z1) = bounds
-        w, h, d = x1 - x0 + 1, y1 - y0 + 1, z1 - z0 + 1
-        data = bytearray()
-        for y in range(y0, y1 + 1):
-            for z in range(z0, z1 + 1):
-                start = self._offset(x0, y, z)
-                for cell in self.cells[start : start + w]:
-                    data += _varint(cell)
-        palette = {f"minecraft:{name}": i for i, name in enumerate(self.palette)}
-        root = {
-            "Version": ("int", 2),
-            "DataVersion": ("int", 3700),
-            "Width": ("short", w),
-            "Height": ("short", h),
-            "Length": ("short", d),
-            "Offset": ("int_array", [x0, y0, z0]),
-            "PaletteMax": ("int", len(palette)),
-            "Palette": ("compound", {name: ("int", i) for name, i in palette.items()}),
-            "BlockData": ("byte_array", bytes(data)),
-        }
-        return gzip.compress(_nbt("Schematic", root))
-
-
-def _varint(n: int) -> bytes:
-    out = bytearray()
-    while True:
-        byte = n & 0x7F
-        n >>= 7
-        if n:
-            out.append(byte | 0x80)
-        else:
-            out.append(byte)
-            return bytes(out)
-
-
-TAGS = {"byte": 1, "short": 2, "int": 3, "string": 8, "byte_array": 7, "int_array": 11, "compound": 10}
-
-
-def _nbt(name: str, value: dict) -> bytes:
-    out = io.BytesIO()
-    out.write(bytes([TAGS["compound"]]))
-    _string(out, name)
-    _compound(out, value)
-    return out.getvalue()
-
-
-def _string(out: io.BytesIO, s: str) -> None:
-    data = s.encode()
-    out.write(struct.pack(">H", len(data)) + data)
-
-
-def _compound(out: io.BytesIO, value: dict) -> None:
-    for key, (kind, payload) in value.items():
-        out.write(bytes([TAGS[kind]]))
-        _string(out, key)
-        _payload(out, kind, payload)
-    out.write(b"\x00")
-
-
-def _payload(out: io.BytesIO, kind: str, payload) -> None:
-    if kind == "byte":
-        out.write(struct.pack(">b", payload))
-    elif kind == "short":
-        out.write(struct.pack(">h", payload))
-    elif kind == "int":
-        out.write(struct.pack(">i", payload))
-    elif kind == "string":
-        _string(out, payload)
-    elif kind == "byte_array":
-        out.write(struct.pack(">i", len(payload)) + payload)
-    elif kind == "int_array":
-        out.write(struct.pack(">i", len(payload)) + b"".join(struct.pack(">i", v) for v in payload))
-    elif kind == "compound":
-        _compound(out, payload)

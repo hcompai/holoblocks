@@ -1,19 +1,21 @@
-import { api, GALLERY, type BuildSummary } from "./api";
+import type { BuildSummary } from "./model";
 import { LoadFailed, PLACEHOLDERS } from "./LibraryPanel";
 
 interface Props {
+  /** Why no build can start here, or null when one can. */
+  closed: string | null;
   builds: BuildSummary[] | null;
   failed: boolean;
   onRetry: () => void;
   onOpen: (id: string) => void;
 }
 
-export function Gallery({ builds, failed, onRetry, onOpen }: Props) {
+export function Gallery({ closed, builds, failed, onRetry, onOpen }: Props) {
   return (
     <div className="gallery">
       <h2>Library</h2>
       <p className="muted">
-        {GALLERY
+        {closed
           ? "Open a build to replay it step by step."
           : "Open a build to replay it step by step, or describe a new one in the chat."}
       </p>
@@ -36,21 +38,23 @@ export function Gallery({ builds, failed, onRetry, onOpen }: Props) {
           {builds.map((b) => (
             <button key={b.id} className="gallery-card" onClick={() => onOpen(b.id)}>
               {b.thumbnail != null ? (
-                <img src={api.thumbnailUrl(b.id, b.thumbnail)} alt="" loading="lazy" decoding="async" />
+                <img src={b.thumbnail} alt="" loading="lazy" decoding="async" />
               ) : (
                 <div className="gallery-thumb">{b.name.slice(0, 1).toUpperCase()}</div>
               )}
               <div className="gallery-caption">
                 <b>{b.name}</b>
                 <span className="muted small">
-                  {b.steps} steps{b.status === "building" ? " · building…" : ""}
+                  {[b.steps !== null && `${b.steps} steps`, b.status === "building" && "building…"]
+                    .filter(Boolean)
+                    .join(" · ")}
                 </span>
               </div>
             </button>
           ))}
         </div>
       ) : (
-        <div className="empty">No builds yet. Describe one in the chat.</div>
+        <div className="empty">{closed ?? "No builds yet. Describe one in the chat."}</div>
       )}
     </div>
   );

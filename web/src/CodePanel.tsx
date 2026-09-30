@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import type { Build } from "./api";
+import type { Build } from "./model";
 
 interface Props {
   build: Build;

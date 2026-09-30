@@ -2,12 +2,11 @@ import { CubeIcon, DownloadSimpleIcon, ImageIcon } from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
 
 interface Props {
-  name: string;
-  schemUrl: string;
+  onSchem: () => void;
   onImage: () => void;
 }
 
-export function DownloadMenu({ name, schemUrl, onImage }: Props) {
+export function DownloadMenu({ onSchem, onImage }: Props) {
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -53,10 +52,16 @@ export function DownloadMenu({ name, schemUrl, onImage }: Props) {
       </button>
       {open && (
         <div className="menu" role="menu" ref={menu}>
-          <a role="menuitem" href={schemUrl} download={`${name}.schem`} onClick={() => setOpen(false)}>
+          <button
+            role="menuitem"
+            onClick={() => {
+              setOpen(false);
+              onSchem();
+            }}
+          >
             <CubeIcon size={16} />
             Download .schem
-          </a>
+          </button>
           <button
             role="menuitem"
             onClick={() => {

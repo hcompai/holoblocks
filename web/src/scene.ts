@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import type { Box, Palette, RenderRequest } from "./api";
+import type { Box, Palette, RenderRequest } from "./model";
 import { type Atlas, buildAtlas } from "./atlas";
 import type { MeshFailure, MeshReply, MeshRequest, MesherSetup } from "./mesher";
 import type { Theme } from "./theme";

@@ -1,19 +1,18 @@
-"""The stateful model an agent edits: a build script rebuilt into validated steps, block search, and renders."""
+"""The model an agent edits: a build script rebuilt into validated steps, and block search."""
 
 from __future__ import annotations
 
-import asyncio
 import hashlib
 import json
-import re
+import subprocess
 import sys
 import tempfile
 from collections import Counter
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from blockyard import blocks
-from blockyard.model import Box
-from blockyard.session import Session, View
+from blockyard.model import Box, Build, Step
+from blockyard.workspace import MODEL, Workspace
 from blockyard.world import World
 
 SCRIPT_TIMEOUT_S = 60
@@ -23,20 +22,8 @@ MAX_STEP_BLOCKS = 2_000_000
 
 
 @dataclass
-class Picture:
-    data: bytes
-    mime: str
-
-
-@dataclass
 class Result:
     text: str
-    note: str | None = None
-    images: list[Picture] = field(default_factory=list)
-    """Images the agent should see."""
-    kind: str | None = None
-    """What the images are, like `render`; an agent keeps only the latest images of each kind in context."""
-    caption: str = ""
     problems: int = 0
 
 
@@ -46,12 +33,12 @@ def _first(lines: list[str]) -> str:
 
 
 class Workbench:
-    def __init__(self, session: Session):
-        self.session = session
+    def __init__(self, workspace: Workspace):
+        self.workspace = workspace
 
     @property
-    def build(self):
-        return self.session.build
+    def build(self) -> Build:
+        return self.workspace.build
 
     def world(self) -> World:
         return World.of(self.build)
@@ -102,39 +89,41 @@ class Workbench:
                 boxes.append(box.model_copy(update={"y0": box.y1 + 1, "y1": box.y1 + 1, "block": str(upper)}))
         return boxes, rejected
 
-    async def run_script(self, code: str) -> Result:
+    def run_script(self, code: str) -> Result:
         """Rebuild the model from `code`: steps up to the first changed one stay, the rest are rebuilt and checked."""
         build = self.build
-        build.script = code
-        fixed = self._fixed()
-        out = await execute(code, (build.width, build.height, build.depth))
+        out = execute(code, (build.width, build.height, build.depth))
         printed = f"\nThe script printed:\n{out['printed']}" if out.get("printed") else ""
         if "error" in out:
-            self.session.store.save(build)
+            self.workspace.save(build.model_copy(update={"script": code}))
             return Result(f"The script stopped, so the model did not change.\n{out['error']}{printed}", problems=1)
         steps = out["steps"]
         keys = [_digest(s) for s in steps]
-        old = [s.key for s in build.steps[fixed:]]
+        old = [s.key for s in build.steps]
         same = 0
         while same < min(len(old), len(keys)) and old[same] == keys[same]:
             same += 1
-        await self.session.rewind(fixed + same)
-        world = await asyncio.to_thread(self.world)
+        candidate = build.model_copy(
+            update={
+                "script": code,
+                "steps": build.steps[:same],
+                "boxes": [b for b in build.boxes if b.step < same],
+            }
+        )
+        world = World.of(candidate)
         source = code.splitlines()
         reports = []
         for n in range(same, len(steps)):
-            reports += await self.place(world, source, steps, n)
-        floating = await asyncio.to_thread(self._floating, world)
+            reports += self.place(candidate, world, source, steps, n)
+        self.workspace.commit(candidate)
+        floating = self._floating(world)
         problems = len(reports)
-        kept = (
-            ""
-            if not same
-            else f"kept step {fixed + 1} unchanged, "
-            if same == 1
-            else f"kept steps {fixed + 1} to {fixed + same} unchanged, "
-        )
+        kept = "" if not same else "kept step 1 unchanged, " if same == 1 else f"kept steps 1 to {same} unchanged, "
         rebuilt = len(steps) - same
-        lines = [f"Ran the script: {kept}rebuilt and checked {rebuilt} step{'' if rebuilt == 1 else 's'}."]
+        lines = [
+            f"Ran the script: {kept}rebuilt and checked {rebuilt} step{'' if rebuilt == 1 else 's'}.",
+            f"Share {MODEL} to show revision {self.build.revision[:8]} to the user, then call look to see it.",
+        ]
         if reports:
             lines += ["Problems, by script line:", _first(reports)]
         else:
@@ -151,24 +140,16 @@ class Workbench:
         lines.append(
             "Steps, with exact sizes and positions: blocks set, then where they sit (x, z, and y from bottom to top):"
         )
-        lines.append(await asyncio.to_thread(self.describe))
-        summary = await asyncio.to_thread(self.summary)
-        seen = await self.look(f"Ran the script: {build.name}" + (f", {problems} problems" if problems else ""))
-        return Result(
-            "\n".join(lines) + printed + "\n" + "\n".join(filter(None, [summary, seen.text])),
-            note=seen.note,
-            images=seen.images,
-            kind=seen.kind,
-            caption=seen.caption,
-            problems=problems,
-        )
+        lines.append(self.describe())
+        lines.append(self.summary(world))
+        return Result("\n".join(lines) + printed, problems=problems)
 
-    async def place(self, world: World, source: list[str], steps: list[dict], n: int) -> list[str]:
-        """Check step `n` of a script run and add it to the model; returns its problems, by script line."""
+    def place(self, build: Build, world: World, source: list[str], steps: list[dict], n: int) -> list[str]:
+        """Check step `n` of a script run and add it to `build` and `world`; returns its problems, by script line."""
         s = steps[n]
         ops = [{k: v for k, v in op.items() if k != "line"} for op in s["ops"]]
-        boxes, rejected = await asyncio.to_thread(self._check, ops)
-        changed = await asyncio.to_thread(world.apply, boxes)
+        boxes, rejected = self._check(ops)
+        changed = world.apply(boxes)
         skipped = Counter((_line(source, s["ops"][i]["line"]), why) for i, why in rejected)
         lines = [
             f"{where}: {why}" + (f" ({count} times)" if count > 1 else "") for (where, why), count in skipped.items()
@@ -183,7 +164,9 @@ class Workbench:
         while end > s["line"] + 1 and source[end - 2].startswith("#"):
             end -= 1
         code = "\n".join(source[start - 1 : max(end - 1, s["line"])]).strip()
-        await self.session.step(s["title"], boxes, code, "" if lines else _digest(s))
+        index = len(build.steps)
+        build.steps = [*build.steps, Step(index=index, title=s["title"], code=code, key="" if lines else _digest(s))]
+        build.boxes = [*build.boxes, *(b.model_copy(update={"step": index}) for b in boxes)]
         return lines
 
     def _floating(self, world: World) -> list[str]:
@@ -199,19 +182,15 @@ class Workbench:
                 if b.block != "air" and b.x0 <= x <= b.x1 and b.y0 <= y <= b.y1 and b.z0 <= z <= b.z1
             )
             xs, ys, zs = zip(*group)
-            box = f"{min(xs)} {min(ys)} {min(zs)} {max(xs)} {max(ys)} {max(zs)}"
+            box = f"[{min(xs)}, {min(ys)}, {min(zs)}, {max(xs)}, {max(ys)}, {max(zs)}]"
             lines.append(
                 f"step '{titles[step]}': {len(group)} blocks float, joined to nothing that reaches"
-                f" the ground; see them with `blocks look {box}`"
+                f" the ground; see them with look box {box}"
             )
         if len(groups) > FLOATING_LIMIT:
             rest = groups[FLOATING_LIMIT:]
             lines.append(f"{len(rest)} more floating groups, {sum(map(len, rest))} blocks in all")
         return lines
-
-    def _fixed(self) -> int:
-        """How many steps were built before the script; it builds on them and never changes them."""
-        return next((s.index for s in self.build.steps if s.key is not None), len(self.build.steps))
 
     def describe(self) -> str:
         """One line per step: the blocks it sets and the box they span."""
@@ -232,55 +211,16 @@ class Workbench:
             lines.append(f"{step.index + 1} {step.title}: {n} block{'s' * (n != 1)}, x {x}, z {z}, y {y}")
         return "\n".join(lines) or "No steps yet."
 
-    async def look(
-        self,
-        note: str = "Looked at the model",
-        box: str = "",
-        angle: str = "",
-        pitch: str = "",
-        zoom: str = "",
-        eye: str = "",
-    ) -> Result:
-        """Render the four views, one view from `angle` and `pitch` in degrees, or one from a camera at `eye` (x y z)
-        looking at the middle; of the model, or only of `box`."""
-        corners = [int(v) for v in re.findall(r"-?\d+", box)]
-        if box and len(corners) != 6:
-            return Result(f"box needs six numbers, x0 y0 z0 x1 y1 z1; got '{box}'", problems=1)
-        try:
-            at = tuple(float(v) for v in eye.split())
-            around = None if at else float(angle) % 360 if angle else 0.0 if pitch else None
-            view = View(around, float(pitch or (0 if at else 30)), float(zoom or 1), at or None)
-        except ValueError:
-            return Result(
-                f"angle, pitch, zoom and eye are numbers; got '{angle}', '{pitch}', '{zoom}', '{eye}'", problems=1
-            )
-        if eye and len(at) != 3:
-            return Result(f"eye needs three numbers, x y z; got '{eye}'", problems=1)
-        low = -90 if at else 0
-        if not low <= view.pitch <= 90 or not 1 <= view.zoom <= 8:
-            return Result(
-                f"pitch goes from {low} to 90 and zoom from 1 to 8; got {view.pitch:g} and {view.zoom:g}", problems=1
-            )
-        png = await self.session.render(box=corners or None, view=view)
-        if png is None:
-            return Result("No viewer is open, so no image this time.", note=f"{note} (no viewer open)")
-        caption = f"The render: {view.caption()}"
-        if corners:
-            caption = f"Close-up of x {corners[0]}-{corners[3]}, y {corners[1]}-{corners[4]}, z {corners[2]}-{corners[5]}, showing only the blocks inside: {view.caption()}"
-        await self.session.say(note, role="tool", images=[self.session.store.save_image(png)])
-        return Result("", images=[Picture(png, "image/png")], kind="render", caption=caption)
-
-    async def find_blocks(self, query: str) -> Result:
+    def find_blocks(self, query: str) -> Result:
         hits = blocks.search(query)
-        text = ", ".join(blocks.describe(h) for h in hits[:60]) if hits else f"No blocks match '{query}'."
-        return Result(text, note=f"Searched blocks for '{query}'")
+        return Result(", ".join(blocks.describe(h) for h in hits[:60]) if hits else f"No blocks match '{query}'.")
 
-    async def rename(self, name: str) -> Result:
-        await self.session.rename(name.strip()[:60] or "Untitled build")
+    def rename(self, name: str) -> Result:
+        self.workspace.save(self.build.model_copy(update={"name": name.strip()[:60] or "Untitled build"}))
         return Result(f"Build is now called '{self.build.name}'.")
 
-    def summary(self) -> str:
-        world = self.world()
+    def summary(self, world: World | None = None) -> str:
+        world = world or self.world()
         counts = world.counts()
         bounds = world.bounds()
         if bounds is None:
@@ -301,29 +241,20 @@ def _digest(step: dict) -> str:
     return hashlib.sha256(json.dumps([step["title"], ops], sort_keys=True).encode()).hexdigest()[:16]
 
 
-async def execute(code: str, site: tuple[int, int, int]) -> dict:
+def execute(code: str, site: tuple[int, int, int]) -> dict:
     """Run a build script on a site (width, height, depth) in a fresh process with an empty environment and a time limit."""
-    process = await asyncio.create_subprocess_exec(
-        sys.executable,
-        "-I",
-        "-m",
-        "blockyard.script",
-        stdin=asyncio.subprocess.PIPE,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-        env={},
-        cwd=tempfile.gettempdir(),
-    )
     try:
-        out, err = await asyncio.wait_for(
-            process.communicate(json.dumps({"code": code, "site": site}).encode()), SCRIPT_TIMEOUT_S
+        process = subprocess.run(
+            [sys.executable, "-I", "-m", "blockyard.script"],
+            input=json.dumps({"code": code, "site": site}).encode(),
+            capture_output=True,
+            env={},
+            cwd=tempfile.gettempdir(),
+            timeout=SCRIPT_TIMEOUT_S,
+            check=False,
         )
-    except TimeoutError:
+    except subprocess.TimeoutExpired:
         return {"error": f"The script ran for over {SCRIPT_TIMEOUT_S} s; look for a loop that never ends."}
-    finally:
-        if process.returncode is None:
-            process.kill()
-            await process.wait()
     if process.returncode:
-        return {"error": f"The script runner crashed: {err.decode(errors='replace')[-500:]}"}
-    return json.loads(out)
+        return {"error": f"The script runner crashed: {process.stderr.decode(errors='replace')[-500:]}"}
+    return json.loads(process.stdout)

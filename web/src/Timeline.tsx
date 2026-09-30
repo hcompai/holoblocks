@@ -1,6 +1,6 @@
 import { PauseIcon, PlayIcon, SkipBackIcon, SkipForwardIcon } from "@phosphor-icons/react";
 import { type CSSProperties, useEffect } from "react";
-import type { Build } from "./api";
+import type { Build } from "./model";
 
 export const SPEEDS = [0.5, 1, 2, 4];
 

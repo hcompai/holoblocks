@@ -1,4 +1,4 @@
-import type { Palette } from "./api";
+import type { Palette } from "./model";
 import type { UV } from "./atlas";
 import { type MeshData, meshWorld, outline, type PackedBoxes, VoxelWorld } from "./voxels";
 

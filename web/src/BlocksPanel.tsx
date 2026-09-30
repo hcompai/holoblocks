@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, type Palette, type Tex, type TextureSheet } from "./api";
+import { type Palette, type Tex, TEXTURE_SHEET_URL, textureSheet, type TextureSheet } from "./model";
 import { sheetOrigin } from "./atlas";
 
 interface Props {
@@ -21,7 +21,7 @@ function Swatch({ sheet, name }: { sheet: TextureSheet; name: string }) {
     <span
       className="swatch"
       style={{
-        backgroundImage: `url(${api.textureSheetUrl})`,
+        backgroundImage: `url(${TEXTURE_SHEET_URL})`,
         backgroundPosition: `${-x * scale}px ${-y * scale}px`,
         backgroundSize: `${sheet.columns * SWATCH}px auto`,
       }}
@@ -34,7 +34,7 @@ export function BlocksPanel({ counts: byName, palette }: Props) {
   const [sheet, setSheet] = useState<TextureSheet | null>(null);
   useEffect(() => {
     palette.then(setBlocks);
-    api.textureSheet().then(setSheet);
+    textureSheet().then(setSheet);
   }, [palette]);
 
   const counts = byName ? [...byName.entries()].sort((a, b) => b[1] - a[1]) : [];

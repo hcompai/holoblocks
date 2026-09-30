@@ -2,7 +2,7 @@ import { ArrowUpIcon, PlusIcon, StopIcon, XIcon } from "@phosphor-icons/react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { api, GALLERY, HttpError, type Build, type BuilderInfo } from "./api";
+import type { Build } from "./model";
 
 const SUGGESTIONS = [
   {
@@ -53,6 +53,7 @@ const WAITING_MS = 4000;
 const RENDER_PX = 240;
 const ATTACHMENT_PX = 96;
 const MAX_EDGE = 1568;
+const MAX_IMAGES = 2;
 const IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp"];
 
 /** The image as a data URL, scaled down to MAX_EDGE on its long side: PNG stays PNG, the rest becomes JPEG. */
@@ -73,14 +74,7 @@ async function shrink(file: File): Promise<string> {
   return canvas.toDataURL(png ? "image/png" : "image/jpeg", 0.9);
 }
 
-function failure(e: unknown): string {
-  if (!(e instanceof HttpError)) return "the server is unreachable";
-  try {
-    const { detail } = JSON.parse(e.text);
-    if (typeof detail === "string") return detail;
-  } catch {}
-  return `the server answered ${e.status}`;
-}
+const failure = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 function nextLine(current: number): number {
   const next = Math.floor(Math.random() * (WAITING_LINES.length - 1));
@@ -108,20 +102,22 @@ interface Props {
   loadFailed: boolean;
   thinking: string;
   hidden: boolean;
-  onCreate: (prompt: string, builder: string, images: string[]) => Promise<void>;
+  /** Why no message can be sent here, or null when one can. */
+  closed: string | null;
+  onCreate: (prompt: string, images: string[]) => Promise<void>;
+  onSay: (text: string, images: string[]) => Promise<void>;
+  onStop: () => Promise<void>;
 }
 
-export function ChatPanel({ buildId, build, loadFailed, thinking, hidden, onCreate }: Props) {
+export function ChatPanel(props: Props) {
+  const { buildId, build, loadFailed, thinking, hidden, closed, onCreate, onSay, onStop } = props;
   const [text, setText] = useState("");
   const [images, setImages] = useState<string[]>([]);
   const [dropping, setDropping] = useState(false);
   const [sending, setSending] = useState(false);
+  const [stopping, setStopping] = useState(false);
   const [failed, setFailed] = useState<string | null>(null);
-  const [builders, setBuilders] = useState<BuilderInfo[]>([]);
-  const [builder, setBuilder] = useState("");
   const [zoomed, setZoomed] = useState<string | null>(null);
-  const pickable = builders.filter((b) => !b.showcase);
-  const maxImages = builders.find((b) => b.name === (buildId ? build?.builder : builder))?.max_images ?? 0;
   const log = useRef<HTMLDivElement>(null);
   const thought = useRef<HTMLDivElement>(null);
   const composer = useRef<HTMLTextAreaElement>(null);
@@ -133,11 +129,8 @@ export function ChatPanel({ buildId, build, loadFailed, thinking, hidden, onCrea
   const scrolledFor = useRef<string | null>(null);
 
   useEffect(() => {
-    api.builders().then((list) => {
-      setBuilders(list);
-      setBuilder((b) => b || (list.find((x) => !x.showcase) ?? list[0])?.name || "");
-    });
-  }, []);
+    if (!busy) setStopping(false);
+  }, [busy]);
 
   useEffect(() => {
     if (hidden) return;
@@ -170,10 +163,10 @@ export function ChatPanel({ buildId, build, loadFailed, thinking, hidden, onCrea
   };
 
   const attach = async (files: Iterable<File>) => {
-    const picked = [...files].filter((f) => IMAGE_TYPES.includes(f.type)).slice(0, maxImages - images.length);
+    const picked = [...files].filter((f) => IMAGE_TYPES.includes(f.type)).slice(0, MAX_IMAGES - images.length);
     const shrunk = await Promise.allSettled(picked.map(shrink));
     const urls = shrunk.flatMap((r) => (r.status === "fulfilled" ? [r.value] : []));
-    setImages((list) => [...list, ...urls].slice(0, maxImages));
+    setImages((list) => [...list, ...urls].slice(0, MAX_IMAGES));
   };
 
   const send = async () => {
@@ -182,8 +175,7 @@ export function ChatPanel({ buildId, build, loadFailed, thinking, hidden, onCrea
     setSending(true);
     setFailed(null);
     try {
-      if (buildId) await api.say(buildId, prompt, images);
-      else await onCreate(prompt, builder, images);
+      await (buildId ? onSay(prompt, images) : onCreate(prompt, images));
       setText("");
       setImages([]);
     } catch (e) {
@@ -200,7 +192,7 @@ export function ChatPanel({ buildId, build, loadFailed, thinking, hidden, onCrea
           <div className="chat-intro">
             <h2>What should we build?</h2>
             <p>Describe a structure. The builder writes it in code, block by block, while you watch it rise.</p>
-            {!GALLERY && (
+            {!closed && (
               <>
                 <div className="label">Try one</div>
                 <div className="chips">
@@ -220,33 +212,23 @@ export function ChatPanel({ buildId, build, loadFailed, thinking, hidden, onCrea
             )}
           </div>
         ) : (
-          build?.messages.map((m) => (
+          build?.messages.map((m, i) => (
             <div
-              key={`${m.at}-${m.role}`}
-              className={`msg ${m.role} ${m.role === "system" && m.text.startsWith("Builder failed") ? "error" : ""}`}
+              key={i}
+              className={`msg ${m.role} ${m.role === "system" && m.text.startsWith("The build stopped") ? "error" : ""}`}
             >
               {m.role === "user" && m.images.length > 0 && (
                 <div className="msg-attachments">
                   {m.images.map((src) => (
                     <button key={src} title="Open the image" onClick={(e) => zoom(src, e.currentTarget)}>
-                      <img
-                        src={api.smallImageUrl(src)}
-                        alt="Attached image"
-                        loading="lazy"
-                        width={ATTACHMENT_PX}
-                        height={ATTACHMENT_PX}
-                      />
+                      <img src={src} alt="Attached image" loading="lazy" width={ATTACHMENT_PX} height={ATTACHMENT_PX} />
                     </button>
                   ))}
                 </div>
               )}
-              {m.role === "assistant" ? (
-                <div className="markdown">
-                  <Markdown remarkPlugins={[remarkGfm]}>{m.text}</Markdown>
-                </div>
-              ) : (
-                m.text
-              )}
+              <div className="markdown">
+                <Markdown remarkPlugins={[remarkGfm]}>{m.text}</Markdown>
+              </div>
               {m.role !== "user" &&
                 m.images.map((src) => (
                   <button
@@ -255,13 +237,7 @@ export function ChatPanel({ buildId, build, loadFailed, thinking, hidden, onCrea
                     title="Open the render"
                     onClick={(e) => zoom(src, e.currentTarget)}
                   >
-                    <img
-                      src={api.smallImageUrl(src)}
-                      alt="Render"
-                      loading="lazy"
-                      width={RENDER_PX}
-                      height={RENDER_PX}
-                    />
+                    <img src={src} alt="Render" loading="lazy" width={RENDER_PX} height={RENDER_PX} />
                   </button>
                 ))}
             </div>
@@ -273,8 +249,8 @@ export function ChatPanel({ buildId, build, loadFailed, thinking, hidden, onCrea
               <Waiting />
             </div>
             {thinking && (
-              <div className="thinking-text" ref={thought}>
-                {thinking}
+              <div className="thinking-text markdown" ref={thought}>
+                <Markdown remarkPlugins={[remarkGfm]}>{thinking}</Markdown>
               </div>
             )}
           </div>
@@ -302,8 +278,8 @@ export function ChatPanel({ buildId, build, loadFailed, thinking, hidden, onCrea
           {failed}
         </p>
       )}
-      {GALLERY ? (
-        <p className="gallery-note">Read-only gallery. New builds run in the local app.</p>
+      {closed ? (
+        <p className="gallery-note">{closed}</p>
       ) : loadFailed ? null : (
         <div
           className={`composer ${dropping ? "dropping" : ""}`}
@@ -368,8 +344,8 @@ export function ChatPanel({ buildId, build, loadFailed, thinking, hidden, onCrea
             <button
               className="round-button attach"
               aria-label="Attach images"
-              title={`Attach images (up to ${maxImages})`}
-              disabled={images.length >= maxImages}
+              title={`Attach images (up to ${MAX_IMAGES})`}
+              disabled={images.length >= MAX_IMAGES}
               onClick={() => picker.current?.click()}
             >
               <PlusIcon size={16} weight="bold" />
@@ -385,27 +361,20 @@ export function ChatPanel({ buildId, build, loadFailed, thinking, hidden, onCrea
                 e.target.value = "";
               }}
             />
-            {!buildId && pickable.length > 1 && (
-              <select
-                className="builder-select"
-                aria-label="Builder"
-                value={builder}
-                onChange={(e) => setBuilder(e.target.value)}
-              >
-                {pickable.map((b) => (
-                  <option key={b.name} value={b.name}>
-                    {b.label}
-                  </option>
-                ))}
-              </select>
-            )}
           </div>
           {busy && build ? (
             <button
               className="round-button send stop"
               aria-label="Stop"
-              title="Stop"
-              onClick={() => api.stop(build.id)}
+              title={stopping ? "Stopping after this step" : "Stop"}
+              disabled={stopping}
+              onClick={() => {
+                setStopping(true);
+                onStop().catch((e) => {
+                  setStopping(false);
+                  setFailed(`Couldn't stop: ${failure(e)}.`);
+                });
+              }}
             >
               <StopIcon size={14} weight="fill" />
             </button>

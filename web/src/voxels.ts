@@ -1,4 +1,4 @@
-import { type BlockInfo, type Box, type Palette, type Tex, texKey } from "./api";
+import { type BlockInfo, type Box, type Palette, type Tex, texKey } from "./model";
 import type { UV } from "./atlas";
 
 export interface State {

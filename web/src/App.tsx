@@ -1,6 +1,6 @@
 import { PlusIcon } from "@phosphor-icons/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { api, GALLERY, type BuildSummary } from "./api";
+import { create, say, stop, unavailable } from "./agent";
 import { BlockLoader } from "./BlockLoader";
 import { BlocksPanel } from "./BlocksPanel";
 import { ChatPanel } from "./ChatPanel";
@@ -8,10 +8,13 @@ import { CodePanel } from "./CodePanel";
 import { DownloadMenu } from "./DownloadMenu";
 import { Gallery } from "./Gallery";
 import { LibraryPanel } from "./LibraryPanel";
+import { library, remember, thumbnail } from "./library";
+import { PALETTE, type BuildSummary } from "./model";
+import type { BlockScene } from "./scene";
+import { schematic } from "./schematic";
 import { ThemeToggle } from "./ThemeToggle";
 import { Timeline } from "./Timeline";
-import type { BlockScene } from "./scene";
-import { useBuild } from "./useBuild";
+import { type BuildRef, useBuild } from "./useBuild";
 import { type Framing, RenderFailed, ViewControls, Viewer } from "./Viewer";
 
 const STEP_MS = 900;
@@ -22,16 +25,30 @@ const CENTER_TABS = [
   { id: "blocks", label: "Blocks" },
 ] as const;
 
-function urlBuildId(): string | null {
-  return new URLSearchParams(window.location.search).get("build");
+function urlRef(): BuildRef | null {
+  const params = new URLSearchParams(window.location.search);
+  const showcase = params.get("showcase");
+  const build = params.get("build");
+  return showcase ? { id: showcase, showcase: true } : build ? { id: build, showcase: false } : null;
+}
+
+const sameRef = (a: BuildRef | null, b: BuildRef | null) => a?.id === b?.id && a?.showcase === b?.showcase;
+
+function save(blob: Blob, name: string) {
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = name;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(link.href));
 }
 
 export default function App() {
-  const [buildId, setBuildId] = useState<string | null>(urlBuildId);
-  const { build, thinking, renderRequest, error } = useBuild(buildId);
+  const [ref, setRef] = useState<BuildRef | null>(urlRef);
+  const buildId = ref?.id ?? null;
+  const { build, thinking, renderRequest, error, syncError, answer } = useBuild(ref);
   const [builds, setBuilds] = useState<BuildSummary[] | null>(null);
   const [buildsFailed, setBuildsFailed] = useState(false);
-  const [left, setLeft] = useState<"chat" | "library">(GALLERY ? "library" : "chat");
+  const [left, setLeft] = useState<"chat" | "library">(unavailable ? "library" : "chat");
   const [center, setCenter] = useState<(typeof CENTER_TABS)[number]["id"]>("model");
   const [step, setStep] = useState(Infinity);
   const [following, setFollowing] = useState(true);
@@ -42,13 +59,13 @@ export default function App() {
   const [renderFailed, setRenderFailed] = useState(false);
   const [framing, setFraming] = useState<Framing>({ view: "iso" });
   const [spin, setSpin] = useState(false);
-  const palette = useMemo(() => api.palette(), []);
+  const palette = useMemo(() => Promise.resolve(PALETTE), []);
   const scene = useRef<BlockScene | null>(null);
   const last = (build?.steps.length ?? 0) - 1;
 
   const refreshBuilds = useCallback(() => {
     setBuildsFailed(false);
-    api.builds().then(setBuilds, (e) => {
+    library().then(setBuilds, (e) => {
       console.error(e);
       setBuildsFailed(true);
     });
@@ -56,38 +73,39 @@ export default function App() {
 
   useEffect(refreshBuilds, [refreshBuilds]);
 
-  const summary = builds?.find((b) => b.id === buildId);
-  const heading = build ?? summary;
+  const summary = builds?.find((b) => b.id === buildId && b.showcase === ref?.showcase);
+  const name = build?.name ?? summary?.name;
 
   useEffect(() => {
     if (build && builds && summary?.status !== build.status) refreshBuilds();
   }, [build?.id, build?.status, summary?.status]);
 
   useEffect(() => {
-    document.title = buildId && heading ? heading.name : TITLE;
-  }, [buildId, heading?.name]);
+    document.title = buildId && name ? name : TITLE;
+  }, [buildId, name]);
 
-  const show = useCallback((id: string | null) => {
-    setBuildId(id);
+  const show = useCallback((next: BuildRef | null) => {
+    setRef(next);
     setStep(Infinity);
     setFollowing(true);
     setPlaying(false);
   }, []);
 
   const open = useCallback(
-    (id: string | null) => {
-      show(id);
-      if (id === urlBuildId()) return;
+    (next: BuildRef | null) => {
+      show(next);
+      if (sameRef(next, urlRef())) return;
       const url = new URL(window.location.href);
-      if (id) url.searchParams.set("build", id);
-      else url.searchParams.delete("build");
+      url.searchParams.delete("build");
+      url.searchParams.delete("showcase");
+      if (next) url.searchParams.set(next.showcase ? "showcase" : "build", next.id);
       window.history.pushState(null, "", url);
     },
     [show],
   );
 
   useEffect(() => {
-    const sync = () => show(urlBuildId());
+    const sync = () => show(urlRef());
     window.addEventListener("popstate", sync);
     return () => window.removeEventListener("popstate", sync);
   }, [show]);
@@ -95,6 +113,12 @@ export default function App() {
   useEffect(() => {
     if (following) setStep(last);
   }, [following, last]);
+
+  useEffect(() => {
+    if (!renderRequest) return;
+    setPlaying(false);
+    setFollowing(true);
+  }, [renderRequest?.request]);
 
   useEffect(() => {
     if (!playing) return;
@@ -107,16 +131,26 @@ export default function App() {
     return () => clearTimeout(timer);
   }, [playing, speed, step, last]);
 
+  const openListed = (id: string) => open({ id, showcase: !!builds?.find((b) => b.id === id)?.showcase });
+
   const scrub = (s: number) => {
     setPlaying(false);
     setStep(s);
     setFollowing(s >= last);
   };
 
-  const create = async (prompt: string, builder: string, images: string[]) => {
-    const created = await api.create(prompt, builder, images);
-    open(created.id);
+  const start = async (prompt: string, images: string[]) => {
+    const id = await create(prompt, images);
+    remember(id, { prompt });
+    open({ id, showcase: false });
     setLeft("chat");
+    refreshBuilds();
+  };
+
+  const saveThumbnail = async (png: Blob) => {
+    if (!ref || ref.showcase) return;
+    remember(ref.id, { thumbnail: await thumbnail(png) });
+    refreshBuilds();
   };
 
   const onCounts = useCallback((c: Map<string, number> | null) => {
@@ -126,18 +160,24 @@ export default function App() {
     setBlockCount(n);
   }, []);
 
+  const closed =
+    unavailable ??
+    (ref?.showcase
+      ? "A showcase from the gallery. Start a new build to make your own."
+      : build && !build.open && build.status !== "building"
+        ? "This build's session has ended. Start a new build to make another."
+        : null);
   const visibleStep = following ? last : Math.min(step, last);
-  const hasBlocks = (build ? build.boxes.length : (summary?.boxes ?? 0)) > 0;
-  const opening = `Opening ${heading?.name ?? "the build"}`;
+  const hasBlocks = !!build?.boxes.length;
+  const opening = `Opening ${name ?? "the build"}`;
 
   const downloadImage = async () => {
     const png = await scene.current?.image();
-    if (!png || !heading) return;
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(png);
-    link.download = `${heading.name}.png`;
-    link.click();
-    setTimeout(() => URL.revokeObjectURL(link.href));
+    if (png && build) save(png, `${build.name}.png`);
+  };
+
+  const downloadSchem = async () => {
+    if (build) save(await schematic(build), `${build.name}.schem`);
   };
 
   return (
@@ -147,27 +187,32 @@ export default function App() {
           <img className="brand-logo" src="/logo.png" alt="" />
           Blockyard
         </button>
-        {buildId && heading && !error && (
+        {buildId && name && !error && (
+          <span className="title" title={name}>
+            {name}
+          </span>
+        )}
+        {build && !error && (
           <>
-            <span className="title" title={heading.name}>
-              {heading.name}
-            </span>
             {counts ? (
               <span className="chip">{blockCount.toLocaleString()} blocks</span>
             ) : (
               !renderFailed && <span className="chip pending" />
             )}
-            <span className="chip">{build?.steps.length ?? summary?.steps} steps</span>
+            <span className="chip">{build.steps.length} steps</span>
             <span className="chip">
-              {heading.width}×{heading.depth} site
+              {build.width}×{build.depth} site
             </span>
+            {syncError && (
+              <span className="chip warn" role="status" title={syncError}>
+                Reconnecting…
+              </span>
+            )}
           </>
         )}
         <span className="spacer" />
         <ThemeToggle />
-        {buildId && heading && !error && hasBlocks && (
-          <DownloadMenu name={heading.name} schemUrl={api.downloadUrl(buildId)} onImage={downloadImage} />
-        )}
+        {build && !error && hasBlocks && <DownloadMenu onSchem={downloadSchem} onImage={downloadImage} />}
       </header>
       <aside>
         <div className="aside-head">
@@ -189,7 +234,7 @@ export default function App() {
               Library
             </button>
           </div>
-          {buildId && !GALLERY && (
+          {buildId && !unavailable && (
             <button
               className="new-build"
               onClick={() => {
@@ -208,7 +253,7 @@ export default function App() {
             failed={buildsFailed}
             onRetry={refreshBuilds}
             activeId={buildId}
-            onOpen={open}
+            onOpen={openListed}
           />
         )}
         <ChatPanel
@@ -217,11 +262,22 @@ export default function App() {
           loadFailed={!!error}
           thinking={thinking}
           hidden={left !== "chat"}
-          onCreate={create}
+          closed={closed}
+          onCreate={start}
+          onSay={(text, images) => say(buildId!, text, images)}
+          onStop={async () => void (await stop(buildId!))}
         />
       </aside>
       <main>
-        {!buildId && <Gallery builds={builds} failed={buildsFailed} onRetry={refreshBuilds} onOpen={open} />}
+        {!buildId && (
+          <Gallery
+            closed={unavailable}
+            builds={builds}
+            failed={buildsFailed}
+            onRetry={refreshBuilds}
+            onOpen={openListed}
+          />
+        )}
         <div className={buildId ? "workspace" : "workspace hidden"}>
           <div className="stage-head">
             <div className="tabs" role="tablist">
@@ -249,11 +305,10 @@ export default function App() {
                 step={visibleStep}
                 framing={framing}
                 spin={spin}
-                thumbnailFresh={
-                  builds && build ? summary?.thumbnail != null && summary.thumbnail >= build.updated * 1000 : undefined
-                }
-                onThumbnail={refreshBuilds}
                 renderRequest={renderRequest}
+                onRender={answer}
+                onThumbnail={saveThumbnail}
+                syncError={syncError}
                 palette={palette}
                 onCounts={onCounts}
                 scene={scene}

@@ -7,73 +7,59 @@
 
 ![Blockyard showing the gothic cathedral](docs/blockyard.jpg)
 
-- **Chat** to describe a build; Holo, a sagent agent, writes a Python build script, and every run rebuilds the model, streams the new steps and shows Holo the render.
+- **Chat** to describe a build, with photos if you like. Holo writes a Python build script on a hosted Workstation, and every revision it shares appears in 3D.
 - **Every block is checked** against a ~750-block palette and clipped to the 128x128 site, 100 blocks tall.
-- **Replay** the steps, read each step's code, browse the blocks, download a WorldEdit `.schem`.
+- **Replay** the steps, read each step's code, browse the blocks, download a WorldEdit `.schem` or a PNG.
+- **Follow up** on a finished build for an hour; **Stop** makes Holo wrap up with an answer, and the build stays open.
 
-Gallery for the H team: [blockyard-h-company.vercel.app](https://blockyard-h-company.vercel.app) (Vercel login).
+## How it works
+
+```
+browser: this web app                  Agents API (agp.eu.hcompany.ai)          Workstation
+  start a session, send messages ───>  Holo (holo4-27b)    ──── shell ────>   blocks run, from the toolkit
+  long-poll its events          <───   model.json.gz        <── share_files ──  model.json.gz
+  answer `look` with a GPU render ──>  the image, as the tool result
+```
+
+- The app talks to the Agents API with the `hai-agents` SDK (`web/src/agent.ts`). A build is a session of the agent `blockyard`; the Library lists them, and the browser keeps each one's name, step count and thumbnail in localStorage.
+- The first message attaches the toolkit, `web/public/blockyard.tgz`: the `blocks` CLI, its Python package, the palette and the showcases with their renders. Holo's first call runs `.blockyard/setup.sh`, which installs it.
+- Holo writes `build.py` in plain Python: `step`, `fill`, `set`, `clear` to place blocks, WorldEdit-style patterns (`"70%stone_bricks,30%andesite"`) anywhere a block goes, and `get`, `replace`, `overlay` to rework what is placed. `blocks run` rebuilds the model from the first changed step, prints the problems by line, notes floating blocks and writes `model.json.gz`. Holo shares it with `share_files`; the browser downloads it and shows it.
+- `look` is a custom tool: the browser renders the shared revision on your GPU and returns the image. Keep the tab open while Holo builds; it waits for the render.
 
 ## Run
 
 ```bash
-cd server && uv sync && .venv/bin/playwright install chromium-headless-shell && cd ..
-cd web && npm install && npm run build && cd ..
-server/.venv/bin/blockyard                    # http://127.0.0.1:8000
+cd server && uv sync && cd ..
+server/.venv/bin/python scripts/pack-toolkit.py        # web/public/blockyard.tgz
+server/.venv/bin/blockyard-gallery web/public          # the showcases, into web/public/gallery
+cd web && npm install
+VITE_HAI_API_KEY=$(grep '^HAI_API_KEY=' ~/code/hai/.env | cut -d= -f2- | tr -d '"') npm run dev   # http://localhost:5173
 ```
 
-Needs Node 20+. Hot reload: `cd web && npm run dev` (http://127.0.0.1:5173).
-
-| Variable | Default |
-| --- | --- |
-| `HAI_ROOT` | unset: only the scripted showcases can build |
-| `HAI_API_KEY`, `HAI_BASE_URL` | for Holo: your key, and `https://api.hcompany.ai/v1/models` |
-| `LINKUP_API_KEY` | for Holo's image search |
-| `HOLO_MODEL` | `holo4-27b` |
-| `BLOCKYARD_PORT` | `8000`, on 127.0.0.1 only (no auth) |
-| `BLOCKYARD_DATA` | `./data` |
-
-## Holo, for now
-
-Live building runs on your machine only. The Vercel site is a read-only gallery of finished builds.
-
-```
-browser tabs <── steps, renders ──>  blockyard server  ── starts ──>  sagent (hai venv), agent/holo.py
-(yours + a hidden one)                (FastAPI, :8000)                  │ edits build.py in data/workspaces/<build>
-                                            ▲                           │ shell: blocks run / look
-                                            └────── HTTP tools API ─────┘
-```
-
-- Holo is a sagent Forest agent with the managed sandbox tools (`shell`, `write_file`, `search_replace`, ...). It writes `build.py` in plain Python: `step`, `fill`, `set`, `clear` to place blocks, WorldEdit-style patterns (`"70%stone_bricks,30%andesite"`) anywhere a block goes, and `get`, `replace`, `overlay` to read and rework what is placed, with its own functions for roofs, towers, trees and land; `random` is seeded per step, so every run builds the same model. It runs `blocks run`, which rebuilds the model on the server from the first changed step and prints the problems by line, and notes any blocks that float. `blocks look` renders the four views or one view from any angle and zoom. For references it has `web_search` (Linkup pages, then image URLs) and `view_image`: it downloads the photos it wants into the workspace and looks at them, all through the build. Renders reach Holo through `@@attach PATH` lines, which the shell tool swaps for the image in the same result.
-- Renders come from a hidden Chromium tab the server keeps on each build asking for them, so Holo sees its model with no tab open; without that browser, an open viewer on the build answers instead.
-- sagent comes from a local hai checkout recent enough for Linkup's `include_images`: set `HAI_ROOT` to it, with its venv synced (`cd hai && uv sync`).
-
-```bash
-export HAI_ROOT=~/code/hai HAI_BASE_URL=https://api.hcompany.ai/v1/models
-export HAI_API_KEY=$(grep '^HAI_API_KEY=' $HAI_ROOT/.env | cut -d= -f2- | tr -d '"')
-export LINKUP_API_KEY=$(grep '^LINKUP_API_KEY=' $HAI_ROOT/.env | cut -d= -f2- | tr -d '"')
-server/.venv/bin/blockyard
-```
+Needs Node 20+. Without `VITE_HAI_API_KEY`, the app shows the showcases only.
 
 | To change | Edit |
 | --- | --- |
-| model, reasoning effort, step and time budget, tools | `agent/holo.yaml` |
-| how Holo builds: principles, workflow, build script API, when to stop | `agent/holo.j2` |
-| what the build script can call | `server/blockyard/script.py` |
+| model, step and time budget, idle timeout, the `look` tool | `web/src/agent.ts` |
+| how Holo builds: workflow, the build script API, when to stop | `agent/holo.md` |
+| the build script functions | `server/blockyard/script.py` (document them in `agent/holo.md`) |
+| the Workstation setup | `setup.sh`, then `scripts/pack-toolkit.py` |
 
-Each request leaves `data/workspaces/<build>/runs/<time>.log` (what Holo did, as the terminal shows it) and `<time>.jsonl` (the full trajectory, reasoning included). The next request on the build replays these trajectories, so Holo continues the conversation. Try the tools by hand from a workspace: `BLOCKYARD_BUILD=<build> ../../../server/.venv/bin/blocks run`.
+Try the toolkit by hand: in a folder with a `build.py`, run `<repo>/server/.venv/bin/blocks run` (`--help` lists the tools).
 
-## Showcases and gallery
+## Showcases and deploy
 
-The steampunk manor, the gothic cathedral and Bag End are build scripts in `server/blockyard/builders/showcases`, on
-the same calls as Holo's, each step told by the comment above it. Holo gets a copy of each, with their renders, to
-learn from. To replay one, pick it in the builder menu under a new chat and send any prompt.
+The steampunk manor, the gothic cathedral, Bag End and Caras Galadhon are build scripts in `agent/showcase`, on the
+same calls as Holo's, each step told by the comment above it. Holo gets them in the toolkit with their renders, and
+Bag End is printed in full in its prompt as the worked example.
 
 ```bash
-scripts/deploy-gallery.sh --preview           # or --prod; ships the latest run of each showcase, then data/gallery.txt
+scripts/deploy.sh --preview                   # or --prod
 ```
 
-To ship a Holo build, add its id to `data/gallery.txt` (one per line). The gallery shows each build with its chat,
-read-only. Open each build once in the app to refresh its thumbnail before deploying.
+`deploy.sh` packs the toolkit, exports the showcases into `web/public/gallery`, builds the app, screenshots each
+showcase as its thumbnail and deploys it to the Vercel project `blockyard`. The bundle is public, so it is built
+without an API key: the site shows the showcases, and building needs sign-in, which is not wired yet.
 
 ## Blocks
 
@@ -84,6 +70,10 @@ palette and texture sheet from a Faithful 32x pack and the matching vanilla clie
 ## Tests
 
 ```bash
-cd server && uv run pytest -q && uv run ruff check .
-cd web && npm run typecheck
+cd server && uv run pytest -q && uv run ruff check . && cd ..
+cd web && npm ci && npx playwright install chromium && npm test && npm run build
 ```
+
+The server tests run the toolkit offline. The browser tests mock the Agents API and render real geometry: a build that
+shares models and asks for renders, a new build with a photo, a follow-up and Stop, the Library, a showcase and the
+`.schem` download.
