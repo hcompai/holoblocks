@@ -408,19 +408,14 @@ aside > .aside-head + * {
   min-height: 0;
 }
 
-/* Home is one column: the composer and the shelves, or the library over it. */
+/* Home is one column: the composer, then the shelves. */
 .app.home {
   grid-template-columns: minmax(0, 1fr);
 }
 
 .app.home main,
-.app.home.library aside,
 .app.home .aside-head {
   display: none;
-}
-
-.app.home.library main {
-  display: flex;
 }
 
 .app.home aside {
@@ -431,7 +426,7 @@ aside > .aside-head + * {
 .app.home .aside-body {
   flex: none;
   gap: 32px;
-  width: min(1120px, 100%);
+  width: min(1600px, 100%);
   margin: 0 auto;
   padding: 9vh 16px 32px;
   border-top: none;
@@ -476,25 +471,45 @@ aside > .aside-head + * {
   justify-content: center;
 }
 
+.home-shelves {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}
+
+.home-shelf {
+  display: flex;
+  flex-direction: column;
+}
+
 .home-shelf h2 {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  margin: 0 0 8px;
+  gap: 8px;
+  min-height: 32px;
+  margin: 0 0 12px;
   font-size: 16px;
   font-weight: 600;
 }
 
-/* Cards in one scrolling row; the padding keeps their shadow inside the scroller. */
-.home-row {
-  display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: 220px;
-  gap: 16px;
-  overflow-x: auto;
-  scrollbar-width: none;
-  margin: -4px -16px -12px;
-  padding: 4px 16px 12px;
+.home-shelf h2 .count {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-tertiary);
+}
+
+.home-empty {
+  margin: 0;
+  padding: 28px 16px;
+  border: 1px dashed var(--stroke-default);
+  border-radius: var(--radius-large);
+  color: var(--text-tertiary);
+  text-align: center;
+}
+
+.home-more {
+  align-self: center;
+  margin-top: 32px;
 }
 
 .chat-log {
@@ -1426,48 +1441,6 @@ main {
   display: none;
 }
 
-.library-page {
-  position: absolute;
-  inset: 0;
-  z-index: 5;
-  overflow-y: auto;
-  padding: 12px 24px 32px;
-  background: var(--background-page);
-  animation: appear 0.15s ease-out;
-}
-
-.library-page:focus {
-  outline: none;
-}
-
-.library-section + .library-section {
-  margin-top: 24px;
-}
-
-.library-section h2 {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  margin: 8px 0 12px;
-  font-size: 15px;
-  font-weight: 600;
-}
-
-.library-section h2 .count {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--text-tertiary);
-}
-
-.library-empty {
-  margin: 0;
-  padding: 28px 16px;
-  border: 1px dashed var(--stroke-default);
-  border-radius: var(--radius-large);
-  color: var(--text-tertiary);
-  text-align: center;
-}
-
 .import-build {
   margin-left: auto;
   display: flex;
@@ -1505,11 +1478,12 @@ main {
 
 .gallery-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  grid-auto-rows: max-content;
   gap: 16px;
 }
 
-.gallery-card {
+.gallery-card,
+.skeleton {
   flex-direction: column;
   align-items: stretch;
   gap: 0;

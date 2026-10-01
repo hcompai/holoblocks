@@ -19,7 +19,7 @@ Setup, architecture, deploy and the toolkit. The [main README](../README.md) is 
 - **Replay** the steps, read each step's code and browse the blocks. **Share** holds the rest: publish, copy the link, a GIF of the build rising (made as the dialog opens, 8 to 30 seconds), a WorldEdit `.schem` or a PNG.
 - **Edit** by hand: choose **Edit**, click a block, Shift-drag a box around the blocks you see, then move, replace or delete them, or right-click a face to place the block in hand; undo, redo and reset. Edits are saved in this browser per build and revision, and publishing includes them. The **?** button or key lists every shortcut.
 - **Walk** through the build: choose **Walk**, click the model, then WASD and the mouse. Space jumps, Space twice flies, Esc leaves. Edit and Walk show once the build has blocks.
-- **Publish** a build to the Library's Public section, **remix** any build (Holo starts from an exact copy: the build's own script, or a replay of its blocks), **import** a model file, **copy** a link that previews the build, even on the sign-in page.
+- **Publish** a build to the home page's Public builds, **remix** any build (Holo starts from an exact copy: the build's own script, or a replay of its blocks), **import** a model file, **copy** a link that previews the build, even on the sign-in page.
 - **Follow up** on a build for an hour; once its session ended, a change starts a copy under the same name. **Stop** makes Holo wrap up with an answer, and the build stays open.
 
 ## How it works
@@ -31,7 +31,7 @@ browser: this web app                  Agents API (agp.eu.hcompany.ai)          
   answer `look` with a GPU render ──>  the image, as the tool result
 ```
 
-- The app talks to the Agents API with the `hai-agents` SDK (`web/src/agent.ts`). A build is a session of the agent `blockyard`; the Library lists them, and the browser keeps each one's name, step count and thumbnail in localStorage.
+- The app talks to the Agents API with the `hai-agents` SDK (`web/src/agent.ts`). A build is a session of the agent `blockyard`; the home page lists them, and the browser keeps each one's name, step count and thumbnail in localStorage.
 - The first message attaches the toolkit, `web/public/blockyard.tgz`: the `blocks` CLI, its Python package, the palette and the showcases with their renders. Holo's first call runs `.blockyard/setup.sh`, which installs it; a second call waits for the first. `BLOCKYARD_MINUTES`, the session's time limit, starts the clock each `blocks run` reports: past 80%, Holo finishes the change in hand and answers.
 - Holo writes `build.py` in plain Python: `step`, `fill`, `set`, `clear` to place blocks, WorldEdit-style patterns (`"70%stone_bricks,30%andesite"`) anywhere a block goes, and `get`, `replace`, `overlay` to rework what is placed. `blocks run` rebuilds the model from the first changed step, prints the problems by line, notes floating blocks and writes `model.json.gz`, with the script that rebuilt it. Holo shares it with `share_files`; the browser downloads it and shows it.
 - `look` is a custom tool: any open HoloBlocks tab renders the shared revision on its GPU, off screen, and returns the image, whichever build it shows. A `look` waits for a tab, so while a build runs the tab asks before closing and keeps the screen awake (Screen Wake Lock, taken again when the tab comes back into view). If the Workstation fails, the session ends: Continue starts a new session with the same requests and photos, from the last shared model.
@@ -109,5 +109,5 @@ cd web && npm ci && npx playwright install chromium && npm test && npm run build
 
 The server tests run the toolkit offline. The browser tests mock the Agents API and the library and render real
 geometry: a build that shares models and asks for renders, a new build with a photo, one-click ideas, a follow-up and
-Stop, a change to an ended build, the Library, publishing, remixes, imports, link previews, sign-in, edits, walking,
+Stop, a change to an ended build, the home page's builds, publishing, remixes, imports, link previews, sign-in, edits, walking,
 the GIF export, recovery and the tab guard.

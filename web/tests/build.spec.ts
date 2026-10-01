@@ -79,7 +79,7 @@ test("a new build sends the toolkit and the photos; Stop makes Holo answer and t
   const composer = page.getByPlaceholder("A castle on a cliff… or drop a photo");
   const prompt = "Le Mont-Saint-Michel à marée haute";
   await composer.fill(prompt);
-  await page.locator('.composer input[type="file"]').setInputFiles(PHOTO);
+  await page.getByLabel("Photos to attach").setInputFiles(PHOTO);
   const send = page.getByRole("button", { name: "Send", exact: true });
   await send.click();
   await expect(page.getByText("The platform is unavailable.")).toBeVisible();
@@ -126,7 +126,7 @@ test("a new build sends the toolkit and the photos; Stop makes Holo answer and t
   await expect(page.getByPlaceholder("Ask for a change")).toHaveCount(0);
 });
 
-test("the library shows my builds by the names Holo gave them; showcases under Public, which download as .schem", async ({
+test("home shows my builds by the names Holo gave them; showcases under Public builds, which download as .schem", async ({
   page,
 }) => {
   const showcase = { ...model(), id: "hut", name: "Hut" };
@@ -140,17 +140,14 @@ test("the library shows my builds by the names Holo gave them; showcases under P
     ),
   );
   await page.goto("/");
-  await page.getByRole("button", { name: "Library" }).click();
-  await expect(page).toHaveURL(/\?library$/);
-  const mine = page.getByRole("region", { name: "Mine" }).locator(".gallery-card");
+  const mine = page.getByRole("region", { name: "Your builds" }).locator(".gallery-card");
   await expect(mine).toHaveCount(1);
   await expect(mine).toContainText("Hollowbough");
   await expect(mine).toContainText("7 steps");
-  const everyone = page.getByRole("region", { name: "Public" }).locator(".gallery-card");
+  const everyone = page.getByRole("region", { name: "Public builds" }).locator(".gallery-card");
   await expect(everyone).toHaveCount(1);
   await everyone.click();
   await expect(page).toHaveURL(/\?showcase=hut$/);
-  await expect(page.locator(".library-page")).toHaveCount(0);
   await shown(page, showcase.revision);
   await expect(page.getByText("A showcase from the gallery: remix it to make your own.")).toBeVisible();
 
@@ -202,8 +199,8 @@ test("Holo keeps getting its renders while the user browses other builds", async
   agp.share("live", hut);
   await page.goto("/?build=live");
   await shown(page, hut.revision);
-  await page.getByRole("button", { name: "Library" }).click();
-  await page.getByRole("region", { name: "Public" }).locator(".gallery-card").click();
+  await page.getByRole("button", { name: "HoloBlocks", exact: true }).click();
+  await page.getByRole("region", { name: "Public builds" }).locator(".gallery-card").click();
   await shown(page, showcase.revision);
 
   agp.look("live", "away", { angle: 180 });

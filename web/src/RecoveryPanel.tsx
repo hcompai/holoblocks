@@ -29,7 +29,7 @@ export function RecoveryPanel({
       setError(
         e instanceof RecoveryProblem
           ? e.message
-          : "No new session could be confirmed. Your build is unchanged: check the library for it before trying again.",
+          : "No new session could be confirmed. Your build is unchanged: check Your builds on the home page for it before trying again.",
       );
     } finally {
       setBusy(false);

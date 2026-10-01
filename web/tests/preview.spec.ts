@@ -56,7 +56,7 @@ async function host() {
 }
 
 const meta = (html: string, key: string) =>
-  html.match(new RegExp(`<meta (?:property|name)="${key}" content="([^"]*)"`))?.[1];
+  html.match(new RegExp(`<meta\\s+(?:property|name)="${key}"\\s+content="([^"]*)"`))?.[1];
 
 test("a link to a public build or a showcase previews its name, steps, author and cover; any other gets the app as is", async () => {
   // The webServer's build writes dist/index.html, which the function bundles.
@@ -76,9 +76,12 @@ test("a link to a public build or a showcase previews its name, steps, author an
     expect(meta(well, "og:description")).toBe("Built in 12 steps, shared by Ada Lovelace");
     expect(meta(well, "og:url")).toMatch(/^https:\/\/[^/?]+\/\?public=well$/);
     expect(meta(well, "og:image")).toBe(WELL.thumbnail);
+    expect(meta(well, "og:image:alt")).toBe("Ada&#39;s &#60;well&#62; &#38; &#34;bucket&#34;");
     expect(well).not.toContain("<well>");
     expect(well).not.toContain(WELL.prompt);
-    expect(well.replace(/<meta property="og:[^>]*>\s*/g, "")).toBe(index.replace(/<meta property="og:[^>]*>\s*/g, ""));
+    expect(well.replace(/<meta\s+property="og:[^>]*>\s*/g, "")).toBe(
+      index.replace(/<meta\s+property="og:[^>]*>\s*/g, ""),
+    );
 
     const bagEnd = await page("?showcase=bag-end");
     expect(meta(bagEnd, "og:title")).toBe("Bag End · HoloBlocks");

@@ -295,7 +295,7 @@ export function ChatPanel(props: Props) {
           remixing
             ? `What should ${WHO} change?`
             : busy
-              ? `${WHO} is building: Stop to change course`
+              ? `${WHO} is building, so press Stop if you want to change course`
               : changing
                 ? "Ask for a change"
                 : "A castle on a cliff… or drop a photo"
@@ -327,6 +327,7 @@ export function ChatPanel(props: Props) {
         <input
           ref={picker}
           type="file"
+          aria-label="Photos to attach"
           accept={IMAGE_TYPES.join(",")}
           multiple
           hidden
@@ -364,7 +365,7 @@ export function ChatPanel(props: Props) {
     return (
       <div className="home-intro">
         <h1>What should we build?</h1>
-        <p>Describe a structure. {WHO} builds it block by block while you watch it rise.</p>
+        <p>Describe anything you like and {WHO} will build it in Minecraft blocks while you watch.</p>
         {input}
         {problem}
         <div className="chips">

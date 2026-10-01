@@ -76,7 +76,7 @@ async function library(page: Page, published: ReturnType<typeof entry>[], builds
   return calls;
 }
 
-test("a colleague's public build opens from the library's Public section, under its author's name", async ({
+test("a colleague's public build opens from the home page's public builds, under its author's name", async ({
   page,
 }) => {
   const hut = { ...model(), id: "hut", name: "Ada's hut" };
@@ -84,9 +84,7 @@ test("a colleague's public build opens from the library's Public section, under 
   await library(page, [entry(hut, "Ada Lovelace", "u-ada")], [hut]);
   await page.goto("/");
 
-  await page.getByRole("button", { name: "Library" }).click();
-  await expect(page).toHaveURL(/\?library$/);
-  const card = page.getByRole("region", { name: "Public" }).locator(".gallery-card");
+  const card = page.getByRole("region", { name: "Public builds" }).locator(".gallery-card");
   await expect(card).toContainText("by Ada Lovelace");
   await card.click();
   await expect(page).toHaveURL(/\?public=hut$/);
@@ -94,6 +92,37 @@ test("a colleague's public build opens from the library's Public section, under 
   await expect(page.locator(".gallery-note")).toHaveText(/^Shared by Ada Lovelace: remix it to make your own\./);
   const menu = await shareMenu(page);
   await expect(menu.getByRole("menuitem", { name: /Publish/ })).toHaveCount(0);
+});
+
+test("home shows one row of my builds and ten rows of public ones, with more below on demand", async ({ page }) => {
+  const builds = Array.from({ length: 80 }, (_, i) => ({ ...model(), id: `b${i}`, name: `Build ${i}` }));
+  await site(page);
+  await library(
+    page,
+    builds.map((b, i) => (i < 12 ? entry(b, ACCOUNT.user.name, ACCOUNT.user.id) : entry(b, "Ada Lovelace", "u-ada"))),
+  );
+  await page.goto("/");
+
+  const yours = page.getByRole("region", { name: "Your builds" });
+  const everyone = page.getByRole("region", { name: "Public builds" });
+  await expect(everyone.locator(".gallery-card").first()).toBeVisible();
+  const columns = await everyone
+    .locator(".gallery-grid")
+    .evaluate((grid) => getComputedStyle(grid).gridTemplateColumns.split(" ").length);
+  expect(columns).toBeGreaterThan(2);
+  expect(columns).toBeLessThan(8);
+
+  await expect(yours.locator(".gallery-card")).toHaveCount(columns);
+  await yours.getByRole("button", { name: "Show all" }).click();
+  await expect(yours.locator(".gallery-card")).toHaveCount(12);
+
+  const more = everyone.getByRole("button", { name: "Show more builds" });
+  await expect(everyone.locator(".gallery-card")).toHaveCount(columns * 10);
+  await more.click();
+  await expect(everyone.locator(".gallery-card")).toHaveCount(Math.min(80, columns * 20));
+  if (columns * 20 < 80) await more.click();
+  await expect(everyone.locator(".gallery-card")).toHaveCount(80);
+  await expect(more).toHaveCount(0);
 });
 
 test("a remix of a public build starts a private session from a script rebuilding each of its boxes, step by step", async ({
@@ -167,13 +196,14 @@ test("the author publishes a build after a confirmation, stays on it, then makes
   expect(post.headers).toMatchObject({ authorization: `Bearer ${ACCOUNT.pass}`, "x-agents-key": ACCOUNT.key });
   expect(post.body).toEqual({ id: "mine", thumbnail: expect.stringMatching(/^data:image\/webp;base64,/), edits: null });
 
-  const shelf = page.getByRole("button", { name: "Library" });
-  const mine = page.getByRole("region", { name: "Mine" }).locator(".gallery-card");
-  const everyone = page.getByRole("region", { name: "Public" }).locator(".gallery-card");
-  await shelf.click();
+  const home = page.getByRole("button", { name: "HoloBlocks", exact: true });
+  const mine = page.getByRole("region", { name: "Your builds" }).locator(".gallery-card");
+  const everyone = page.getByRole("region", { name: "Public builds" }).locator(".gallery-card");
+  await home.click();
   await expect(mine).toContainText("public");
   await expect(everyone).toContainText(`by ${ACCOUNT.user.name}`);
-  await shelf.click();
+  await page.goBack();
+  await shown(page, hut.revision);
 
   const confirm = page.getByRole("dialog", { name: "Make private" });
   const unpublish = menu.getByRole("menuitem", { name: "Make private…" });
@@ -194,7 +224,7 @@ test("the author publishes a build after a confirmation, stays on it, then makes
     search: "?id=mine",
     headers: { authorization: `Bearer ${ACCOUNT.pass}`, "x-agents-key": ACCOUNT.key },
   });
-  await shelf.click();
+  await home.click();
   await expect(everyone).toHaveCount(0);
   await expect(mine).not.toContainText("public");
 });
@@ -251,7 +281,7 @@ test("signed out, only the sign-in page shows; Google brings the user back signe
 
   await page.goto(`/?showcase=${hut.id}`);
   await expect(page.getByRole("heading", { name: "HoloBlocks" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Library" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "HoloBlocks", exact: true })).toHaveCount(0);
   await google.click();
   await expect(page.getByRole("alert")).toHaveText("HoloBlocks is open to H Company accounts.");
 

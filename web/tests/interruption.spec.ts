@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 import { model, site } from "./fixtures";
 import { platform } from "./platform";
 
-test("a running build guards the tab and keeps the screen awake through the library, and lets go when it finishes", async ({
+test("a running build guards the tab and keeps the screen awake through other builds, and lets go when it finishes", async ({
   page,
 }) => {
   await site(page, [{ ...model(), id: "village", name: "Village" }]);
@@ -35,8 +35,8 @@ test("a running build guards the tab and keeps the screen awake through the libr
     });
   await page.goto("/?build=live");
   await expect.poll(guarded).toBe(true);
-  await page.getByRole("button", { name: "Library" }).click();
-  await page.getByRole("region", { name: "Public" }).locator(".gallery-card").click();
+  await page.getByRole("button", { name: "HoloBlocks", exact: true }).click();
+  await page.getByRole("region", { name: "Public builds" }).locator(".gallery-card").click();
   await expect(page).toHaveURL(/village/);
   expect(await guarded()).toBe(true);
   expect(await awake()).toBe(1);

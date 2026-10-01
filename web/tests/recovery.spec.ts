@@ -58,7 +58,7 @@ test("a recovery whose creation response was lost is reopened, never started twi
   agp.loseCreationResponse = true;
   await page.goto("/?build=failed");
   await page.getByRole("button", { name: "Continue from saved version" }).click();
-  await expect(page.getByRole("alert")).toContainText("check the library");
+  await expect(page.getByRole("alert")).toContainText("check Your builds on the home page");
   await page.reload();
   await page.getByRole("button", { name: "Continue from saved version" }).click();
   await expect(page).toHaveURL(/build=new-build$/);

@@ -1,4 +1,4 @@
-import { PlusIcon, SquaresFourIcon } from "@phosphor-icons/react";
+import { PlusIcon } from "@phosphor-icons/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Account } from "./account";
 import { AccountMenu } from "./AccountMenu";
@@ -13,7 +13,6 @@ import { FilmExport } from "./FilmExport";
 import { HomeShelves } from "./HomeShelves";
 import { ImportBuild } from "./ImportBuild";
 import { card, library, publish, remember, setPrivate, type Shelf, thumbnail, unpublish } from "./library";
-import { LibraryPage } from "./LibraryPage";
 import { type Build, type BuildSummary, EMPTY_MODEL, PALETTE, type Source } from "./model";
 import { RecoveryPanel } from "./RecoveryPanel";
 import type { BlockScene } from "./scene";
@@ -35,7 +34,6 @@ const CENTER_TABS = [
 ] as const;
 /** The URL parameter naming the open build, by where it is read from. */
 const PARAMS: Record<Source, string> = { session: "build", public: "public", showcase: "showcase" };
-const LIBRARY = "library";
 
 function urlBuild(): BuildRef | null {
   const params = new URLSearchParams(window.location.search);
@@ -46,8 +44,6 @@ function urlBuild(): BuildRef | null {
   return null;
 }
 
-const urlLibrary = () => new URLSearchParams(window.location.search).has(LIBRARY);
-
 const linkTo = (ref: BuildRef) => `${window.location.origin}/?${new URLSearchParams({ [PARAMS[ref.source]]: ref.id })}`;
 
 const same = (a: BuildRef | null, b: BuildRef | null) => a?.id === b?.id && a?.source === b?.source;
@@ -56,7 +52,6 @@ export default function App({ account }: { account: Account }) {
   const [ref, setRef] = useState<BuildRef | null>(urlBuild);
   const opened = useRef(ref);
   opened.current = ref;
-  const [libraryOpen, setLibraryOpen] = useState(urlLibrary);
   const buildId = ref?.id ?? null;
   const read = useBuild(ref);
   /** What the user just asked for, shown as a starting build where they asked it, until its session answers. */
@@ -106,7 +101,8 @@ export default function App({ account }: { account: Account }) {
     );
   }, []);
 
-  useEffect(() => void refreshBuilds(), [refreshBuilds, account.user.id, libraryOpen]);
+  const home = !ref && !drafted;
+  useEffect(() => void refreshBuilds(), [refreshBuilds, account.user.id, home]);
   /** The user's sessions building now, which need this tab open. */
   const running = [
     ...new Set([
@@ -158,26 +154,19 @@ export default function App({ account }: { account: Account }) {
     setPlaying(false);
   }, []);
 
-  /** Show this build, with the library over it or not, and put both in the URL. */
-  const navigate = useCallback(
-    (next: BuildRef | null, library: boolean) => {
-      if (!same(next, opened.current)) show(next);
-      setLibraryOpen(library);
-      const url = new URL(window.location.href);
-      for (const param of [...Object.values(PARAMS), LIBRARY]) url.searchParams.delete(param);
-      if (next) url.searchParams.set(PARAMS[next.source], next.id);
-      if (library) url.search += `${url.search ? "&" : "?"}${LIBRARY}`;
-      if (url.href !== window.location.href) window.history.pushState(null, "", url);
-    },
-    [show],
-  );
-  const open = (next: BuildRef | null) => navigate(next, false);
+  /** Show this build, or home for none, and put it in the URL. */
+  const open = (next: BuildRef | null) => {
+    if (!same(next, opened.current)) show(next);
+    const url = new URL(window.location.href);
+    for (const param of Object.values(PARAMS)) url.searchParams.delete(param);
+    if (next) url.searchParams.set(PARAMS[next.source], next.id);
+    if (url.href !== window.location.href) window.history.pushState(null, "", url);
+  };
 
   useEffect(() => {
     const sync = () => {
       const next = urlBuild();
       if (!same(next, opened.current)) show(next);
-      setLibraryOpen(urlLibrary());
     };
     window.addEventListener("popstate", sync);
     return () => window.removeEventListener("popstate", sync);
@@ -267,7 +256,7 @@ export default function App({ account }: { account: Account }) {
 
   const unpublishBuild = async () => {
     if (!build) return;
-    // Unpublishing would delete an imported build; making it private keeps it under Mine.
+    // Unpublishing would delete an imported build; making it private keeps it under the user's builds.
     if (imported) await setPrivate(build.id, true);
     else {
       await unpublish(build.id);
@@ -285,7 +274,7 @@ export default function App({ account }: { account: Account }) {
   const deleteBuild = async () => {
     if (!build) return;
     await unpublish(build.id);
-    navigate(null, true);
+    open(null);
     await refreshBuilds();
   };
 
@@ -308,7 +297,6 @@ export default function App({ account }: { account: Account }) {
   const recoveredFrom = ref?.source === "session" ? card(ref.id)?.recoveredFrom : undefined;
   const visibleStep = following ? last : Math.min(step, last);
   const opening = `Opening ${heading?.name ?? "the build"}`;
-  const home = !ref && !drafted;
   /** The open build, once it is more than a request on its way. */
   const actionable = drafted ? null : build;
   const loading = error
@@ -317,25 +305,18 @@ export default function App({ account }: { account: Account }) {
       ? buildId && opening
       : !built
         ? build.status === "building"
-          ? "Holo is getting its blocks ready. First blocks in a few minutes."
+          ? "Holo is sorting through its blocks, and the first ones should appear in a few minutes."
           : null
         : counts
           ? null
           : opening;
 
   return (
-    <div className={`app${home ? " home" : ""}${libraryOpen ? " library" : ""}`}>
+    <div className={home ? "app home" : "app"}>
       <header>
         <button className="brand" onClick={() => open(null)}>
           <img className="brand-logo" src="/logo.png" alt="" />
           HoloBlocks
-        </button>
-        <button
-          className={libraryOpen ? "quiet active" : "quiet"}
-          aria-pressed={libraryOpen}
-          onClick={() => navigate(ref, !libraryOpen)}
-        >
-          <SquaresFourIcon size={16} /> <span>Library</span>
         </button>
         {syncError && (
           <span className="chip warn" role="status" title={syncError}>
@@ -417,12 +398,21 @@ export default function App({ account }: { account: Account }) {
               if (build) await start(text, images, build);
             }}
           />
-          {home && builds && (
+          {home && (
             <HomeShelves
               builds={builds}
+              failed={buildsFailed}
               me={account.user.id}
+              onRetry={refreshBuilds}
               onOpen={openListed}
-              onLibrary={() => navigate(null, true)}
+              mineActions={
+                <ImportBuild
+                  onImported={(id) => {
+                    refreshBuilds();
+                    open({ id, source: "public" });
+                  }}
+                />
+              }
             />
           )}
         </div>
@@ -481,7 +471,9 @@ export default function App({ account }: { account: Account }) {
                 edits={edits}
                 onMode={setMode}
               />
-              {build && !built && build.status !== "building" && <div className="notice">Nothing built yet</div>}
+              {build && !built && build.status !== "building" && (
+                <div className="notice">There's nothing here yet, so ask Holo in the chat to start building.</div>
+              )}
             </div>
             {center !== "model" && (
               <div className="pane">
@@ -499,7 +491,7 @@ export default function App({ account }: { account: Account }) {
             {error && (
               <div className="pane notice" role="alert">
                 <b>{error}</b>
-                <button onClick={() => navigate(null, true)}>Back to the library</button>
+                <button onClick={() => open(null)}>Back to the start</button>
               </div>
             )}
           </div>
@@ -520,25 +512,6 @@ export default function App({ account }: { account: Account }) {
             />
           )}
         </div>
-        {libraryOpen && (
-          <LibraryPage
-            builds={builds}
-            failed={buildsFailed}
-            active={ref}
-            onRetry={refreshBuilds}
-            onClose={() => navigate(ref, false)}
-            onOpen={openListed}
-            me={account.user.id}
-            mineActions={
-              <ImportBuild
-                onImported={(id) => {
-                  refreshBuilds();
-                  open({ id, source: "public" });
-                }}
-              />
-            }
-          />
-        )}
       </main>
       {filmBuild && <FilmExport build={filmBuild} onClose={() => setFilmBuild(null)} />}
     </div>

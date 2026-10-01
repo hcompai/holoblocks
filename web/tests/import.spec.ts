@@ -41,7 +41,7 @@ for (const [why, damage, message] of [
     expect(attempt).toThrow(message);
   });
 
-test("Import a build uploads the file as the signed-in user after a confirmation, then shows it under Mine", async ({
+test("Import a build uploads the file as the signed-in user after a confirmation, then shows it under Your builds", async ({
   page,
 }) => {
   await site(page);
@@ -79,9 +79,9 @@ test("Import a build uploads the file as the signed-in user after a confirmation
     const id = params.get("id");
     return route.fulfill({ json: id ? listed.find((e: any) => e.id === id) : listed });
   });
-  await page.goto("/?library");
+  await page.goto("/");
 
-  const mine = page.getByRole("region", { name: "Mine" });
+  const mine = page.getByRole("region", { name: "Your builds" });
   const file = { name: "stone-hut.json", mimeType: "application/json" };
   await mine.getByLabel("Model file to import").setInputFiles({ ...file, buffer: Buffer.from("{}") });
   await expect(mine.getByRole("alert")).toContainText("not a HoloBlocks model");
@@ -99,7 +99,7 @@ test("Import a build uploads the file as the signed-in user after a confirmation
   expect(uploads[0].headers).toMatchObject({ authorization: `Bearer ${ACCOUNT.pass}`, "x-agents-key": ACCOUNT.key });
   expect(uploads[0].body.thumbnail).toMatch(/^data:image\/webp;base64,/);
 
-  await page.getByRole("button", { name: "Library" }).click();
+  await page.getByRole("button", { name: "HoloBlocks", exact: true }).click();
   await expect(mine.locator(".gallery-card")).toContainText("Stone hut");
   await expect(mine.locator(".gallery-card")).toContainText("imported");
 });
