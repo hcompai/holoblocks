@@ -145,6 +145,8 @@ export function ChatPanel(props: Props) {
   const [sending, setSending] = useState(false);
   const [stopping, setStopping] = useState(false);
   const [failed, setFailed] = useState<string | null>(null);
+  /** Messages sent to the builder that its chat does not show yet, each with how many user messages it showed then. */
+  const [queued, setQueued] = useState<{ text: string; images: string[]; heard: number }[]>([]);
   const [zoomed, setZoomed] = useState<string | null>(null);
   const log = useRef<HTMLDivElement>(null);
   /** Whether the log sits at its end, so new lines scroll it and reading earlier ones is left alone. */
@@ -158,7 +160,10 @@ export function ChatPanel(props: Props) {
   const changing = !!buildId || !!build;
   /** The builder no longer takes messages here: a change starts a copy of the build. */
   const ended = !!build && !build.open && !busy;
-  const ready = !!(text.trim() || images.length) && !sending && (remixing || !changing || (!!build && !busy));
+  const typed = !!(text.trim() || images.length);
+  const ready = typed && !sending && (remixing || !changing || !!build?.id);
+  const heard = build?.messages.filter((m) => m.role === "user").length ?? 0;
+  const waiting = queued.length ? queued.slice(Math.max(0, heard - queued[0].heard)) : queued;
   const scrolledFor = useRef<string | null>(null);
 
   useEffect(() => {
@@ -166,11 +171,15 @@ export function ChatPanel(props: Props) {
   }, [busy]);
 
   useEffect(() => {
+    if (queued.length && !waiting.length) setQueued([]);
+  }, [queued.length, waiting.length]);
+
+  useEffect(() => {
     const jump = scrolledFor.current !== (build?.id ?? null);
     scrolledFor.current = build?.id ?? null;
     if (jump) pinned.current = true;
     if (pinned.current) log.current?.scrollTo({ top: log.current.scrollHeight, behavior: jump ? "instant" : "smooth" });
-  }, [build?.id, build?.messages.length, busy]);
+  }, [build?.id, build?.messages.length, busy, waiting.length]);
 
   useEffect(() => {
     if (!buildId) composer.current?.focus();
@@ -196,14 +205,18 @@ export function ChatPanel(props: Props) {
     setImages((list) => [...list, ...urls].slice(0, MAX_IMAGES));
   };
 
-  /** Hand `prompt` to the builder; whether it took it. */
+  /** Hand `prompt` to the builder, even mid-build; whether it took it. */
   const deliver = async (prompt: string, attached: string[]) => {
+    const saying = changing && !remixing && !ended;
+    const entry = { text: prompt, images: attached, heard };
+    if (saying) setQueued((list) => [...list, entry]);
     setSending(true);
     setFailed(null);
     try {
-      await (remixing || ended ? onRemix : changing ? onSay : onCreate)(prompt, attached);
+      await (remixing || ended ? onRemix : saying ? onSay : onCreate)(prompt, attached);
       return true;
     } catch (e) {
+      setQueued((list) => list.filter((q) => q !== entry));
       setFailed(`Couldn't send: ${failure(e)}.`);
       return false;
     } finally {
@@ -241,6 +254,16 @@ export function ChatPanel(props: Props) {
         </button>
       </form>
     </dialog>
+  );
+
+  const attachments = (list: string[]) => (
+    <div className="msg-attachments">
+      {list.map((src) => (
+        <button key={src} title="Open the image" onClick={(e) => zoom(src, e.currentTarget)}>
+          <img src={src} alt="Attached image" loading="lazy" width={ATTACHMENT_PX} height={ATTACHMENT_PX} />
+        </button>
+      ))}
+    </div>
   );
 
   const problem = failed && (
@@ -294,11 +317,9 @@ export function ChatPanel(props: Props) {
         placeholder={
           remixing
             ? `What should ${WHO} change?`
-            : busy
-              ? `${WHO} is building, so press Stop if you want to change course`
-              : changing
-                ? "Ask for a change"
-                : "A castle on a cliff… or drop a photo"
+            : changing
+              ? "Ask for a change"
+              : "A castle on a cliff… or drop a photo"
         }
         onChange={(e) => setText(e.target.value)}
         onPaste={(e) => {
@@ -337,7 +358,7 @@ export function ChatPanel(props: Props) {
           }}
         />
       </div>
-      {busy && build ? (
+      {busy && build && !typed ? (
         <button
           className="round-button send stop"
           aria-label="Stop"
@@ -395,15 +416,7 @@ export function ChatPanel(props: Props) {
         {build?.messages.map((m, i) => (
           <div key={i} className={`msg ${m.role} ${m.error ? "error" : ""}`}>
             {m.work && <WorkLog work={m.work} summary={`Worked for ${duration(m.work.end - m.work.start)}`} />}
-            {m.role === "user" && m.images.length > 0 && (
-              <div className="msg-attachments">
-                {m.images.map((src) => (
-                  <button key={src} title="Open the image" onClick={(e) => zoom(src, e.currentTarget)}>
-                    <img src={src} alt="Attached image" loading="lazy" width={ATTACHMENT_PX} height={ATTACHMENT_PX} />
-                  </button>
-                ))}
-              </div>
-            )}
+            {m.role === "user" && m.images.length > 0 && attachments(m.images)}
             {m.role === "tool" ? (
               <details className="work">
                 <summary>{WHO} checked it</summary>
@@ -430,6 +443,14 @@ export function ChatPanel(props: Props) {
           </div>
         ))}
         {busy && build && activity && <Live activity={activity} early={!build.boxes.length} />}
+        {waiting.map((q, i) => (
+          <div key={i} className="msg user queued" title={`Sent: ${WHO} reads it at its next step`}>
+            {q.images.length > 0 && attachments(q.images)}
+            <div className="markdown">
+              <Markdown remarkPlugins={[remarkGfm]}>{q.text}</Markdown>
+            </div>
+          </div>
+        ))}
       </div>
       {lightboxDialog}
       {problem}

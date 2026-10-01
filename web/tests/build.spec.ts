@@ -162,6 +162,37 @@ test("home shows my builds by the names Holo gave them; showcases under Public b
   expect(nbt.includes("minecraft:oak_planks")).toBe(true);
 });
 
+test("a message sent while Holo builds reaches it without stopping, and shows as sent until Holo reads it", async ({
+  page,
+}) => {
+  await site(page);
+  const agp = await platform(page);
+  agp.session("live");
+  agp.say("live", "A tower");
+  await page.goto("/?build=live");
+  const composer = page.getByPlaceholder("Ask for a change");
+  const stop = page.getByRole("button", { name: "Stop", exact: true });
+  const send = page.getByRole("button", { name: "Send", exact: true });
+  await expect(stop).toBeVisible();
+
+  agp.hold = true;
+  await composer.fill("Make it taller");
+  await expect(stop).toHaveCount(0);
+  await send.click();
+  await expect(composer).toHaveValue("");
+  await expect(stop).toBeVisible();
+  const sent = page.locator(".msg.user.queued");
+  await expect(sent).toHaveText("Make it taller");
+  expect(agp.posted("/messages")).toMatchObject([{ message: "Make it taller" }]);
+  expect(agp.posted("/force_answer")).toHaveLength(0);
+  await expect(page.locator(".msg.live")).toBeVisible();
+
+  agp.say("live", "Make it taller");
+  await expect(sent).toHaveCount(0);
+  await expect(page.locator(".msg.user")).toHaveText(["A tower", "Make it taller"]);
+  await expect(page.locator(".msg.live")).toContainText("Reading your message");
+});
+
 test("Holo's work shows as what it does now, then folds under its message", async ({ page }) => {
   await site(page);
   const agp = await platform(page);

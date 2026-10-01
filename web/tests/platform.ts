@@ -36,6 +36,8 @@ export class Platform {
   /** Create the next session, then answer as if the response were lost. */
   loseCreationResponse = false;
   offline = false;
+  /** Leave the user's messages unread until the test says them. */
+  hold = false;
   /** When the next event happens, in ms since the epoch. */
   now = Date.parse(NOW);
 
@@ -162,6 +164,7 @@ export async function platform(page: Page): Promise<Platform> {
     }
     if (!session) return reply(404, { detail: "No such session" });
     if (action === "messages") {
+      if (agp.hold) return reply(202);
       agp.say(session.id, body.message);
       agp.state(session.id, "running");
       return reply(202);
