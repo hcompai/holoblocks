@@ -136,7 +136,7 @@ function Live({ activity }: { activity: Activity }) {
       <span key={label} className="shimmer">
         {label}
       </span>
-      {elapsed >= CLOCK_MS && <span className="live-clock">{clock(elapsed)}</span>}
+      {activity.since > 0 && elapsed >= CLOCK_MS && <span className="live-clock">{clock(elapsed)}</span>}
     </span>
   );
   return (
