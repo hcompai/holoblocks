@@ -5,6 +5,7 @@ import remarkGfm from "remark-gfm";
 import type { Build, Work } from "./model";
 import type { Activity } from "./session";
 import { label, SUGGESTIONS } from "./suggestions";
+import { ThinkingIcon } from "./Thinking";
 
 const WHO = "Holo";
 const PINNED_PX = 80;
@@ -107,6 +108,7 @@ function Live({ activity, early }: { activity: Activity; early: boolean }) {
   const elapsed = useNow() - activity.since;
   const head = (
     <span className="live-head">
+      <ThinkingIcon label={shown} />
       <span key={shown} className="shimmer">
         {shown}
       </span>

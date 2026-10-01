@@ -1,14 +1,23 @@
-import { ArrowsClockwiseIcon, PencilSimpleIcon, PersonSimpleWalkIcon } from "@phosphor-icons/react";
+import {
+  ArrowsClockwiseIcon,
+  PauseIcon,
+  PencilSimpleIcon,
+  PersonSimpleWalkIcon,
+  PlayIcon,
+} from "@phosphor-icons/react";
 import { type RefObject, useEffect, useRef, useState } from "react";
 import { BlockLoader } from "./BlockLoader";
 import { ACTION_KEYS, type Action, blockLabel, EditBar, EditPanel } from "./EditPanel";
 import type { Edits } from "./edits";
 import type { Build, Palette } from "./model";
-import { BlockScene, typing, type View } from "./scene";
+import { BlockScene, type PlacementProgress, typing, type View } from "./scene";
 import { Shortcuts } from "./Shortcuts";
+import type { Activity } from "./session";
 import { useTheme } from "./theme";
+import { Thinking } from "./Thinking";
 import type { Hit, Vec3 } from "./voxels";
 import { WalkHud } from "./WalkHud";
+import { PlacementSoundToggle } from "./PlacementSound";
 
 /** Hand edits come in bursts; the library tile waits for a pause. */
 const THUMBNAIL_IDLE_MS = 1500;
@@ -86,6 +95,7 @@ export function ViewControls({ framing, spin, mode, canEdit, built, onFrame, onS
         </>
       )}
       <Shortcuts />
+      {built && <PlacementSoundToggle />}
     </div>
   );
 }
@@ -104,6 +114,10 @@ interface Props {
   scene: RefObject<BlockScene | null>;
   /** What is opening while the model is not meshed yet. */
   loading: string | null;
+  /** Live activity before the first blocks arrive. */
+  thinking: Activity | null;
+  placementSpeed?: number;
+  onPlacing?: (placing: boolean) => void;
   /** The model could not be meshed. */
   failed: boolean;
   onFailed: (failed: boolean) => void;
@@ -116,7 +130,8 @@ const add = (a: Vec3, b: Vec3): Vec3 => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
 const scale = (v: Vec3, by: number): Vec3 => [v[0] * by || 0, v[1] * by || 0, v[2] * by || 0];
 
 export function Viewer(props: Props) {
-  const { build, step, framing, spin, onThumbnail, palette, onCounts, scene, loading, failed, onFailed } = props;
+  const { build, step, framing, spin, onThumbnail, palette, onCounts, scene, loading, thinking, failed, onFailed } =
+    props;
   const { mode, edits, onMode } = props;
   const container = useRef<HTMLDivElement>(null);
   const framedBuild = useRef<string | null>(null);
@@ -131,6 +146,9 @@ export function Viewer(props: Props) {
   const [box, setBox] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
   const [locked, setLocked] = useState(false);
   const [flying, setFlying] = useState(false);
+  const [placement, setPlacement] = useState<PlacementProgress | null>(null);
+  const [placementPaused, setPlacementPaused] = useState(false);
+  const previous = useRef<{ id: string; revision: string; step: number } | null>(null);
   const pointer = useRef<{ x: number; y: number } | null>(null);
   const hoverFrame = useRef(0);
   const width = build?.width ?? 64;
@@ -149,6 +167,11 @@ export function Viewer(props: Props) {
     s.onFailure = () => onFailed(true);
     s.onWalkLock = setLocked;
     s.onFly = setFlying;
+    s.onPlacement = (progress) => {
+      setPlacement(progress.active ? progress : null);
+      if (!progress.active) setPlacementPaused(false);
+      props.onPlacing?.(progress.active);
+    };
     scene.current = s;
     return () => s.dispose();
   }, []);
@@ -159,12 +182,20 @@ export function Viewer(props: Props) {
     onFailed(false);
     setDrawn(null);
     if (!build) {
+      previous.current = null;
       framedBuild.current = null;
       s.show(null);
       onCounts(null);
       return;
     }
-    s.show(build, step);
+    const was = previous.current;
+    const same = was?.id === build.id;
+    const animate =
+      mode === "view" &&
+      ((same && step > was.step) || (build.status === "building" && (!same || was.revision !== build.revision)));
+    if (animate && build.boxes.length) props.onPlacing?.(true);
+    s.show(build, step, { animate, reset: !same });
+    previous.current = { id: build.id, revision: build.revision, step };
     let current = true;
     s.ready.then(() => {
       if (current) {
@@ -180,7 +211,7 @@ export function Viewer(props: Props) {
     return () => {
       current = false;
     };
-  }, [build?.id, build?.boxes, build?.status, step]);
+  }, [build?.id, build?.boxes, step]);
 
   useEffect(() => {
     const s = scene.current;
@@ -214,6 +245,7 @@ export function Viewer(props: Props) {
   }, [build?.id, build?.status, build?.revision, last]);
 
   useEffect(() => scene.current?.setSpin(spin), [spin]);
+  useEffect(() => scene.current?.setPlacementSpeed(props.placementSpeed ?? 1), [props.placementSpeed]);
 
   useEffect(() => scene.current?.setTheme(theme), [theme]);
 
@@ -226,6 +258,7 @@ export function Viewer(props: Props) {
 
   useEffect(() => {
     scene.current?.setWalk(mode === "walk");
+    if (mode !== "view") scene.current?.skipPlacement();
     if (mode !== "walk") {
       setLocked(false);
       setFlying(false);
@@ -381,7 +414,13 @@ export function Viewer(props: Props) {
   const pointing = (editing && !!hover && !hover.ground) || (mode === "walk" && !locked);
 
   return (
-    <div className="viewer" data-revision={drawn ?? undefined}>
+    <div
+      className="viewer"
+      data-revision={drawn ?? undefined}
+      data-placing={placement ? "true" : undefined}
+      data-placed={placement?.placed}
+      data-placement-total={placement?.total}
+    >
       <div
         className="viewer-canvas"
         ref={container}
@@ -412,7 +451,38 @@ export function Viewer(props: Props) {
         <EditPanel label={label} onAction={act} onClose={() => setSelected(NONE)} />
       )}
       {mode === "walk" && shown && <WalkHud locked={locked} flying={flying} />}
-      {failed ? <RenderFailed /> : loading && <BlockLoader label={loading} />}
+      {placement && mode === "view" && (
+        <div className="placement-hud">
+          <span>
+            Layer {placement.layer}{" "}
+            <span className="muted">
+              · {placement.placed.toLocaleString()} / {placement.total.toLocaleString()}
+            </span>
+          </span>
+          <button
+            aria-label={placementPaused ? "Resume block placement" : "Pause block placement"}
+            onClick={() => {
+              scene.current?.pausePlacement(!placementPaused);
+              setPlacementPaused(!placementPaused);
+            }}
+          >
+            {placementPaused ? <PlayIcon size={12} weight="fill" /> : <PauseIcon size={12} weight="fill" />}
+          </button>
+          <button onClick={() => scene.current?.skipPlacement()}>Skip</button>
+        </div>
+      )}
+      {failed ? (
+        <RenderFailed />
+      ) : thinking ? (
+        <Thinking
+          activity={thinking}
+          name={build?.name}
+          request={build?.messages.find((message) => message.role === "user")?.text}
+          photos={build?.messages.filter((message) => message.role === "user").flatMap((message) => message.images)}
+        />
+      ) : (
+        loading && <BlockLoader label={loading} />
+      )}
     </div>
   );
 }

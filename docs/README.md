@@ -14,7 +14,7 @@ Setup, architecture, deploy and the toolkit. The [main README](../README.md) is 
 
 ## Features in detail
 
-- **Chat** to describe a build, with photos if you like, or start from one of the ideas in one click. The request shows at once and the build opens as soon as its session exists. Holo writes a Python build script on a hosted Workstation, and every revision it shares appears in 3D. The chat names the phase Holo is in (reading your idea, getting its blocks ready, placing blocks, checking every side); its steps fold under its next message.
+- **Chat** to describe a build, with photos if you like, or start from one of the ideas in one click. The request shows at once and the build opens as soon as its session exists. Holo writes a Python build script on a hosted Workstation, and every revision it shares appears in 3D. While the canvas is empty, the first four phases (reading, preparing blocks, references, naming) have pausable visuals: a subject sketch, real palette textures, photos as Holo opens or shares them, and the title once named. Selected photos also arrive through `share_files`; user attachments appear in the design board immediately. Building and checking stay in chat. New blocks reveal quickly in step and layer order, with a short settling motion; existing blocks stay in place. Block sounds are on by default: quiet synthesized pops with material-specific tones, limited to audible beats for dense fills. The speaker button mutes them and remembers the choice. Reduced motion shows the completed model immediately. The chat names the phase Holo is in; its steps fold under its next message.
 - **Every block is checked** against a ~750-block palette and clipped to the 128x128 site, 100 blocks tall.
 - **Replay** the steps, read each step's code and browse the blocks. **Share** holds the rest: publish, copy the link, a GIF of the build rising (made as the dialog opens, 8 to 30 seconds), a WorldEdit `.schem` or a PNG.
 - **Edit** by hand: choose **Edit**, click a block, Shift-drag a box around the blocks you see, then move, replace or delete them, or right-click a face to place the block in hand; undo, redo and reset. Edits are saved in this browser per build and revision, and publishing includes them. The **?** button or key lists every shortcut.
@@ -48,6 +48,8 @@ npm run dev                                                                     
 ```
 
 Needs Node 20+. HoloBlocks is open to H Company: everything sits behind a sign-in with an `@hcompany.ai` Google account on the H portal.
+
+With the dev server running, open `/dev/thinking.html` to try the thinking visuals without signing in. Change the request to try different subject sketches and material textures. **Replay photo arrivals** shows three credited sample references appearing one at a time; the naming stage reveals a sample title. Show the illustrative model and replay its placement at different speeds. Block sounds are on by default; the speaker button mutes them. This separate dev entry and its sample photos are not included in the production build.
 
 ## Accounts and the public library
 

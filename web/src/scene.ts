@@ -7,6 +7,8 @@ import type { MeshFailure, MeshReply, MeshRequest, MesherSetup } from "./mesher"
 import type { Theme } from "./theme";
 import { collision, type Hit, type Kind, packBoxes, raycast, type Vec3, VoxelWorld } from "./voxels";
 import { Solids, WALK, Walker } from "./walker";
+import { type PlacementPlan, placedCount, SETTLE_SECONDS } from "./placement";
+import { placementPop } from "./blockAudio";
 
 export type View = "iso" | "isoBack" | "front" | "top";
 
@@ -133,28 +135,82 @@ interface Model {
   outline: Float32Array;
   bounds: THREE.Box3 | null;
   counts: Map<string, number>;
+  placement?: { plan: PlacementPlan; time: { value: number }; materials: Materials };
 }
 
-function toModel({ meshes, outline, counts, bounds }: MeshReply, materials: Materials): Model {
+function placementMaterials(source: Materials, time: { value: number }): Materials {
+  return Object.fromEntries(
+    Object.entries(source).map(([kind, original]) => {
+      const material = original.clone();
+      material.customProgramCacheKey = () => "block-placement-v1";
+      material.onBeforeCompile = (shader) => {
+        shader.uniforms.placementTime = time;
+        shader.vertexShader = `uniform float placementTime; attribute vec2 placement; varying vec2 vPlacement;\n${shader.vertexShader}`;
+        shader.vertexShader = shader.vertexShader.replace(
+          "#include <begin_vertex>",
+          `
+        #include <begin_vertex>
+        vPlacement = placement;
+        if (placement.x >= 0.0) {
+          float landed = smoothstep(0.0, ${SETTLE_SECONDS}, max(0.0, placementTime - placement.x));
+          transformed.y += 0.18 * (1.0 - landed);
+        }
+      `,
+        );
+        shader.fragmentShader = `uniform float placementTime; varying vec2 vPlacement;\n${shader.fragmentShader}`;
+        shader.fragmentShader = shader.fragmentShader.replace(
+          "#include <clipping_planes_fragment>",
+          `
+        #include <clipping_planes_fragment>
+        if (vPlacement.x >= 0.0 && placementTime < vPlacement.x) discard;
+        if (vPlacement.y >= 0.0 && placementTime >= vPlacement.y) discard;
+      `,
+        );
+      };
+      return [kind, material];
+    }),
+  ) as Materials;
+}
+
+function toModel({ meshes, outline, counts, bounds, placement }: MeshReply, materials: Materials): Model {
   const group = new THREE.Group();
-  for (const { kind, positions, normals, uvs, colors, indices } of meshes) {
+  const time = { value: 0 };
+  const animated = placement && placementMaterials(materials, time);
+  for (const { kind, positions, normals, uvs, colors, indices, placement: timing, temporary } of meshes) {
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
     geometry.setAttribute("normal", new THREE.BufferAttribute(normals, 3));
     geometry.setAttribute("uv", new THREE.BufferAttribute(uvs, 2));
     geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
     geometry.setIndex(new THREE.BufferAttribute(indices, 1));
-    const mesh = new THREE.Mesh(geometry, materials[kind]);
+    if (timing) geometry.setAttribute("placement", new THREE.BufferAttribute(timing, 2));
+    const mesh = new THREE.Mesh(geometry, animated?.[kind] ?? materials[kind]);
+    mesh.userData = { kind, temporary };
     mesh.renderOrder = kind === "transparent" ? 2 : kind === "cutout" ? 1 : 0;
     mesh.receiveShadow = true;
-    mesh.castShadow = kind !== "transparent";
+    mesh.castShadow = kind !== "transparent" && !temporary;
     group.add(mesh);
   }
-  return { group, outline, bounds: bounds && new THREE.Box3().setFromArray(bounds), counts };
+  return {
+    group,
+    outline,
+    bounds: bounds && new THREE.Box3().setFromArray(bounds),
+    counts,
+    ...(placement && animated && { placement: { plan: placement, time, materials: animated } }),
+  };
 }
 
-const disposeModel = ({ group }: Pick<Model, "group">) =>
+const disposeModel = ({ group, placement }: Pick<Model, "group"> & Partial<Pick<Model, "placement">>) => {
   group.traverse((o) => o instanceof THREE.Mesh && o.geometry.dispose());
+  if (placement) for (const material of Object.values(placement.materials)) material.dispose();
+};
+
+export interface PlacementProgress {
+  active: boolean;
+  placed: number;
+  total: number;
+  layer: number;
+}
 
 /** A mesh a caller shows in its own shots, with how many blocks it holds. */
 export interface Staged {
@@ -232,6 +288,11 @@ export class BlockScene {
   private loaded: Promise<void>;
   /** Whether the site last asked for could not be meshed. */
   private failed = false;
+  private animate = false;
+  private shown: { site: Site; step: number } | null = null;
+  private placing: { model: Model; elapsed: number; lastReport: number; placed: number } | null = null;
+  private placementSpeed = 1;
+  private placementPaused = false;
   /** Set once the user orbits or zooms, so live framing stops fighting them. */
   userMoved = false;
   onCounts: ((counts: Map<string, number>) => void) | null = null;
@@ -239,6 +300,7 @@ export class BlockScene {
   /** Called when walking takes or releases the mouse pointer. */
   onWalkLock: ((locked: boolean) => void) | null = null;
   onFly: ((flying: boolean) => void) | null = null;
+  onPlacement: ((progress: PlacementProgress) => void) | null = null;
 
   constructor(
     private container: HTMLElement,
@@ -293,6 +355,7 @@ export class BlockScene {
     const tick = (time?: number) => {
       this.frame = requestAnimationFrame(tick);
       const seconds = Math.min(this.timer.update(time).getDelta(), 0.1);
+      this.advancePlacement(seconds);
       if (this.walking) this.walk(seconds);
       else if (this.controls.update()) this.dirty = true;
       if (!this.dirty) return;
@@ -308,6 +371,8 @@ export class BlockScene {
   }
 
   dispose() {
+    if (this.model) disposeModel(this.model);
+    if (this.materials) for (const material of Object.values(this.materials)) material.dispose();
     this.worker?.terminate();
     cancelAnimationFrame(this.frame);
     this.resizeObserver.disconnect();
@@ -328,7 +393,10 @@ export class BlockScene {
   }
 
   /** Show this site's boxes up to `step`. */
-  show(site: Site | null, step = Infinity) {
+  show(site: Site | null, step = Infinity, options: { animate?: boolean; reset?: boolean } = {}) {
+    this.skipPlacement();
+    if (options.reset) this.shown = null;
+    this.animate = !!options.animate && !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     this.site = site;
     this.step = step;
     this.world = null;
@@ -344,12 +412,12 @@ export class BlockScene {
 
   /** Meshes the latest site and step, one mesh in flight at a time, and shows it unless a newer one was asked for meanwhile. */
   private async request(): Promise<void> {
-    const { site, step, version, materials } = this;
+    const { site, step, version, materials, animate, shown } = this;
     if (!materials) return;
     let model: Model | null = null;
     if (site) {
       this.meshing = true;
-      model = await this.mesh(site, step, materials).catch(logged);
+      model = await this.mesh(site, step, materials, animate ? shown : undefined, animate).catch(logged);
       this.meshing = false;
       if (version !== this.version) {
         if (model) disposeModel(model);
@@ -362,21 +430,113 @@ export class BlockScene {
     if (old) disposeModel(old);
     this.failed = !!site && !model;
     if (model) this.onCounts?.(model.counts);
+    this.shown = site && model ? { site, step } : null;
+    if (model?.placement) {
+      this.placing = { model, elapsed: 0, lastReport: -Infinity, placed: 0 };
+      this.placementPaused = false;
+      this.renderer.shadowMap.enabled = false;
+      this.reportPlacement(true, 0);
+    } else this.onPlacement?.({ active: false, placed: 0, total: 0, layer: 0 });
     if (this.failed) this.onFailure?.();
     this.settle?.();
     this.settle = null;
   }
 
-  private mesh(site: Site, step: number, materials: Materials): Promise<Model> {
+  private mesh(
+    site: Site,
+    step: number,
+    materials: Materials,
+    previous?: { site: Site; step: number } | null,
+    animate = false,
+  ): Promise<Model> {
     const worker = this.worker;
     if (!worker) return Promise.reject(new Error("The mesher is down"));
     const id = ++this.lastJob;
     const { blocks, boxes } = packBoxes(site.boxes, step);
     const request: MeshRequest = { id, width: site.width, height: site.height, depth: site.depth, blocks, boxes };
-    worker.postMessage(request, [boxes.buffer]);
+    const transfer: ArrayBuffer[] = [boxes.buffer];
+    if (animate) {
+      request.steps = Int32Array.from(
+        site.boxes.filter((box) => box.step <= step),
+        (box) => box.step,
+      );
+      transfer.push(request.steps.buffer);
+      if (previous) {
+        request.previous = {
+          width: previous.site.width,
+          height: previous.site.height,
+          depth: previous.site.depth,
+          ...packBoxes(previous.site.boxes, previous.step),
+        };
+        transfer.push(request.previous.boxes.buffer);
+      }
+    }
+    worker.postMessage(request, transfer);
     return new Promise<MeshReply>((resolve, reject) => this.jobs.set(id, { resolve, reject })).then((reply) =>
       toModel(reply, materials),
     );
+  }
+
+  setPlacementSpeed(speed: number) {
+    this.placementSpeed = speed;
+  }
+  pausePlacement(paused: boolean) {
+    this.placementPaused = paused;
+  }
+
+  private reportPlacement(active: boolean, placed: number) {
+    const plan = this.placing?.model.placement?.plan;
+    if (!plan || !this.site) return;
+    const cell = plan.cells[Math.max(0, placed - 1)] ?? 0;
+    this.onPlacement?.({
+      active,
+      placed,
+      total: plan.cells.length,
+      layer: Math.floor(cell / (this.site.width * this.site.depth)) + 1,
+    });
+  }
+
+  private advancePlacement(seconds: number) {
+    const current = this.placing;
+    const animation = current?.model.placement;
+    if (!current || !animation) return;
+    if (document.hidden || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      this.skipPlacement();
+      return;
+    }
+    if (this.placementPaused) return;
+    current.elapsed += seconds * this.placementSpeed;
+    animation.time.value = current.elapsed;
+    const placed = placedCount(animation.plan, current.elapsed);
+    if (placed > current.placed) placementPop(animation.plan.names[animation.plan.blockIds[placed - 1]]);
+    current.placed = placed;
+    if (current.elapsed - current.lastReport >= 0.05) {
+      current.lastReport = current.elapsed;
+      this.reportPlacement(true, placed);
+    }
+    this.dirty = true;
+    if (current.elapsed >= animation.plan.duration) this.skipPlacement();
+  }
+
+  /** Finish the visual reveal without changing the canonical model, step, or block counts. */
+  skipPlacement() {
+    const current = this.placing;
+    const animation = current?.model.placement;
+    if (!current || !animation || !this.materials) return;
+    this.reportPlacement(false, animation.plan.cells.length);
+    for (const child of [...current.model.group.children]) {
+      if (!(child instanceof THREE.Mesh)) continue;
+      if (child.userData.temporary) {
+        current.model.group.remove(child);
+        child.geometry.dispose();
+      } else child.material = this.materials[child.userData.kind as Kind];
+    }
+    for (const material of Object.values(animation.materials)) material.dispose();
+    delete current.model.placement;
+    this.placing = null;
+    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.needsUpdate = true;
+    this.dirty = true;
   }
 
   private spawn() {
@@ -559,6 +719,12 @@ export class BlockScene {
       if (!full) return null;
     }
     const shown = this.model;
+    const animation = shown?.placement;
+    const placementTime = animation?.time.value;
+    if (animation) animation.time.value = 1e9;
+    const shadows = this.renderer.shadowMap.enabled;
+    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.needsUpdate = true;
     if (full) this.put(full);
     this.overlay.visible = false;
     const { position, quaternion, near, far, fov } = this.camera;
@@ -621,12 +787,20 @@ export class BlockScene {
     this.controls.target.copy(saved.target);
     this.controls.update();
     if (this.walking) this.camera.quaternion.copy(saved.quaternion);
+    if (animation) animation.time.value = placementTime!;
+    this.renderer.shadowMap.enabled = shadows;
     this.renderer.render(this.scene, this.camera);
     return new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
   }
 
   /** What the viewer shows now, at `scale` times its pixel size, without the edit marks. */
   image(scale = 2): Promise<Blob | null> {
+    const animation = this.model?.placement;
+    const time = animation?.time.value;
+    if (animation) animation.time.value = 1e9;
+    const shadows = this.renderer.shadowMap.enabled;
+    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.needsUpdate = true;
     const ratio = this.renderer.getPixelRatio();
     this.renderer.setPixelRatio(ratio * scale);
     this.overlay.visible = false;
@@ -637,6 +811,8 @@ export class BlockScene {
     canvas.width = source.width;
     canvas.height = source.height;
     canvas.getContext("2d")!.drawImage(source, 0, 0);
+    if (animation) animation.time.value = time!;
+    this.renderer.shadowMap.enabled = shadows;
     this.renderer.setPixelRatio(ratio);
     this.resize();
     return new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
