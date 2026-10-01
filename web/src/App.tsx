@@ -70,6 +70,7 @@ export default function App({ account }: { account: Account }) {
   const [step, setStep] = useState(Infinity);
   const [following, setFollowing] = useState(true);
   const [playing, setPlaying] = useState(false);
+  const [placing, setPlacing] = useState(false);
   const [speed, setSpeed] = useState(1);
   const [counts, setCounts] = useState<Map<string, number> | null>(null);
   const [blockCount, setBlockCount] = useState(0);
@@ -177,7 +178,7 @@ export default function App({ account }: { account: Account }) {
   }, [following, last]);
 
   useEffect(() => {
-    if (!playing) return;
+    if (!playing || placing) return;
     if (step >= last) {
       setPlaying(false);
       setFollowing(true);
@@ -185,7 +186,7 @@ export default function App({ account }: { account: Account }) {
     }
     const timer = setTimeout(() => setStep((s) => s + 1), STEP_MS / speed);
     return () => clearTimeout(timer);
-  }, [playing, speed, step, last]);
+  }, [playing, placing, speed, step, last]);
 
   const scrub = (s: number) => {
     setPlaying(false);
@@ -299,17 +300,7 @@ export default function App({ account }: { account: Account }) {
   const opening = `Opening ${heading?.name ?? "the build"}`;
   /** The open build, once it is more than a request on its way. */
   const actionable = drafted ? null : build;
-  const loading = error
-    ? null
-    : !build
-      ? buildId && opening
-      : !built
-        ? build.status === "building"
-          ? "Holo is sorting through its blocks, and the first ones should appear in a few minutes."
-          : null
-        : counts
-          ? null
-          : opening;
+  const loading = error ? null : !build ? buildId && opening : !built ? null : counts ? null : opening;
 
   return (
     <div className={home ? "app home" : "app"}>
@@ -465,6 +456,9 @@ export default function App({ account }: { account: Account }) {
                 onCounts={onCounts}
                 scene={scene}
                 loading={loading}
+                thinking={!error && !built && build?.status === "building" ? activity : null}
+                placementSpeed={speed}
+                onPlacing={setPlacing}
                 failed={renderFailed}
                 onFailed={setRenderFailed}
                 mode={mode}

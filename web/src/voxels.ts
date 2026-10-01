@@ -1,6 +1,7 @@
 import { type BlockInfo, type Box, type Palette, type Tex, texKey } from "./model";
 import type { UV } from "./atlas";
 import type { Solid } from "./walker";
+import { type PlacementPlan, SETTLE_SECONDS } from "./placement";
 
 export interface State {
   name: string;
@@ -106,7 +107,7 @@ export class VoxelWorld {
 /** Boxes as block names and [x0, y0, z0, x1, y1, z1, block index] runs, cheap to hand to a worker. */
 export interface PackedBoxes {
   blocks: string[];
-  boxes: Int32Array;
+  boxes: Int32Array<ArrayBuffer>;
 }
 
 export function packBoxes(boxes: Box[], maxStep = Infinity): PackedBoxes {
@@ -364,9 +365,21 @@ class Buffers {
   indices = new Uint32Array((6 * INITIAL_VERTICES) / 4);
   vertices = 0;
   quads = 0;
+  placement: Float32Array<ArrayBuffer> | undefined;
+
+  constructor(animated = false) {
+    if (animated) this.placement = new Float32Array(2 * INITIAL_VERTICES);
+  }
 
   /** Appends a quad from its corners `p` and texture coordinates `uv`, flattened, facing `n`, with corner brightness `b`. */
-  quad(p: ArrayLike<number>, n: ArrayLike<number>, uv: ArrayLike<number>, b: ArrayLike<number>) {
+  quad(
+    p: ArrayLike<number>,
+    n: ArrayLike<number>,
+    uv: ArrayLike<number>,
+    b: ArrayLike<number>,
+    start = -1,
+    until = -1,
+  ) {
     if (3 * (this.vertices + 4) > this.positions.length) this.grow();
     const base = this.vertices;
     for (let i = 0; i < 4; i++) {
@@ -378,6 +391,10 @@ class Buffers {
       }
       this.uvs[2 * v] = uv[2 * i];
       this.uvs[2 * v + 1] = uv[2 * i + 1];
+      if (this.placement) {
+        this.placement[2 * v] = start;
+        this.placement[2 * v + 1] = until;
+      }
     }
     const q = 6 * this.quads;
     this.indices[q] = this.indices[q + 3] = base;
@@ -400,6 +417,7 @@ class Buffers {
     this.uvs = grown(this.uvs, float);
     this.colors = grown(this.colors, float);
     this.indices = grown(this.indices, (n) => new Uint32Array(n));
+    if (this.placement) this.placement = grown(this.placement, float);
   }
 
   data(kind: Kind): MeshData {
@@ -411,6 +429,7 @@ class Buffers {
       uvs: this.uvs.slice(0, 2 * n),
       colors: this.colors.slice(0, 3 * n),
       indices: this.indices.slice(0, 6 * this.quads),
+      ...(this.placement && { placement: this.placement.slice(0, 2 * n) }),
     };
   }
 }
@@ -425,6 +444,9 @@ export interface MeshData {
   uvs: Float32Array<ArrayBuffer>;
   colors: Float32Array<ArrayBuffer>;
   indices: Uint32Array<ArrayBuffer>;
+  placement?: Float32Array<ArrayBuffer>;
+  /** Faces exposed only while their neighbouring block is on its way. */
+  temporary?: boolean;
 }
 
 const CROSS_NORMALS = [
@@ -433,8 +455,12 @@ const CROSS_NORMALS = [
 ];
 
 /** One mesh per material kind for everything in the world, textured from the atlas `uvs`. */
-export function meshWorld(world: VoxelWorld, uvs: Map<string, UV>): MeshData[] {
-  const buffers = { opaque: new Buffers(), cutout: new Buffers(), transparent: new Buffers() };
+export function meshWorld(world: VoxelWorld, uvs: Map<string, UV>, plan?: PlacementPlan): MeshData[] {
+  const buffers = { opaque: new Buffers(!!plan), cutout: new Buffers(!!plan), transparent: new Buffers(!!plan) };
+  const caps = { opaque: new Buffers(!!plan), cutout: new Buffers(!!plan), transparent: new Buffers(!!plan) };
+  let start = -1,
+    until = -1,
+    capQuads = 0;
   const { width, height, depth, ids, states } = world;
   const firstTile = uvs.values().next().value!;
   const opaque = Uint8Array.from(states, (s) => (isFullOpaque(s) ? 1 : 0));
@@ -502,16 +528,16 @@ export function meshWorld(world: VoxelWorld, uvs: Map<string, UV>): MeshData[] {
         brightness[i] = shade * AO_LEVELS[s1 && s2 ? 0 : 3 - (s1 + s2 + c)];
       }
     }
-    buffer.quad(corners, n, uv, brightness);
+    buffer.quad(corners, n, uv, brightness, start, until);
   };
 
   const cross = (buffer: Buffers, tile: UV, x: number, y: number, z: number) => {
     uv.set([tile[0], tile[1], tile[2], tile[1], tile[2], tile[3], tile[0], tile[3]]);
     brightness.fill(0.9);
     corners.set([x, y, z, x + 1, y, z + 1, x + 1, y + 1, z + 1, x, y + 1, z]);
-    buffer.quad(corners, CROSS_NORMALS[0], uv, brightness);
+    buffer.quad(corners, CROSS_NORMALS[0], uv, brightness, start);
     corners.set([x + 1, y, z, x, y, z + 1, x, y + 1, z + 1, x + 1, y + 1, z]);
-    buffer.quad(corners, CROSS_NORMALS[1], uv, brightness);
+    buffer.quad(corners, CROSS_NORMALS[1], uv, brightness, start);
   };
 
   for (let y = 0; y < height; y++)
@@ -520,7 +546,10 @@ export function meshWorld(world: VoxelWorld, uvs: Map<string, UV>): MeshData[] {
         const id = ids[world.at(x, y, z)];
         const s = states[id];
         if (s === AIR) continue;
-        const buffer = buffers[s.info.transparent ? "transparent" : s.info.cutout ? "cutout" : "opaque"];
+        start = plan?.starts[world.at(x, y, z)] ?? -1;
+        until = -1;
+        const kind = s.info.transparent ? "transparent" : s.info.cutout ? "cutout" : "opaque";
+        const buffer = buffers[kind];
         const shape = s.info.shape ?? "cube";
         if (shape === "cross" || shape === "tall_cross") {
           cross(buffer, tiles[id][4], x, y, z);
@@ -540,14 +569,32 @@ export function meshWorld(world: VoxelWorld, uvs: Map<string, UV>): MeshData[] {
               nz = z + n[2];
             const neighbour = inside(nx, ny, nz) ? ids[world.at(nx, ny, nz)] : 0;
             const flush = box[FACE_EDGE[dir]] === (dir % 2 === 0 ? 16 : 0);
-            if (flush && (opaque[neighbour] || (mergesSame && states[neighbour].name === s.name))) continue;
+            if (flush && (opaque[neighbour] || (mergesSame && states[neighbour].name === s.name))) {
+              const next = plan && inside(nx, ny, nz) ? plan.starts[world.at(nx, ny, nz)] : -1;
+              // Bound transient geometry for large solid fills; all exposed blocks retain their own timing.
+              if (
+                next !== undefined &&
+                next >= 0 &&
+                next > start &&
+                capQuads < 250_000 &&
+                (plan!.cells.length < 80_000 || dir === 2)
+              ) {
+                until = next + SETTLE_SECONDS;
+                emit(caps[kind], s, tiles[id][dir], box, dir, false);
+                capQuads++;
+                until = -1;
+              }
+              continue;
+            }
             emit(buffer, s, tiles[id][dir], box, dir as Dir, full);
           }
       }
 
-  return (["opaque", "cutout", "transparent"] as const)
-    .filter((kind) => buffers[kind].quads)
-    .map((kind) => buffers[kind].data(kind));
+  const kinds = ["opaque", "cutout", "transparent"] as const;
+  return [
+    ...kinds.filter((kind) => buffers[kind].quads).map((kind) => buffers[kind].data(kind)),
+    ...kinds.filter((kind) => caps[kind].quads).map((kind) => ({ ...caps[kind].data(kind), temporary: true })),
+  ];
 }
 
 /** Of the meshes' vertices, those ending a run along x, y and z: they include every corner of the convex hull, so any view that fits them fits the model. */

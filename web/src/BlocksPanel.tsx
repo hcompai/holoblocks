@@ -15,21 +15,31 @@ const swatchTex = (tex: Palette[string]["tex"]): Tex =>
 const texName = (tex: Tex) => (typeof tex === "string" ? tex : tex[0]);
 
 /** A block's texture, from its side else its top, as a small square. */
-export function BlockSwatch({ sheet, info }: { sheet: TextureSheet; info: BlockInfo | undefined }) {
+export function BlockSwatch({
+  sheet,
+  info,
+  size = SWATCH,
+}: {
+  sheet: TextureSheet;
+  info: BlockInfo | undefined;
+  size?: number;
+}) {
   const tex = info ? texName(swatchTex(info.tex)) : "";
-  return tex ? <Swatch sheet={sheet} name={tex} /> : null;
+  return tex ? <Swatch sheet={sheet} name={tex} size={size} /> : null;
 }
 
-function Swatch({ sheet, name }: { sheet: TextureSheet; name: string }) {
-  const scale = SWATCH / sheet.tile;
+function Swatch({ sheet, name, size }: { sheet: TextureSheet; name: string; size: number }) {
+  const scale = size / sheet.tile;
   const [x, y] = sheetOrigin(sheet, name);
   return (
     <span
       className="swatch"
       style={{
+        width: size,
+        height: size,
         backgroundImage: `url(${TEXTURE_SHEET_URL})`,
         backgroundPosition: `${-x * scale}px ${-y * scale}px`,
-        backgroundSize: `${sheet.columns * SWATCH}px auto`,
+        backgroundSize: `${sheet.columns * size}px auto`,
       }}
     />
   );

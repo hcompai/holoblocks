@@ -15,6 +15,7 @@ import {
   type Transcript,
 } from "./session";
 import { label } from "./suggestions";
+import { H } from "./hosts";
 
 const WAIT_S = 20;
 const RETRY_MS = 3000;
@@ -79,26 +80,29 @@ function follow(id: string, signal: AbortSignal, notify: Listener, displayed: ()
   const seen = new Set<string>();
   const pictures = new Map<string, string | null>();
 
+  const stored = (src: string) => src.startsWith(`${H.agents}/`);
+  const shownPicture = (src: string) => (stored(src) ? (pictures.get(src) ?? null) : src);
   const shown = (messages: Message[]) =>
     messages.map((m) => ({
       ...m,
-      images: m.images.flatMap((src) => (src.startsWith("data:") ? [src] : (pictures.get(src) ?? []))),
+      images: m.images.flatMap((src) => shownPicture(src) ?? []),
     }));
 
   const fetchPictures = () => {
     if (!displayed()) return;
-    for (const m of transcript.messages)
-      for (const src of m.images) {
-        if (src.startsWith("data:") || pictures.has(src)) continue;
-        pictures.set(src, null);
-        download(src, signal).then(
-          (blob) => {
-            pictures.set(src, URL.createObjectURL(blob));
-            publish();
-          },
-          () => pictures.delete(src),
-        );
-      }
+    const sources = [...transcript.messages.flatMap((m) => m.images), ...transcript.references.map((r) => r.src)];
+    for (const src of sources) {
+      if (!stored(src) || pictures.has(src)) continue;
+      pictures.set(src, null);
+      download(src, signal).then(
+        (blob) => {
+          if (signal.aborted) return;
+          pictures.set(src, URL.createObjectURL(blob));
+          publish();
+        },
+        () => pictures.delete(src),
+      );
+    }
   };
 
   const see = async (call: HaiAgents.ToolRequest, shared: number) => {
@@ -145,7 +149,16 @@ function follow(id: string, signal: AbortSignal, notify: Listener, displayed: ()
         open: session === "idle" && !transcript.crashed,
         failure: transcript.error ?? failure,
       },
-      activity: state === "building" ? activity(transcript) : null,
+      activity:
+        state === "building"
+          ? {
+              ...activity(transcript),
+              references: transcript.references.flatMap((reference) => {
+                const src = shownPicture(reference.src);
+                return src ? [{ ...reference, src }] : [];
+              }),
+            }
+          : null,
     });
     if (transcript.state !== "awaiting_tool_results") return;
     const look = transcript.looks.find((l) => l.shared <= loaded);
