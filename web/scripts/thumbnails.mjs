@@ -24,6 +24,19 @@ try {
     await new Promise((resolve) => setTimeout(resolve, 200));
   }
   const page = await browser.newPage({ viewport: { width: 1000, height: 760 } });
+  const account = {
+    user: { id: "thumbnails", email: "thumbnails@hcompany.ai", name: "Thumbnails" },
+    key: "",
+    keyId: "",
+    expires: Date.now() / 1000 + 3600,
+    pass: "",
+  };
+  await page.addInitScript((a) => localStorage.setItem("blockyard.account", JSON.stringify(a)), account);
+  // Offline: a showcase needs nothing beyond the site, and a refused key would sign the page out.
+  await page.route(
+    (url) => url.origin !== URL,
+    (route) => route.abort(),
+  );
   for (const folder of FOLDERS) mkdirSync(folder, { recursive: true });
   for (const { id, revision } of JSON.parse(readFileSync("public/gallery/builds.json", "utf8"))) {
     await page.goto(`${URL}/?showcase=${id}`);

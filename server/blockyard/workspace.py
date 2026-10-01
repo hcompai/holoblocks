@@ -21,12 +21,12 @@ def write(path: Path, data: str | bytes) -> None:
 
 
 def bundle(build: Build) -> dict:
-    """The build as the browser shows it; boxes packed as one flat list of x0 y0 z0 x1 y1 z1 block step."""
+    """The build as the browser shows it, with the script that rebuilds it; boxes packed as x0 y0 z0 x1 y1 z1 block step."""
     blocks: dict[str, int] = {}
     boxes: list[int] = []
     for b in build.boxes:
         boxes += [b.x0, b.y0, b.z0, b.x1, b.y1, b.z1, blocks.setdefault(b.block, len(blocks)), b.step]
-    return build.model_dump(include={"name", "width", "depth", "height", "updated"}) | {
+    return build.model_dump(include={"name", "width", "depth", "height", "updated", "script"}) | {
         "revision": build.revision,
         "steps": [s.model_dump(include={"index", "title", "code"}) for s in build.steps],
         "blocks": list(blocks),

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { type Palette, type Tex, TEXTURE_SHEET_URL, textureSheet, type TextureSheet } from "./model";
+import { type BlockInfo, type Palette, type Tex, TEXTURE_SHEET_URL, textureSheet, type TextureSheet } from "./model";
 import { sheetOrigin } from "./atlas";
 
 interface Props {
@@ -13,6 +13,12 @@ const swatchTex = (tex: Palette[string]["tex"]): Tex =>
   typeof tex === "string" || Array.isArray(tex) ? tex : (tex.side ?? tex.top ?? tex.bottom ?? "");
 
 const texName = (tex: Tex) => (typeof tex === "string" ? tex : tex[0]);
+
+/** A block's texture, from its side else its top, as a small square. */
+export function BlockSwatch({ sheet, info }: { sheet: TextureSheet; info: BlockInfo | undefined }) {
+  const tex = info ? texName(swatchTex(info.tex)) : "";
+  return tex ? <Swatch sheet={sheet} name={tex} /> : null;
+}
 
 function Swatch({ sheet, name }: { sheet: TextureSheet; name: string }) {
   const scale = SWATCH / sheet.tile;
@@ -55,20 +61,16 @@ export function BlocksPanel({ counts: byName, palette }: Props) {
           </tr>
         </thead>
         <tbody>
-          {counts.map(([name, n]) => {
-            const info = blocks[name];
-            const tex = info ? texName(swatchTex(info.tex)) : "";
-            return (
-              <tr key={name}>
-                <td className="qty">{n.toLocaleString()}×</td>
-                <td>
-                  {tex && sheet && <Swatch sheet={sheet} name={tex} />}
-                  {name.replaceAll("_", " ")}
-                </td>
-                <td className="id">{name}</td>
-              </tr>
-            );
-          })}
+          {counts.map(([name, n]) => (
+            <tr key={name}>
+              <td className="qty">{n.toLocaleString()}×</td>
+              <td>
+                {sheet && <BlockSwatch sheet={sheet} info={blocks[name]} />}
+                {name.replaceAll("_", " ")}
+              </td>
+              <td className="id">{name}</td>
+            </tr>
+          ))}
         </tbody>
       </table>
     </div>

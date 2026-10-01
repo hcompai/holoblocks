@@ -95,7 +95,6 @@ class Workbench:
         out = execute(code, (build.width, build.height, build.depth))
         printed = f"\nThe script printed:\n{out['printed']}" if out.get("printed") else ""
         if "error" in out:
-            self.workspace.save(build.model_copy(update={"script": code}))
             return Result(f"The script stopped, so the model did not change.\n{out['error']}{printed}", problems=1)
         steps = out["steps"]
         keys = [_digest(s) for s in steps]

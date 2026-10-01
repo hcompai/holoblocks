@@ -3,7 +3,7 @@ import json
 
 import pytest
 
-from blockyard import blocks, gallery, script, showcases
+from blockyard import blocks, client, gallery, script, showcases
 from blockyard.model import Build
 from blockyard.showcases import SHOWCASES, Showcase, told
 from blockyard.workbench import Workbench
@@ -96,6 +96,26 @@ def test_each_run_writes_the_model_the_browser_shows_and_keeps_unchanged_steps(t
         stopped.problems == 1
         and reopened.build.revision == Build.model_validate_json((tmp_path / BUILD).read_text()).revision
     )
+
+
+def test_the_shared_model_carries_the_script_that_rebuilds_it_exactly(tmp_path):
+    bench = Workbench(Workspace(Build(width=16, depth=16, height=16), tmp_path))
+    bench.run_script(HUT)
+    bench.run_script("fill(")
+    model = json.loads(gzip.decompress((tmp_path / MODEL).read_bytes()))
+    assert model["script"] == HUT
+    remixed = Workbench(Workspace(Build(width=16, depth=16, height=16)))
+    remixed.run_script(model["script"])
+    assert remixed.build.revision == model["revision"]
+
+
+def test_each_run_reports_the_session_clock_and_says_to_finish_late(tmp_path, monkeypatch):
+    assert client.tick(tmp_path) == ""
+    (tmp_path / client.CLOCK).write_text(json.dumps({"started": 1000, "minutes": 180}))
+    monkeypatch.setattr(client.time, "time", lambda: 1000 + 60 * 41)
+    assert client.tick(tmp_path) == "Run 1 · 41 of 180 min used\n"
+    monkeypatch.setattr(client.time, "time", lambda: 1000 + 60 * 150)
+    assert client.tick(tmp_path).startswith("Run 2 · 150 of 180 min used: start nothing new")
 
 
 LAND = """

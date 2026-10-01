@@ -3,11 +3,30 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
+import time
 from pathlib import Path
 
 from blockyard.workbench import Workbench
-from blockyard.workspace import Workspace
+from blockyard.workspace import Workspace, write
+
+CLOCK = ".blockyard-clock"
+"""Written by setup: when it started and the session's time limit in minutes."""
+FINISH_AT = 0.8
+
+
+def tick(folder: Path) -> str:
+    """Count this run on the session clock and say how much time is used, if setup started one."""
+    path = folder / CLOCK
+    if not path.exists():
+        return ""
+    clock = json.loads(path.read_text())
+    clock["runs"] = clock.get("runs", 0) + 1
+    write(path, json.dumps(clock))
+    used, limit = round((time.time() - clock["started"]) / 60), clock["minutes"]
+    late = ": start nothing new; finish the change in hand and answer" if used >= FINISH_AT * limit else ""
+    return f"Run {clock['runs']} · {used} of {limit} min used{late}\n"
 
 
 def main() -> None:
@@ -23,6 +42,7 @@ def main() -> None:
     bench = Workbench(Workspace.open(Path.cwd()))
     if args.tool == "run":
         out = bench.run_script(Path(args.script).read_text())
+        out.text = tick(Path.cwd()) + out.text
     elif args.tool == "find":
         out = bench.find_blocks(args.query)
     else:

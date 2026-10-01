@@ -1,29 +1,48 @@
 import { isSettledSessionStatus, type HaiAgents } from "hai-agents";
-import type { Message, Status } from "./model";
+import { doing } from "./activity";
+import type { Message, Status, Work } from "./model";
 
+export const AGENT = "blockyard";
 export const MODEL_FILE = "model.json.gz";
+
+/** JSON from a file, gunzipped when it is gzipped. */
+export async function readJson<T>(blob: Blob): Promise<T> {
+  const head = new Uint8Array(await blob.slice(0, 2).arrayBuffer());
+  const gzipped = head[0] === 0x1f && head[1] === 0x8b;
+  const stream = gzipped ? blob.stream().pipeThrough(new DecompressionStream("gzip")) : blob.stream();
+  return JSON.parse(await new Response(stream).text());
+}
 /** The builder's side of a session, read from its events in order. */
 export interface Transcript {
   events: number;
   messages: Message[];
-  /** Reasoning of the latest step while the builder works. */
-  thinking: string;
+  /** The builder's work since its last message. */
+  work: Work | null;
+  /** Tool calls of the latest step still waiting for their results. */
+  running: HaiAgents.ToolRequest[];
+  /** When `running` last changed, or the builder last heard from the user, in ms since the epoch. */
+  since: number;
   state: "running" | "idle" | "awaiting_tool_results";
   /** URL of the model the builder shared last, and how many models it shared up to it. */
   model: { url: string; shared: number } | null;
   /** `look` calls awaiting a render, with how many models were shared when each was made. */
   looks: { call: HaiAgents.ToolRequest; shared: number }[];
   error: string | null;
+  /** The session crashed: its workstation is gone, so every later message crashes too. */
+  crashed: boolean;
 }
 
 export const EMPTY_TRANSCRIPT: Transcript = {
   events: 0,
   messages: [],
-  thinking: "",
+  work: null,
+  running: [],
+  since: 0,
   state: "running",
   model: null,
   looks: [],
   error: null,
+  crashed: false,
 };
 
 /** An image in event content as a URL: inline ones as data URLs, stored ones as platform URLs that need the API key. */
@@ -44,6 +63,8 @@ function render(result: unknown): Message | null {
   return Array.isArray(result) ? { role: "tool", text: text(result), images: images(result) } : null;
 }
 
+const STOPPED = "The building service stopped unexpectedly. You can continue below.";
+
 function step(t: Transcript, event: HaiAgents.SessionEvent): Transcript {
   switch (event.type) {
     case "ActiveStateChangeEvent": {
@@ -51,7 +72,7 @@ function step(t: Transcript, event: HaiAgents.SessionEvent): Transcript {
       const pending = (pendingToolCalls ?? []).filter((c) => c.toolName === "look");
       const shared = t.model?.shared ?? 0;
       const looks = pending.map((call) => t.looks.find((l) => l.call.id === call.id) ?? { call, shared });
-      return { ...t, state, looks, thinking: state === "running" ? t.thinking : "" };
+      return { ...t, state, looks, running: state === "idle" ? [] : t.running };
     }
     case "AttachmentEvent": {
       const { origin, name, url } = (event as HaiAgents.SessionEventZero.AttachmentEvent).data;
@@ -66,32 +87,83 @@ function step(t: Transcript, event: HaiAgents.SessionEvent): Transcript {
       return t;
   }
   const data = (event as HaiAgents.SessionEventZero.AgentEvent).data;
+  const at = new Date(event.timestamp).getTime();
   const say = (message: Message) => ({ ...t, messages: [...t.messages, message] });
+  /** Holo's message, carrying the work that led to it. */
+  const fresh: Work = { start: at, end: at, steps: [] };
+  const speak = (from: Transcript, text: string): Transcript => ({
+    ...from,
+    messages: [
+      ...from.messages,
+      { role: "assistant", text, images: [], ...(from.work?.steps.length ? { work: from.work } : {}) },
+    ],
+    work: fresh,
+  });
+  const settle = (call: HaiAgents.ToolRequest) => {
+    const i = t.running.findIndex((c) => (call.id ? c.id === call.id : c.toolName === call.toolName));
+    return i < 0 ? t : { ...t, running: t.running.filter((_, j) => j !== i), since: at };
+  };
   switch (data.kind) {
     case "message_event": {
       if (data.callerId !== "user") return t;
-      return say({ role: "user", text: text(data.content ?? []), images: images(data.content ?? []) });
+      const said = say({ role: "user", text: text(data.content ?? []), images: images(data.content ?? []) });
+      return { ...said, since: at, work: t.work?.steps.length ? t.work : fresh };
     }
     case "policy_event": {
-      const thinking = data.reasoningContent ?? "";
+      const calls = (data.toolReqs ?? []).filter((c) => c.toolName !== "answer");
+      const reasoning = data.reasoningContent?.trim() ?? "";
+      const previous = t.work ?? fresh;
+      const steps =
+        reasoning || calls.length ? [...previous.steps, { reasoning, actions: calls.map(doing) }] : previous.steps;
+      const next = { ...t, running: calls, since: at, work: { ...previous, end: at, steps } };
       const content = data.content?.trim();
-      return content ? { ...say({ role: "assistant", text: content, images: [] }), thinking } : { ...t, thinking };
+      return content ? speak(next, content) : next;
     }
     case "tool_result": {
+      const settled = settle(data.toolReq);
       const looked = data.toolReq.toolName === "look" ? render(data.result) : null;
-      return looked ? say(looked) : t;
+      return looked ? { ...settled, messages: [...settled.messages, looked] } : settled;
     }
     case "answer_event": {
-      const answer = typeof data.answer === "string" ? data.answer : JSON.stringify(data.answer);
-      return say({ role: "assistant", text: answer, images: [] });
+      const answer = (typeof data.answer === "string" ? data.answer : JSON.stringify(data.answer)).trim();
+      const last = t.messages.at(-1);
+      // A step with a message but no tool call is refused, and Holo often answers with that same message.
+      if (last?.role !== "assistant" || last.text !== answer) return speak(t, answer);
+      const extra = t.work?.steps ?? [];
+      if (!extra.length) return { ...t, work: fresh };
+      const work = {
+        start: last.work?.start ?? t.work!.start,
+        end: at,
+        steps: [...(last.work?.steps ?? []), ...extra],
+      };
+      return { ...t, messages: [...t.messages.slice(0, -1), { ...last, work }], work: fresh };
     }
-    case "error_event":
-      if (data.origin === "crash") return say({ role: "system", text: `The build stopped: ${data.error}`, images: [] });
-      return data.toolReq?.toolName === "look" ? say({ role: "system", text: data.error, images: [] }) : t;
+    case "error_event": {
+      if (data.origin === "crash")
+        return { ...say({ role: "system", text: STOPPED, images: [], error: true }), error: data.error, crashed: true };
+      const settled = data.toolReq ? settle(data.toolReq) : t;
+      if (data.toolReq?.toolName !== "look") return settled;
+      return { ...settled, messages: [...settled.messages, { role: "system", text: data.error, images: [] }] };
+    }
     default:
       return t;
   }
 }
+
+/** What the builder is doing now, while it builds. */
+export interface Activity {
+  label: string;
+  /** In ms since the epoch. */
+  since: number;
+  /** Its work since its last message. */
+  work: Work | null;
+}
+
+export const activity = (t: Transcript): Activity => ({
+  label: t.running.length ? doing(t.running[0]) : "Thinking",
+  since: t.since,
+  work: t.work?.steps.length ? t.work : null,
+});
 
 export function read(t: Transcript, events: HaiAgents.SessionEvent[]): Transcript {
   return { ...events.reduce(step, t), events: t.events + events.length };
@@ -103,9 +175,15 @@ export function status(session: HaiAgents.TrajectoryStatus): Status {
 }
 
 /** The chat's last line once the session stopped on its own terms, if it needs one. */
-export function ending(session: HaiAgents.TrajectoryStatus, error: string | null): Message | null {
+export function ending(session: HaiAgents.TrajectoryStatus): Message | null {
   if (session === "interrupted") return { role: "system", text: "Stopped.", images: [] };
-  if (status(session) === "error")
-    return { role: "system", text: `The build stopped: ${error ?? session.replace("_", " ")}.`, images: [] };
+  if (session === "timed_out")
+    return {
+      role: "system",
+      text: "This build reached its time limit. You can continue it below.",
+      images: [],
+      error: true,
+    };
+  if (status(session) === "error") return { role: "system", text: STOPPED, images: [], error: true };
   return null;
 }

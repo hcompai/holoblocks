@@ -1,10 +1,12 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import { PointerLockControls } from "three/examples/jsm/controls/PointerLockControls.js";
 import type { Box, Palette, RenderRequest } from "./model";
 import { type Atlas, buildAtlas } from "./atlas";
 import type { MeshFailure, MeshReply, MeshRequest, MesherSetup } from "./mesher";
 import type { Theme } from "./theme";
-import { type Kind, packBoxes } from "./voxels";
+import { collision, type Hit, type Kind, packBoxes, raycast, type Vec3, VoxelWorld } from "./voxels";
+import { Solids, WALK, Walker } from "./walker";
 
 export type View = "iso" | "isoBack" | "front" | "top";
 
@@ -32,9 +34,24 @@ export interface Site {
 /** Share of the frame's height and width the build may fill. */
 const FRAME_FILL = 0.9;
 const SKY_RADIUS = 3000;
+const ORBIT_FOV = 35;
 /** Vertical field of view of a camera placed at a visitor's eye, wider than the framing views'. */
 const EYE_FOV = 60;
+const WALK_FOV = 70;
+/** How many blocks in front of the build walking starts. */
+const WALK_FRONT = 6;
 const FOCUS_BACKGROUND = "#141414";
+const HOVER_COLOR = 0x5eb1ff;
+const SELECTED_COLOR = 0xffa133;
+/** Rays cast at most across a selection box, at least a few pixels apart. */
+const BOX_RAYS = 20000;
+
+/** Unit cube edges a hair outside the cell, so they draw over its faces. */
+const CELL_EDGES = new THREE.EdgesGeometry(new THREE.BoxGeometry(1.01, 1.01, 1.01));
+const CELL_BOX = new THREE.BoxGeometry(1.01, 1.01, 1.01);
+
+export const typing = (event: KeyboardEvent) =>
+  event.target instanceof HTMLElement && !!event.target.closest("input, textarea, select, [contenteditable]");
 
 function corners(box: THREE.Box3): number[] {
   const points: number[] = [];
@@ -136,7 +153,14 @@ function toModel({ meshes, outline, counts, bounds }: MeshReply, materials: Mate
   return { group, outline, bounds: bounds && new THREE.Box3().setFromArray(bounds), counts };
 }
 
-const disposeModel = (model: Model) => model.group.traverse((o) => o instanceof THREE.Mesh && o.geometry.dispose());
+const disposeModel = ({ group }: Pick<Model, "group">) =>
+  group.traverse((o) => o instanceof THREE.Mesh && o.geometry.dispose());
+
+/** A mesh a caller shows in its own shots, with how many blocks it holds. */
+export interface Staged {
+  group: THREE.Group;
+  blocks: number;
+}
 
 const logged = (error: unknown) => {
   console.error(error);
@@ -156,10 +180,37 @@ export class BlockScene {
   private dome = skyDome();
   private fog = new THREE.Fog(0, 140, 420);
   private theme: Theme = "dark";
-  private camera = new THREE.PerspectiveCamera(35, 1, 0.1, 5000);
+  private camera = new THREE.PerspectiveCamera(ORBIT_FOV, 1, 0.1, 5000);
   private controls: OrbitControls;
   private model: Model | null = null;
   private materials: Materials | null = null;
+  private palette: Palette | null = null;
+  /** The blocks shown, for picking and walking; filled on demand once the site or step changes. */
+  private world: VoxelWorld | null = null;
+  private framing: { view: View; width: number; depth: number } = { view: "iso", width: 64, depth: 64 };
+  private raycaster = new THREE.Raycaster();
+  /** The hovered and selected blocks' marks; never drawn in renders. */
+  private overlay = new THREE.Group();
+  private hover = new THREE.LineSegments(CELL_EDGES, new THREE.LineBasicMaterial({ color: HOVER_COLOR }));
+  private selection = new THREE.Group();
+  private selected: Vec3[] = [];
+  private marks = {
+    edges: new THREE.LineBasicMaterial({ color: SELECTED_COLOR }),
+    fill: new THREE.MeshBasicMaterial({ color: SELECTED_COLOR, transparent: true, opacity: 0.3, depthWrite: false }),
+    through: new THREE.MeshBasicMaterial({
+      color: SELECTED_COLOR,
+      transparent: true,
+      opacity: 0.12,
+      depthWrite: false,
+      depthTest: false,
+    }),
+  };
+  private pointer: PointerLockControls | null = null;
+  private walking = false;
+  private walker: Walker | null = null;
+  /** What walking bumps into: the blocks shown, looked up again once they change. */
+  private solids: Solids | null = null;
+  private timer = new THREE.Timer();
   private lights: THREE.DirectionalLight[] = [];
   private sun!: THREE.DirectionalLight;
   private site: Site | null = null;
@@ -185,6 +236,9 @@ export class BlockScene {
   userMoved = false;
   onCounts: ((counts: Map<string, number>) => void) | null = null;
   onFailure: (() => void) | null = null;
+  /** Called when walking takes or releases the mouse pointer. */
+  onWalkLock: ((locked: boolean) => void) | null = null;
+  onFly: ((flying: boolean) => void) | null = null;
 
   constructor(
     private container: HTMLElement,
@@ -218,8 +272,13 @@ export class BlockScene {
     this.controls.addEventListener("start", () => (this.userMoved = true));
     this.controls.autoRotateSpeed = 1.2;
 
+    this.hover.visible = false;
+    this.overlay.add(this.hover, this.selection);
+    this.scene.add(this.overlay);
+
     this.spawn();
     this.loaded = palette.then(async (p) => {
+      this.palette = p;
       const atlas = await buildAtlas(p);
       this.setup = { palette: p, uvs: atlas.uvs };
       this.worker?.postMessage(this.setup);
@@ -231,9 +290,12 @@ export class BlockScene {
     this.resizeObserver.observe(container);
     this.resize();
     this.frameView("iso", 64, 64);
-    const tick = () => {
+    const tick = (time?: number) => {
       this.frame = requestAnimationFrame(tick);
-      if (!this.controls.update() && !this.dirty) return;
+      const seconds = Math.min(this.timer.update(time).getDelta(), 0.1);
+      if (this.walking) this.walk(seconds);
+      else if (this.controls.update()) this.dirty = true;
+      if (!this.dirty) return;
       this.dirty = false;
       this.renderer.render(this.scene, this.camera);
     };
@@ -249,6 +311,8 @@ export class BlockScene {
     this.worker?.terminate();
     cancelAnimationFrame(this.frame);
     this.resizeObserver.disconnect();
+    this.stopListening();
+    this.pointer?.dispose();
     this.controls.dispose();
     this.renderer.dispose();
     this.renderer.domElement.remove();
@@ -267,6 +331,8 @@ export class BlockScene {
   show(site: Site | null, step = Infinity) {
     this.site = site;
     this.step = step;
+    this.world = null;
+    this.solids = null;
     this.remesh();
   }
 
@@ -392,8 +458,14 @@ export class BlockScene {
     this.dirty = true;
   }
 
+  /** Point the camera along `view` so the build (or the empty site) fills the frame, once back from walking if walking. */
+  frameView(view: View, width: number, depth: number) {
+    this.framing = { view, width, depth };
+    if (!this.walking) this.aim(view, width, depth);
+  }
+
   /** Point the camera along `view` so `focus`, else the build (or the empty site), fills the frame. */
-  frameView(view: View | THREE.Vector3, width: number, depth: number, focus?: THREE.Box3) {
+  private aim(view: View | THREE.Vector3, width: number, depth: number, focus?: THREE.Box3) {
     const box =
       focus ??
       this.model?.bounds ??
@@ -465,7 +537,7 @@ export class BlockScene {
     return this.model?.outline.length ? this.model.outline : corners(box);
   }
 
-  /** Square renders of the model, or only the blocks inside `focus`, into a 2D canvas over `sky`, or transparent; the user's view is left untouched. */
+  /** Square renders of the whole model, or only its blocks inside `focus`, into a 2D canvas over `sky`, or transparent; the user's view is left untouched. */
   private async offscreen(
     size: number,
     tiles: (({ view: View | THREE.Vector3 } | { eye: THREE.Vector3; pitch: number }) & {
@@ -488,8 +560,16 @@ export class BlockScene {
     }
     const shown = this.model;
     if (full) this.put(full);
-    const { position, near, far, fov } = this.camera;
-    const saved = { position: position.clone(), target: this.controls.target.clone(), near, far, fov };
+    this.overlay.visible = false;
+    const { position, quaternion, near, far, fov } = this.camera;
+    const saved = {
+      position: position.clone(),
+      quaternion: quaternion.clone(),
+      target: this.controls.target.clone(),
+      near,
+      far,
+      fov,
+    };
     const pixelRatio = this.renderer.getPixelRatio();
     const canvas = document.createElement("canvas");
     canvas.width = size * columns;
@@ -508,7 +588,7 @@ export class BlockScene {
     const depth = site?.depth ?? 64;
     for (const tile of tiles) {
       if ("eye" in tile) this.placeEye(tile.eye, tile.pitch, width, depth, focus);
-      else this.frameView(tile.view, width, depth, focus);
+      else this.aim(tile.view, width, depth, focus);
       this.renderer.render(this.scene, this.camera);
       if (focus) {
         ctx.fillStyle = FOCUS_BACKGROUND;
@@ -529,6 +609,7 @@ export class BlockScene {
       disposeModel(full);
     }
     this.dome.visible = true;
+    this.overlay.visible = true;
     this.scene.fog = this.fog;
     this.renderer.clippingPlanes = [];
     this.paintSky(this.theme);
@@ -539,15 +620,18 @@ export class BlockScene {
     this.camera.updateProjectionMatrix();
     this.controls.target.copy(saved.target);
     this.controls.update();
+    if (this.walking) this.camera.quaternion.copy(saved.quaternion);
     this.renderer.render(this.scene, this.camera);
     return new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
   }
 
-  /** What the viewer shows now, at `scale` times its pixel size. */
+  /** What the viewer shows now, at `scale` times its pixel size, without the edit marks. */
   image(scale = 2): Promise<Blob | null> {
     const ratio = this.renderer.getPixelRatio();
     this.renderer.setPixelRatio(ratio * scale);
+    this.overlay.visible = false;
     this.renderer.render(this.scene, this.camera);
+    this.overlay.visible = true;
     const source = this.renderer.domElement;
     const canvas = document.createElement("canvas");
     canvas.width = source.width;
@@ -558,8 +642,215 @@ export class BlockScene {
     return new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
   }
 
+  /** The blocks shown, filled from the site's boxes up to the step shown. */
+  private visible(): VoxelWorld | null {
+    const { site, palette } = this;
+    if (!site || !palette) return null;
+    if (!this.world) {
+      this.world = new VoxelWorld(site.width, site.height, site.depth, palette);
+      this.world.apply(packBoxes(site.boxes, this.step));
+    }
+    return this.world;
+  }
+
+  /** The name of the block shown in `cell`, "air" when empty. */
+  blockAt([x, y, z]: Vec3): string {
+    return this.visible()?.get(x, y, z).name ?? "air";
+  }
+
+  private ray(x: number, y: number): THREE.Ray | null {
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    if (!rect.width || !rect.height) return null;
+    const point = new THREE.Vector2(((x - rect.left) / rect.width) * 2 - 1, -((y - rect.top) / rect.height) * 2 + 1);
+    this.raycaster.setFromCamera(point, this.camera);
+    return this.raycaster.ray;
+  }
+
+  /** The block shown under the client point (`x`, `y`), else the site's ground there, and the face the pointer is on. */
+  pick(x: number, y: number): Hit | null {
+    const world = this.visible();
+    const ray = world && this.ray(x, y);
+    return ray ? raycast(world!, ray.origin.toArray(), ray.direction.toArray()) : null;
+  }
+
+  /** The blocks seen inside the client rectangle, by rays cast on a grid across it. */
+  cellsSeenIn(x0: number, y0: number, x1: number, y1: number): Vec3[] {
+    const [left, right] = [Math.min(x0, x1), Math.max(x0, x1)];
+    const [top, bottom] = [Math.min(y0, y1), Math.max(y0, y1)];
+    const spacing = Math.max(2, Math.sqrt(((right - left) * (bottom - top)) / BOX_RAYS));
+    const cells = new Map<string, Vec3>();
+    for (let y = top + spacing / 2; y < bottom; y += spacing)
+      for (let x = left + spacing / 2; x < right; x += spacing) {
+        const hit = this.pick(x, y);
+        if (hit && !hit.ground) cells.set(hit.cell.join(), hit.cell);
+      }
+    return [...cells.values()];
+  }
+
+  /** Let the mouse orbit the camera, or not while it draws a selection box. */
+  setOrbit(orbit: boolean) {
+    if (!this.walking) this.controls.enabled = orbit;
+  }
+
+  /** Outline the block under the pointer, and mark the selected ones. */
+  setHighlight(hover: Vec3 | null, selected: Vec3[]) {
+    this.hover.visible = !!hover;
+    if (hover) this.hover.position.set(hover[0] + 0.5, hover[1] + 0.5, hover[2] + 0.5);
+    if (selected !== this.selected) {
+      this.selected = selected;
+      for (const child of this.selection.children) {
+        if (child instanceof THREE.InstancedMesh) child.dispose();
+        else if (child instanceof THREE.LineSegments) child.geometry.dispose();
+      }
+      this.selection.clear();
+      if (selected.length) this.markSelection(selected);
+    }
+    this.dirty = true;
+  }
+
+  private markSelection(cells: Vec3[]) {
+    const edges = CELL_EDGES.getAttribute("position").array;
+    const lines = new Float32Array(edges.length * cells.length);
+    const matrix = new THREE.Matrix4();
+    const fill = new THREE.InstancedMesh(CELL_BOX, this.marks.fill, cells.length);
+    const through = new THREE.InstancedMesh(CELL_BOX, this.marks.through, cells.length);
+    cells.forEach(([x, y, z], i) => {
+      matrix.makeTranslation(x + 0.5, y + 0.5, z + 0.5);
+      fill.setMatrixAt(i, matrix);
+      through.setMatrixAt(i, matrix);
+      for (let k = 0; k < edges.length; k += 3) {
+        lines[i * edges.length + k] = edges[k] + x + 0.5;
+        lines[i * edges.length + k + 1] = edges[k + 1] + y + 0.5;
+        lines[i * edges.length + k + 2] = edges[k + 2] + z + 0.5;
+      }
+    });
+    const geometry = new THREE.BufferGeometry().setAttribute("position", new THREE.BufferAttribute(lines, 3));
+    const outline = new THREE.LineSegments(geometry, this.marks.edges);
+    fill.renderOrder = through.renderOrder = outline.renderOrder = 3;
+    this.selection.add(through, fill, outline);
+  }
+
+  /** The build's horizontal axes nearest the screen's right and the view's forward. */
+  screenAxes(): { right: Vec3; forward: Vec3 } {
+    const d = this.camera.getWorldDirection(new THREE.Vector3());
+    const forward: Vec3 = Math.abs(d.x) > Math.abs(d.z) ? [Math.sign(d.x), 0, 0] : [0, 0, Math.sign(d.z) || -1];
+    return { forward, right: [-forward[2] || 0, 0, forward[0] || 0] };
+  }
+
+  /** Walk through the build at a player's eye height, or go back to orbiting it. */
+  setWalk(walk: boolean) {
+    if (walk === this.walking) return;
+    this.walking = walk;
+    this.camera.fov = walk ? WALK_FOV : ORBIT_FOV;
+    this.camera.updateProjectionMatrix();
+    this.controls.enabled = !walk;
+    if (walk) {
+      this.pointer ??= this.makePointer();
+      this.userMoved = true;
+      this.standAtFront();
+      window.addEventListener("keydown", this.keyDown);
+      window.addEventListener("keyup", this.keyUp);
+      window.addEventListener("blur", this.releaseKeys);
+    } else {
+      this.stopListening();
+      this.walker = null;
+      this.pointer?.unlock();
+      this.userMoved = false;
+      this.frameView(this.framing.view, this.framing.width, this.framing.depth);
+    }
+    this.dirty = true;
+  }
+
+  /** Take the mouse pointer to look around, while walking; the browser needs a click for it. */
+  lockPointer() {
+    if (this.walking) this.pointer?.lock();
+  }
+
+  private makePointer(): PointerLockControls {
+    const pointer = new PointerLockControls(this.camera, this.renderer.domElement);
+    pointer.pointerSpeed = WALK.pointerSpeed;
+    pointer.minPolarAngle = WALK.tilt;
+    pointer.maxPolarAngle = Math.PI - WALK.tilt;
+    pointer.addEventListener("change", () => (this.dirty = true));
+    pointer.addEventListener("lock", () => this.onWalkLock?.(true));
+    pointer.addEventListener("unlock", () => this.onWalkLock?.(false));
+    return pointer;
+  }
+
+  /** Stand on the ground in front of the build, looking at its middle. */
+  private standAtFront() {
+    const { width, depth } = this.framing;
+    const box = this.model?.bounds ?? new THREE.Box3(new THREE.Vector3(), new THREE.Vector3(width, 0, depth));
+    const center = box.getCenter(new THREE.Vector3());
+    this.solids = null;
+    const feet = { x: center.x, y: 0, z: box.max.z + WALK_FRONT };
+    this.walker = new Walker(feet, (flying) => this.onFly?.(flying));
+    this.camera.position.set(feet.x, this.walker.eye, feet.z);
+    this.camera.near = 0.05;
+    this.camera.far = SKY_RADIUS * 2;
+    this.camera.updateProjectionMatrix();
+    this.camera.lookAt(center.x, this.walker.eye, center.z);
+  }
+
+  private walk(seconds: number) {
+    const world = this.visible();
+    if (!this.walker || !world) return;
+    this.solids ??= new Solids((x, y, z) => collision(world, x, y, z));
+    this.walker.step(seconds, new THREE.Euler().setFromQuaternion(this.camera.quaternion, "YXZ").y, this.solids);
+    const eye = new THREE.Vector3(this.walker.x, this.walker.eye, this.walker.z);
+    if (eye.equals(this.camera.position)) return;
+    this.camera.position.copy(eye);
+    this.dirty = true;
+  }
+
+  private keyDown = (event: KeyboardEvent) => {
+    if (typing(event) || event.metaKey || event.ctrlKey || event.altKey) return;
+    if (this.walker?.press(event.code, event.timeStamp)) event.preventDefault();
+  };
+
+  private keyUp = (event: KeyboardEvent) => this.walker?.release(event.code);
+
+  private releaseKeys = () => this.walker?.releaseAll();
+
+  private stopListening() {
+    window.removeEventListener("keydown", this.keyDown);
+    window.removeEventListener("keyup", this.keyUp);
+    window.removeEventListener("blur", this.releaseKeys);
+    this.walker?.releaseAll();
+  }
+
   thumbnail(size = 320): Promise<Blob | null> {
     return this.offscreen(size, [{ view: "iso", x: 0, y: 0 }], null);
+  }
+
+  /** A hidden mesh of `site` up to `step` beside the model shown, lit for the site; null when it cannot be meshed. */
+  async stage(site: Site, step: number): Promise<Staged | null> {
+    await this.loaded;
+    const model = this.materials && (await this.mesh(site, step, this.materials).catch(logged));
+    if (!model) return null;
+    this.aimLights(site.width, site.height, site.depth);
+    model.group.visible = false;
+    this.scene.add(model.group);
+    return { group: model.group, blocks: [...model.counts.values()].reduce((a, b) => a + b, 0) };
+  }
+
+  unstage(staged: Staged) {
+    this.scene.remove(staged.group);
+    disposeModel(staged);
+  }
+
+  /** Draw the scene from `camera` into a `width` × `height` buffer, with fresh shadows and each material's clipping. */
+  shoot(camera: THREE.Camera, width: number, height: number): HTMLCanvasElement {
+    if (this.renderer.getContext().isContextLost()) throw new Error("The WebGL context was lost.");
+    const { width: w, height: h } = this.renderer.domElement;
+    if (w !== width || h !== height || this.renderer.getPixelRatio() !== 1) {
+      this.renderer.setPixelRatio(1);
+      this.renderer.setSize(width, height, false);
+    }
+    this.renderer.localClippingEnabled = true;
+    this.renderer.shadowMap.needsUpdate = true;
+    this.renderer.render(this.scene, camera);
+    return this.renderer.domElement;
   }
 
   /** What a builder asked to see: one large view from its camera, the four labelled views, or one large view from its angle and pitch, of the model or only of the blocks in its box. */
