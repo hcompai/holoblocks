@@ -920,6 +920,72 @@ aside > .aside-head + * {
   font-weight: 600;
 }
 
+.gallery-note:has(.recovery-panel) {
+  display: block;
+  max-height: 60%;
+  overflow-y: auto;
+}
+
+.gallery-note:has(.recovery-panel) > button {
+  margin-top: 10px;
+  background: transparent;
+  color: var(--text-default);
+  border-color: var(--stroke-default);
+}
+
+.recovery-panel strong {
+  color: var(--text-default);
+}
+
+.recovery-panel p {
+  margin: 8px 0;
+  line-height: 1.5;
+}
+
+.recovery-panel details {
+  margin-top: 10px;
+}
+
+.recovery-panel summary {
+  cursor: pointer;
+}
+
+.failure-detail {
+  overflow-wrap: anywhere;
+  font-family: "Fira Code Variable", ui-monospace, monospace;
+  font-size: 11px;
+}
+
+.recovery-origin {
+  margin-block: 0;
+  padding-top: 10px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.app.has-running {
+  grid-template-rows: 56px auto minmax(0, 1fr);
+}
+
+.build-notice {
+  grid-column: 1 / -1;
+  padding: 9px 20px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  background: var(--background-muted);
+  border-bottom: 1px solid var(--stroke-default);
+}
+
+.build-notice strong {
+  color: var(--text-default);
+}
+
+.tab-hint {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
 .load-failed {
   display: flex;
   align-items: center;

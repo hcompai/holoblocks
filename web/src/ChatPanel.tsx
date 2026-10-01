@@ -153,8 +153,8 @@ interface Props {
   /** The open build could not be loaded. */
   loadFailed: boolean;
   activity: Activity | null;
-  /** Why no message can be sent here, or null when one can. */
-  closed: string | null;
+  /** Why no message can be sent here, or how to carry on, or null when a message can be sent. */
+  closed: ReactNode;
   onCreate: (prompt: string, images: string[]) => Promise<void>;
   onSay: (text: string, images: string[]) => Promise<void>;
   onStop: () => Promise<void>;
@@ -251,6 +251,7 @@ export function ChatPanel(props: Props) {
           <div className="chat-intro">
             <h2>What should we build?</h2>
             <p>Describe a structure. The builder writes it in code, block by block, while you watch it rise.</p>
+            <p className="tab-hint">Keep this tab open while Holo builds: your browser renders the model for it.</p>
             {!closed && (
               <>
                 <div className="label">Try one</div>
@@ -272,10 +273,7 @@ export function ChatPanel(props: Props) {
           </div>
         ) : (
           build?.messages.map((m, i) => (
-            <div
-              key={i}
-              className={`msg ${m.role} ${m.role === "system" && m.text.startsWith("The build stopped") ? "error" : ""}`}
-            >
+            <div key={i} className={`msg ${m.role} ${m.error ? "error" : ""}`}>
               {m.work && <WorkLog work={m.work} summary={`Worked for ${duration(m.work.end - m.work.start)}`} />}
               {m.role === "user" && m.images.length > 0 && (
                 <div className="msg-attachments">
@@ -329,10 +327,10 @@ export function ChatPanel(props: Props) {
       )}
       {closed && !remixing ? (
         <div className="gallery-note">
-          <p>{closed}</p>
+          {typeof closed === "string" ? <p>{closed}</p> : closed}
           {!!build?.boxes.length && (
             <button onClick={() => setRemixing(true)} title="Start your own build from a copy of this one">
-              <ShuffleIcon size={14} weight="bold" /> Remix
+              <ShuffleIcon size={14} weight="bold" /> {typeof closed === "string" ? "Remix" : "Remix a copy"}
             </button>
           )}
         </div>

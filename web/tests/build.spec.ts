@@ -119,10 +119,10 @@ test("a new build sends the toolkit and the photos; Stop makes Holo answer and t
   expect(agp.posted("/messages")[0]).toMatchObject({ message: "Add the causeway", files: [] });
 
   agp.crash("new-build", "Session 27289a90 is not running (status: failed)");
-  await expect(page.locator(".msg").last()).toHaveText(
-    "The build stopped: Session 27289a90 is not running (status: failed)",
+  await expect(page.locator(".msg.error")).toHaveText(
+    "The building service stopped unexpectedly. You can continue below.",
   );
-  await expect(page.getByText("This build's session has ended: remix it to keep building.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Try again with same request" })).toBeVisible();
   await expect(page.getByPlaceholder("Describe how to change it…")).toHaveCount(0);
 });
 

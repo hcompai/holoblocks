@@ -63,6 +63,8 @@ function render(result: unknown): Message | null {
   return Array.isArray(result) ? { role: "tool", text: text(result), images: images(result) } : null;
 }
 
+const STOPPED = "The building service stopped unexpectedly. You can continue below.";
+
 function step(t: Transcript, event: HaiAgents.SessionEvent): Transcript {
   switch (event.type) {
     case "ActiveStateChangeEvent": {
@@ -138,7 +140,7 @@ function step(t: Transcript, event: HaiAgents.SessionEvent): Transcript {
     }
     case "error_event": {
       if (data.origin === "crash")
-        return { ...say({ role: "system", text: `The build stopped: ${data.error}`, images: [] }), crashed: true };
+        return { ...say({ role: "system", text: STOPPED, images: [], error: true }), error: data.error, crashed: true };
       const settled = data.toolReq ? settle(data.toolReq) : t;
       if (data.toolReq?.toolName !== "look") return settled;
       return { ...settled, messages: [...settled.messages, { role: "system", text: data.error, images: [] }] };
@@ -173,9 +175,15 @@ export function status(session: HaiAgents.TrajectoryStatus): Status {
 }
 
 /** The chat's last line once the session stopped on its own terms, if it needs one. */
-export function ending(session: HaiAgents.TrajectoryStatus, error: string | null): Message | null {
+export function ending(session: HaiAgents.TrajectoryStatus): Message | null {
   if (session === "interrupted") return { role: "system", text: "Stopped.", images: [] };
-  if (status(session) === "error")
-    return { role: "system", text: `The build stopped: ${error ?? session.replace("_", " ")}.`, images: [] };
+  if (session === "timed_out")
+    return {
+      role: "system",
+      text: "This build reached its time limit. You can continue it below.",
+      images: [],
+      error: true,
+    };
+  if (status(session) === "error") return { role: "system", text: STOPPED, images: [], error: true };
   return null;
 }

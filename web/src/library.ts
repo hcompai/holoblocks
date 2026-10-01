@@ -16,6 +16,10 @@ interface Card {
   prompt: string;
   steps: number;
   thumbnail?: string;
+  /** The build this session recovers. */
+  recoveredFrom?: string;
+  /** The session started to recover this build. */
+  recoveryAttempt?: string;
 }
 
 const cards = (): Record<string, Card> => {

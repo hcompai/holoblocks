@@ -128,7 +128,7 @@ function follow(id: string, signal: AbortSignal, notify: Listener, displayed: ()
   };
 
   const publish = () => {
-    const end = ending(session, failure ?? transcript.error);
+    const end = transcript.crashed ? null : ending(session);
     set({
       build: {
         ...model,
@@ -139,6 +139,7 @@ function follow(id: string, signal: AbortSignal, notify: Listener, displayed: ()
         status: buildStatus(session),
         messages: shown(end ? [...transcript.messages, end] : transcript.messages),
         open: session === "idle" && !transcript.crashed,
+        failure: transcript.error ?? failure,
       },
       activity: buildStatus(session) === "building" ? activity(transcript) : null,
     });

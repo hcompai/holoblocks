@@ -105,23 +105,31 @@ async function message(
   return { type: "user_message", message: text, images: photos, files };
 }
 
-/** Start a build with its first message, the toolkit, `attached` and the photos in one request: a session never sits empty, and any browser lists it by its prompt. */
-export async function create(text: string, photos: string[], attached: Record<string, Blob> = {}): Promise<string> {
-  const toolkit = await fetch(TOOLKIT);
-  if (!toolkit.ok) throw new Error("The Blockyard toolkit is missing from this site.");
-  const first = await message(text, photos, { "blockyard.tgz": await toolkit.blob(), ...attached });
+export async function toolkit(): Promise<Blob> {
+  const response = await fetch(TOOLKIT);
+  if (!response.ok) throw new Error("The Blockyard toolkit is missing from this site.");
+  return response.blob();
+}
+
+/** Start a session with all its first messages in one request, so it never sits empty and any browser lists it by its prompt; `group` ties a recovery to its build. */
+export async function begin(messages: HaiAgents.UserMessageEvent[], group?: string): Promise<string> {
   const request = {
     agent: agent(),
-    messages: [first],
+    messages,
     maxSteps: MAX_STEPS,
     maxTimeS: MAX_TIME_S,
     idleTimeoutS: IDLE_TIMEOUT_S,
     deleteAfterMin: null,
+    ...(group && { groupId: group }),
   };
   assertRequestUnderLimit(request);
   // Creating a run is a side effect: never retry an ambiguous response automatically.
   return (await client.sessions.createSession({ body: request }, { maxRetries: 0 })).id;
 }
+
+/** Start a build: its message carries the toolkit, `attached` and the photos. */
+export const create = async (text: string, photos: string[], attached: Record<string, Blob> = {}) =>
+  begin([await message(text, photos, { "blockyard.tgz": await toolkit(), ...attached })]);
 
 /** Start a build from an exact copy of `build`, which Holo then changes as `text` asks. */
 export const remix = (build: Build, text: string, photos: string[]) =>

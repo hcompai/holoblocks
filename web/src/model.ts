@@ -31,6 +31,8 @@ export interface Message {
   /** URLs: the images a user attached, or the render shown with a look. */
   images: string[];
   work?: Work;
+  /** A line saying the build stopped. */
+  error?: boolean;
 }
 
 export type Status = "building" | "done" | "error";
@@ -76,6 +78,8 @@ export interface Build extends Omit<Model, "blocks" | "boxes"> {
   messages: Message[];
   /** The builder waits for the next message. */
   open: boolean;
+  /** What stopped the session, word for word: shown only on request. */
+  failure?: string | null;
 }
 
 /** Where a build is read from: a session of the signed-in user, the public library, or the showcases. */

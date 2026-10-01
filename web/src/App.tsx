@@ -13,10 +13,11 @@ import { DownloadMenu } from "./DownloadMenu";
 import { useEdits } from "./edits";
 import { FilmExport } from "./FilmExport";
 import { ImportBuild } from "./ImportBuild";
-import { library, publish, remember, setPrivate, type Shelf, thumbnail, unpublish } from "./library";
+import { card, library, publish, remember, setPrivate, type Shelf, thumbnail, unpublish } from "./library";
 import { LibraryPage } from "./LibraryPage";
 import { type Build, type BuildSummary, PALETTE, type Source } from "./model";
 import { PublishButton } from "./PublishButton";
+import { RecoveryPanel } from "./RecoveryPanel";
 import type { BlockScene } from "./scene";
 import { schematic } from "./schematic";
 import { ThemeToggle } from "./ThemeToggle";
@@ -107,10 +108,18 @@ export default function App({ account }: { account: Account }) {
   }, []);
 
   useEffect(() => void refreshBuilds(), [refreshBuilds, account.user.id, libraryOpen]);
-  useKeeper(
-    builds?.filter((b) => b.source === "session" && b.status === "building").map((b) => b.id) ?? [],
-    refreshBuilds,
-  );
+  /** The user's sessions building now, which need this tab open. */
+  const running = [
+    ...new Set([
+      ...(builds ?? [])
+        .filter(
+          (b) => b.source === "session" && b.status === "building" && (b.id !== live?.id || live.status === "building"),
+        )
+        .map((b) => b.id),
+      ...(live?.status === "building" ? [live.id] : []),
+    ]),
+  ];
+  useKeeper(running, refreshBuilds);
 
   const summary = builds?.find((b) => b.id === buildId && b.source === ref?.source);
   const name = build?.name ?? summary?.name;
@@ -252,13 +261,22 @@ export default function App({ account }: { account: Account }) {
   };
 
   const closed =
-    ref?.source === "showcase"
-      ? "A showcase from the gallery: remix it to make your own."
-      : ref?.source === "public"
-        ? `Shared by ${summary?.author ?? "an H builder"}: remix it to make your own.`
-        : build && !build.open && build.status !== "building"
-          ? "This build's session has ended: remix it to keep building."
-          : null;
+    ref?.source === "showcase" ? (
+      "A showcase from the gallery: remix it to make your own."
+    ) : ref?.source === "public" ? (
+      `Shared by ${summary?.author ?? "an H builder"}: remix it to make your own.`
+    ) : live && !live.open && live.status !== "building" ? (
+      <RecoveryPanel
+        key={live.id}
+        build={live}
+        edited={edits.edits.length > 0}
+        onOpen={(id) => {
+          if (opened.current?.source === "session" && opened.current.id === live.id) open({ id, source: "session" });
+          refreshBuilds();
+        }}
+      />
+    ) : null;
+  const recoveredFrom = ref?.source === "session" ? card(ref.id)?.recoveredFrom : undefined;
   const visibleStep = following ? last : Math.min(step, last);
   const hasBlocks = !!build?.boxes.length;
   const opening = `Opening ${name ?? "the build"}`;
@@ -274,7 +292,7 @@ export default function App({ account }: { account: Account }) {
   };
 
   return (
-    <div className="app">
+    <div className={running.length ? "app has-running" : "app"}>
       <header>
         <button className="brand" onClick={() => open(null)}>
           <img className="brand-logo" src="/logo.png" alt="" />
@@ -328,8 +346,14 @@ export default function App({ account }: { account: Account }) {
         {build && imported && <DeleteButton name={build.name} onDelete={deleteBuild} />}
         <ThemeToggle />
         {build && !error && hasBlocks && <DownloadMenu onSchem={downloadSchem} onImage={downloadImage} />}
-        <AccountMenu account={account} />
+        <AccountMenu account={account} building={running.length > 0} />
       </header>
+      {running.length > 0 && (
+        <div className="build-notice" role="note" aria-label="Keep Blockyard open">
+          <strong>Keep this tab open while Holo builds.</strong> Your browser renders the model for Holo. You can browse
+          within Blockyard; closing this tab, leaving the site or sleeping your device can interrupt the build.
+        </div>
+      )}
       <aside>
         <div className="aside-head">
           <span className="aside-title">Chat</span>
@@ -340,6 +364,20 @@ export default function App({ account }: { account: Account }) {
             </button>
           )}
         </div>
+        {recoveredFrom && (
+          <p className="recovery-origin">
+            Recovery attempt ·{" "}
+            <a
+              href={linkTo({ id: recoveredFrom, source: "session" })}
+              onClick={(event) => {
+                event.preventDefault();
+                open({ id: recoveredFrom, source: "session" });
+              }}
+            >
+              Open original build
+            </a>
+          </p>
+        )}
         <ChatPanel
           key={ref ? `${ref.source}:${ref.id}` : "new"}
           buildId={buildId}

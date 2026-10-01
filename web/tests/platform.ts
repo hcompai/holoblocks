@@ -16,6 +16,8 @@ interface Session {
   status: string;
   events: object[];
   shared: number;
+  group?: string;
+  error?: string;
 }
 
 interface Request {
@@ -31,6 +33,8 @@ export class Platform {
   readonly files = new Map<string, Buffer>();
   /** Answer the next session creations with this HTTP status. */
   refuse: number[] = [];
+  /** Create the next session, then answer as if the response were lost. */
+  loseCreationResponse = false;
   offline = false;
   /** When the next event happens, in ms since the epoch. */
   now = Date.parse(NOW);
@@ -53,8 +57,22 @@ export class Platform {
     this.push(id, "ActiveStateChangeEvent", { state, pending_tool_calls: pending });
   }
 
-  say(id: string, text: string) {
-    this.agent(id, { kind: "message_event", caller_id: "user", content: [text] });
+  say(id: string, text: string, images: unknown[] = []) {
+    this.agent(id, { kind: "message_event", caller_id: "user", content: [text, ...images] });
+  }
+
+  attach(id: string, name: string, contents: Buffer) {
+    const url = `${AGP}/files/${id}/${name}`;
+    this.files.set(url, contents);
+    this.push(id, "AttachmentEvent", {
+      origin: "user",
+      name,
+      path: `/workspace/files/${name}`,
+      media_type: "application/octet-stream",
+      size_bytes: contents.length,
+      url,
+    });
+    return url;
   }
 
   step(id: string, content: string, reasoning = "", calls: { tool_name: string; args: object; id: string }[] = []) {
@@ -117,21 +135,29 @@ export async function platform(page: Page): Promise<Platform> {
     const session = id ? agp.sessions.get(id) : undefined;
 
     if (url.pathname === "/api/v2/sessions" && method === "GET") {
-      const items = [...agp.sessions.values()].map((s) => ({
-        id: s.id,
-        agent: "blockyard",
-        status: s.status,
-        first_message: null,
-        created_at: NOW,
-      }));
+      const group = url.searchParams.get("group_id");
+      const items = [...agp.sessions.values()]
+        .filter((s) => group === null || s.group === group)
+        .map((s) => ({
+          id: s.id,
+          agent: "blockyard",
+          status: s.status,
+          first_message: null,
+          created_at: NOW,
+        }));
       return reply(200, { items, total: items.length, page: 1 });
     }
     if (url.pathname === "/api/v2/sessions" && method === "POST") {
       const refused = agp.refuse.shift();
       if (refused) return reply(refused, { detail: "The platform is unavailable." });
       agp.session("new-build", "pending");
-      for (const message of body.messages ?? []) agp.say("new-build", message.message);
+      agp.sessions.get("new-build")!.group = body.group_id;
+      for (const message of body.messages ?? []) agp.say("new-build", message.message, message.images ?? []);
       if (body.messages?.length) agp.state("new-build", "running");
+      if (agp.loseCreationResponse) {
+        agp.loseCreationResponse = false;
+        return reply(503, { detail: "Response lost" });
+      }
       return reply(200, { id: "new-build", request: body, status: "pending", created_at: NOW });
     }
     if (!session) return reply(404, { detail: "No such session" });
@@ -141,12 +167,16 @@ export async function platform(page: Page): Promise<Platform> {
       return reply(202);
     }
     if (action === "tool_results" || action === "force_answer") return reply(202);
-    if (action === "status") return reply(200, { status: session.status, error: null });
+    if (action === "status") return reply(200, { status: session.status, error: session.error ?? null });
     if (action === "changes") {
       if (agp.offline) return reply(503, { detail: "Unavailable" });
       const from = Number(url.searchParams.get("from_index") ?? 0);
       if (from < session.events.length)
-        return reply(200, { status: session.status, error: null, new_events: session.events.slice(from) });
+        return reply(200, {
+          status: session.status,
+          error: session.error ?? null,
+          new_events: session.events.slice(from),
+        });
       await new Promise((resolve) => setTimeout(resolve, 200));
       return reply(204);
     }
