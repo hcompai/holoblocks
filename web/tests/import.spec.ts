@@ -84,7 +84,7 @@ test("Import a build uploads the file as the signed-in user after a confirmation
   const mine = page.getByRole("region", { name: "Mine" });
   const file = { name: "stone-hut.json", mimeType: "application/json" };
   await mine.getByLabel("Model file to import").setInputFiles({ ...file, buffer: Buffer.from("{}") });
-  await expect(mine.getByRole("alert")).toContainText("not a Blockyard model");
+  await expect(mine.getByRole("alert")).toContainText("not a HoloBlocks model");
 
   await mine
     .getByLabel("Model file to import")

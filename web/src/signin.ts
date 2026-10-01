@@ -23,7 +23,7 @@ export interface User {
   name: string;
 }
 
-/** A sign-in: the user, their Agents API key, and the pass for Blockyard's own API. */
+/** A sign-in: the user, their Agents API key, and the pass for HoloBlocks's own API. */
 export interface Account {
   user: User;
   key: string;

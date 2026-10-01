@@ -1,5 +1,5 @@
 import { CopyIcon, DownloadSimpleIcon, ShareNetworkIcon, XIcon } from "@phosphor-icons/react";
-import { useEffect, useRef, useState } from "react";
+import { type CSSProperties, useEffect, useRef, useState } from "react";
 import { BlockLoader } from "./BlockLoader";
 import type { Build } from "./model";
 import { FilmRenderer } from "./film";
@@ -25,19 +25,19 @@ function browserOptions(aspect: FilmAspect, seconds: number, branded: boolean): 
 
 const megabytes = (bytes: number) => `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 
+/** Makes the GIF as soon as the blocks load, and again whenever an option changes. */
 export function FilmExport({ build, onClose }: Props) {
   const dialog = useRef<HTMLDialogElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
   const renderer = useRef<FilmRenderer | null>(null);
-  const job = useRef<AbortController | null>(null);
+  /** The GIF being made; the next waits for it to stop, since both draw with the one renderer. */
+  const queue = useRef(Promise.resolve());
   const [aspect, setAspect] = useState<FilmAspect>("16:9");
   const [seconds, setSeconds] = useState(8);
   const [branded, setBranded] = useState(true);
   const [ready, setReady] = useState(false);
   const [blocks, setBlocks] = useState<number | null>(null);
-  const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState(0);
-  const [status, setStatus] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [url, setUrl] = useState<string | null>(null);
   const [error, setError] = useState("");
@@ -46,14 +46,9 @@ export function FilmExport({ build, onClose }: Props) {
   const caption = filmCaption(build, blocks, branded);
   const size = browserOptions(aspect, seconds, branded);
   const canShare = !!file && !!navigator.canShare?.({ files: [file] });
-  const update = <T,>(set: (value: T) => void, value: T) => {
-    set(value);
-    setFile(null);
-  };
 
   useEffect(() => {
     dialog.current?.showModal();
-    return () => job.current?.abort();
   }, []);
 
   useEffect(() => {
@@ -100,7 +95,6 @@ export function FilmExport({ build, onClose }: Props) {
     return () => {
       current = false;
       clearTimeout(timer);
-      job.current?.abort();
       engine?.dispose();
       renderer.current = null;
     };
@@ -116,39 +110,32 @@ export function FilmExport({ build, onClose }: Props) {
     });
   };
 
-  useEffect(() => {
-    if (ready) preview();
-  }, [ready, aspect, seconds, branded]);
-
-  const generate = async () => {
+  const generate = async (signal: AbortSignal) => {
     const r = renderer.current;
-    if (!r || !ready || busy) return;
-    const controller = new AbortController();
-    job.current = controller;
-    setBusy(true);
+    if (signal.aborted || !r) return;
     setProgress(0);
-    setStatus("");
     setFile(null);
     setError("");
     setNotice("");
     try {
       r.configure(browserOptions(aspect, seconds, branded));
-      const blob = await encodeGif(r, BROWSER_FPS, controller.signal, (value) => {
-        setProgress(value);
-        setStatus(`Creating GIF… ${Math.round(value * 100)}%`);
-      });
-      controller.signal.throwIfAborted();
+      const blob = await encodeGif(r, BROWSER_FPS, signal, setProgress);
+      signal.throwIfAborted();
       setFile(new File([blob], filmFilename(build.name, "gif"), { type: "image/gif" }));
     } catch (e) {
-      if (!controller.signal.aborted) setError(e instanceof Error ? e.message : "Could not make the GIF.");
+      if (!signal.aborted) setError(e instanceof Error ? e.message : "Could not make the GIF.");
     } finally {
       if (renderer.current === r) preview();
-      if (job.current === controller) {
-        job.current = null;
-        setBusy(false);
-      }
     }
   };
+
+  useEffect(() => {
+    if (!ready) return;
+    preview();
+    const controller = new AbortController();
+    queue.current = queue.current.then(() => generate(controller.signal));
+    return () => controller.abort();
+  }, [ready, aspect, seconds, branded]);
 
   const share = async () => {
     if (!file || !canShare) return;
@@ -160,6 +147,8 @@ export function FilmExport({ build, onClose }: Props) {
       }
     }
   };
+
+  const percent = Math.round(progress * 100);
 
   return (
     <dialog className="film-dialog" ref={dialog} aria-labelledby="film-title" onCancel={onClose}>
@@ -179,7 +168,7 @@ export function FilmExport({ build, onClose }: Props) {
             aspectRatio: `${size.width}/${size.height}`,
             width: `min(100%, ${(68 * size.width) / size.height}dvh)`,
           }}
-          aria-busy={!ready || busy}
+          aria-busy={!url}
         >
           <canvas ref={canvas} hidden={!!url || !ready} aria-label="Film preview" />
           {url && <img src={url} alt={`Film of ${build.name}`} />}
@@ -190,11 +179,38 @@ export function FilmExport({ build, onClose }: Props) {
             {build.status === "building" ? "A snapshot of the build in progress. " : "A snapshot of this build. "}
             Replays its saved steps, not Holo’s working history.
           </p>
-          <fieldset disabled={busy}>
-            <legend className="sr-only">Film settings</legend>
+          <div className="film-generation" aria-live="polite">
+            {file && url ? (
+              <>
+                <div className="film-actions">
+                  <a className="film-primary" href={url} download={file.name}>
+                    <DownloadSimpleIcon size={16} /> Download GIF
+                  </a>
+                  {canShare && (
+                    <button onClick={share}>
+                      <ShareNetworkIcon size={16} /> Share…
+                    </button>
+                  )}
+                </div>
+                <p className="small muted">
+                  {size.width} × {size.height} · {seconds}s · {megabytes(file.size)}
+                </p>
+              </>
+            ) : error ? (
+              <div role="alert" className="film-error">
+                {error} <button onClick={() => setRetry((n) => n + 1)}>Retry</button>
+              </div>
+            ) : (
+              <button className="progress-button" disabled style={{ "--progress": `${percent}%` } as CSSProperties}>
+                {ready ? `Making the GIF… ${percent}%` : "Loading the blocks…"}
+              </button>
+            )}
+          </div>
+          <details className="film-options">
+            <summary>Options</summary>
             <label>
               Format
-              <select value={aspect} onChange={(e) => update(setAspect, e.target.value as FilmAspect)}>
+              <select value={aspect} onChange={(e) => setAspect(e.target.value as FilmAspect)}>
                 {Object.entries(FILM_ASPECTS).map(([key, value]) => (
                   <option key={key} value={key}>
                     {value.label}
@@ -204,7 +220,7 @@ export function FilmExport({ build, onClose }: Props) {
             </label>
             <label>
               Duration
-              <select value={seconds} onChange={(e) => update(setSeconds, Number(e.target.value))}>
+              <select value={seconds} onChange={(e) => setSeconds(Number(e.target.value))}>
                 {FILM_SECONDS.map((s) => (
                   <option key={s} value={s}>
                     {s} seconds
@@ -213,60 +229,9 @@ export function FilmExport({ build, onClose }: Props) {
               </select>
             </label>
             <label className="film-branding">
-              <input type="checkbox" checked={branded} onChange={(e) => update(setBranded, e.target.checked)} />H
-              Company logo
+              <input type="checkbox" checked={branded} onChange={(e) => setBranded(e.target.checked)} />H Company logo
             </label>
-          </fieldset>
-          <p className="small muted">The build rises step by step, then the finished model takes a full turn.</p>
-          <div className="film-generation" aria-live="polite">
-            {busy ? (
-              <>
-                <progress value={progress} max={1} aria-label="Film progress" />
-                <div className="film-progress-row">
-                  <span>{status || "Starting…"}</span>
-                  <button
-                    onClick={() => {
-                      job.current?.abort();
-                      setNotice("Export cancelled. You can start it again.");
-                    }}
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </>
-            ) : (
-              <button className="film-primary" disabled={!ready} onClick={generate}>
-                {file ? "Generate again" : "Generate GIF"}
-              </button>
-            )}
-            {error && (
-              <div role="alert" className="film-error">
-                {error} <button onClick={() => setRetry((n) => n + 1)}>Retry</button>
-              </div>
-            )}
-          </div>
-          {file && url && (
-            <div className="film-result">
-              <p>
-                {size.width} × {size.height} · {seconds}s · {megabytes(file.size)}
-              </p>
-              <div className="film-actions">
-                <a className="film-primary" href={url} download={file.name}>
-                  <DownloadSimpleIcon size={16} /> Download GIF
-                </a>
-                {canShare && (
-                  <button onClick={share}>
-                    <ShareNetworkIcon size={16} /> Share…
-                  </button>
-                )}
-              </div>
-              <p className="small muted">
-                {canShare
-                  ? "Choose an app in the share sheet, or download to attach to a post."
-                  : "Download and attach to your post. File sharing is unavailable in this browser."}
-              </p>
-            </div>
-          )}
+          </details>
           <label className="film-caption">
             Suggested caption
             <textarea value={caption} readOnly rows={4} onFocus={(e) => e.target.select()} />

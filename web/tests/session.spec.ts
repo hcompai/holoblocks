@@ -77,9 +77,9 @@ test("the portal's Google sign-in comes back as a key and a pass for every H acc
   try {
     const { response, handoff } = await comeBack({ [H.token]: TOKEN, [PENDING]: '{"back": "//evil.test"}' });
     expect(response.headers.get("location")).toBe("/");
-    expect(handoff).toEqual({ error: "Blockyard is open to H Company accounts." });
+    expect(handoff).toEqual({ error: "HoloBlocks is open to H Company accounts." });
     expect(outsider.calls).toEqual(["GET /auth/me"]);
-    expect((await comeBack({})).handoff).toEqual({ error: "The H sign-in did not reach Blockyard: try again." });
+    expect((await comeBack({})).handoff).toEqual({ error: "The H sign-in did not reach HoloBlocks: try again." });
   } finally {
     outsider.restore();
   }

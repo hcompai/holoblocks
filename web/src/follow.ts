@@ -14,6 +14,7 @@ import {
   status as buildStatus,
   type Transcript,
 } from "./session";
+import { label } from "./suggestions";
 
 const WAIT_S = 20;
 const RETRY_MS = 3000;
@@ -129,20 +130,22 @@ function follow(id: string, signal: AbortSignal, notify: Listener, displayed: ()
 
   const publish = () => {
     const end = transcript.crashed ? null : ending(session);
+    const request = transcript.messages.find((m) => m.role === "user")?.text;
+    const state = transcript.crashed ? "error" : buildStatus(session);
     set({
       build: {
         ...model,
         name:
-          [model.name, card(id)?.name, transcript.messages.find((m) => m.role === "user")?.text.slice(0, 60)].find(
+          [model.name, card(id)?.name, request && (label(request) ?? request.slice(0, 60))].find(
             (n) => n && named({ name: n }),
           ) ?? model.name,
         id,
-        status: buildStatus(session),
+        status: state,
         messages: shown(end ? [...transcript.messages, end] : transcript.messages),
         open: session === "idle" && !transcript.crashed,
         failure: transcript.error ?? failure,
       },
-      activity: buildStatus(session) === "building" ? activity(transcript) : null,
+      activity: state === "building" ? activity(transcript) : null,
     });
     if (transcript.state !== "awaiting_tool_results") return;
     const look = transcript.looks.find((l) => l.shared <= loaded);

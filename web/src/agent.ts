@@ -80,7 +80,7 @@ function agent(): HaiAgents.Agent {
     .replaceAll("{{max_minutes}}", String(MAX_TIME_S / 60));
   return {
     name: AGENT,
-    description: "Designs Minecraft structures in code, step by step, in Blockyard.",
+    description: "Designs Minecraft structures in code, step by step, in HoloBlocks.",
     model: MODEL,
     instructions,
     environments: [{ kind: "workstation", id: AGENT }],
@@ -107,7 +107,7 @@ async function message(
 
 export async function toolkit(): Promise<Blob> {
   const response = await fetch(TOOLKIT);
-  if (!response.ok) throw new Error("The Blockyard toolkit is missing from this site.");
+  if (!response.ok) throw new Error("The HoloBlocks toolkit is missing from this site.");
   return response.blob();
 }
 

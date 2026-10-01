@@ -3,7 +3,7 @@ import { card } from "./library";
 import type { Build } from "./model";
 import { canRestore, RecoveryProblem, recover } from "./recovery";
 
-/** How to carry on with a build whose session ended: a new session continues it. */
+/** How to carry on with a build whose session failed: a new session continues it. */
 export function RecoveryPanel({
   build,
   edited,
@@ -37,7 +37,7 @@ export function RecoveryPanel({
   };
   return (
     <section className="recovery-panel" aria-label="Build recovery">
-      <strong>{build.status === "error" ? "Building was interrupted" : "This session has ended"}</strong>
+      <strong>Building was interrupted</strong>
       <p>
         {restore
           ? "Continue from the last shared version in a new session, with your requests and photos. This build stays as it is."

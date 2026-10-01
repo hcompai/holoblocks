@@ -156,7 +156,7 @@ export async function publish(id: string, thumbnail: string | null, edits: { rev
   });
 }
 
-/** A Blockyard model file as the browser reads it, before the library checks it. */
+/** A HoloBlocks model file as the browser reads it, before the library checks it. */
 export type ModelFile = Pick<Shared, "name" | "blocks" | "boxes" | "steps" | "width" | "depth" | "height"> &
   Partial<Shared>;
 
@@ -164,7 +164,7 @@ export type ModelFile = Pick<Shared, "name" | "blocks" | "boxes" | "steps" | "wi
 export async function readModel(file: Blob): Promise<ModelFile> {
   const model = await readJson<Partial<ModelFile>>(file).catch(() => null);
   if (!Array.isArray(model?.boxes) || !model.boxes.length || !Array.isArray(model.blocks))
-    throw new Error("This file is not a Blockyard model: choose a model.json.gz or a build's .json.");
+    throw new Error("This file is not a HoloBlocks model: choose a model.json.gz or a build's .json.");
   return { steps: [], ...model, name: model.name || "Imported build" } as ModelFile;
 }
 

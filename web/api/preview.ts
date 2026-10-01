@@ -42,7 +42,7 @@ async function showcase(id: string): Promise<Card | null> {
   return build
     ? {
         name: build.name,
-        description: `Built in ${steps(build.steps)}, from the Blockyard gallery`,
+        description: `Built in ${steps(build.steps)}, from the HoloBlocks gallery`,
         url: link("showcase", id),
         image: `${H.site}/gallery/thumbnails/${id}.png?v=${build.revision.slice(0, 8)}`,
       }
@@ -52,7 +52,7 @@ async function showcase(id: string): Promise<Card | null> {
 /** index.html with the card's title, description, link and cover in its link preview tags. */
 function page(card: Card): string {
   const tags: Record<string, string> = {
-    "og:title": `${card.name} · Blockyard`,
+    "og:title": `${card.name} · HoloBlocks`,
     "og:description": card.description,
     "og:url": card.url,
     ...(card.image ? { "og:image": card.image, "og:image:alt": card.name } : {}),

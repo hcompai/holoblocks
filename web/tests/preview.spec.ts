@@ -72,7 +72,7 @@ test("a link to a public build or a showcase previews its name, steps, author an
   };
   try {
     const well = await page("?public=well");
-    expect(meta(well, "og:title")).toBe("Ada&#39;s &#60;well&#62; &#38; &#34;bucket&#34; · Blockyard");
+    expect(meta(well, "og:title")).toBe("Ada&#39;s &#60;well&#62; &#38; &#34;bucket&#34; · HoloBlocks");
     expect(meta(well, "og:description")).toBe("Built in 12 steps, shared by Ada Lovelace");
     expect(meta(well, "og:url")).toMatch(/^https:\/\/[^/?]+\/\?public=well$/);
     expect(meta(well, "og:image")).toBe(WELL.thumbnail);
@@ -81,8 +81,8 @@ test("a link to a public build or a showcase previews its name, steps, author an
     expect(well.replace(/<meta property="og:[^>]*>\s*/g, "")).toBe(index.replace(/<meta property="og:[^>]*>\s*/g, ""));
 
     const bagEnd = await page("?showcase=bag-end");
-    expect(meta(bagEnd, "og:title")).toBe("Bag End · Blockyard");
-    expect(meta(bagEnd, "og:description")).toBe("Built in 9 steps, from the Blockyard gallery");
+    expect(meta(bagEnd, "og:title")).toBe("Bag End · HoloBlocks");
+    expect(meta(bagEnd, "og:description")).toBe("Built in 9 steps, from the HoloBlocks gallery");
     expect(meta(bagEnd, "og:image")).toMatch(/^https:\/\/[^/?]+\/gallery\/thumbnails\/bag-end\.png\?v=0a1b2c3d$/);
     expect(bagEnd).not.toContain(SHOWCASE.prompt);
 

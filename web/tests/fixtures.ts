@@ -62,3 +62,9 @@ export async function site(
     );
   }
 }
+
+/** Opens the open build's Share menu. */
+export async function shareMenu(page: Page) {
+  await page.getByRole("button", { name: "Share", exact: true }).click();
+  return page.getByRole("menu");
+}

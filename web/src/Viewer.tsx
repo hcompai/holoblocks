@@ -35,13 +35,14 @@ interface ControlsProps {
   spin: boolean;
   mode: Mode;
   canEdit: boolean;
-  canWalk: boolean;
+  /** The build has blocks, so it can be edited or walked through. */
+  built: boolean;
   onFrame: (framing: Framing) => void;
   onSpin: (spin: boolean) => void;
   onMode: (mode: Mode) => void;
 }
 
-export function ViewControls({ framing, spin, mode, canEdit, canWalk, onFrame, onSpin, onMode }: ControlsProps) {
+export function ViewControls({ framing, spin, mode, canEdit, built, onFrame, onSpin, onMode }: ControlsProps) {
   const toggle = (next: Mode) => onMode(mode === next ? "view" : next);
   return (
     <div className="tabs">
@@ -60,27 +61,30 @@ export function ViewControls({ framing, spin, mode, canEdit, canWalk, onFrame, o
         <ArrowsClockwiseIcon size={14} weight="bold" />
         Spin
       </button>
-      <span className="tabs-sep" />
-      <button
-        className={mode === "edit" ? "active" : ""}
-        aria-pressed={mode === "edit"}
-        disabled={!canEdit && mode !== "edit"}
-        title={canEdit ? "Select blocks to replace, move or delete them" : "Blocks can be edited once Holo is done"}
-        onClick={() => toggle("edit")}
-      >
-        <PencilSimpleIcon size={14} weight="bold" />
-        Edit
-      </button>
-      <button
-        className={mode === "walk" ? "active" : ""}
-        aria-pressed={mode === "walk"}
-        disabled={!canWalk && mode !== "walk"}
-        title="Walk through the build: WASD and the mouse"
-        onClick={() => toggle("walk")}
-      >
-        <PersonSimpleWalkIcon size={14} weight="bold" />
-        Walk
-      </button>
+      {built && (
+        <>
+          <span className="tabs-sep" />
+          <button
+            className={mode === "edit" ? "active" : ""}
+            aria-pressed={mode === "edit"}
+            disabled={!canEdit && mode !== "edit"}
+            title={canEdit ? "Select blocks to replace, move or delete them" : "Blocks can be edited once Holo is done"}
+            onClick={() => toggle("edit")}
+          >
+            <PencilSimpleIcon size={14} weight="bold" />
+            Edit
+          </button>
+          <button
+            className={mode === "walk" ? "active" : ""}
+            aria-pressed={mode === "walk"}
+            title="Walk through the build: WASD and the mouse"
+            onClick={() => toggle("walk")}
+          >
+            <PersonSimpleWalkIcon size={14} weight="bold" />
+            Walk
+          </button>
+        </>
+      )}
       <Shortcuts />
     </div>
   );

@@ -2,24 +2,23 @@ import { PlusIcon, SquaresFourIcon } from "@phosphor-icons/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Account } from "./account";
 import { AccountMenu } from "./AccountMenu";
+import { PHASES } from "./activity";
 import { create, remix, say, stop } from "./agent";
 import { BlockLoader } from "./BlockLoader";
 import { BlocksPanel } from "./BlocksPanel";
 import { ChatPanel } from "./ChatPanel";
 import { CodePanel } from "./CodePanel";
-import { CopyLink } from "./CopyLink";
-import { DeleteButton } from "./DeleteButton";
-import { DownloadMenu } from "./DownloadMenu";
 import { useEdits } from "./edits";
 import { FilmExport } from "./FilmExport";
+import { HomeShelves } from "./HomeShelves";
 import { ImportBuild } from "./ImportBuild";
 import { card, library, publish, remember, setPrivate, type Shelf, thumbnail, unpublish } from "./library";
 import { LibraryPage } from "./LibraryPage";
-import { type Build, type BuildSummary, PALETTE, type Source } from "./model";
-import { PublishButton } from "./PublishButton";
+import { type Build, type BuildSummary, EMPTY_MODEL, PALETTE, type Source } from "./model";
 import { RecoveryPanel } from "./RecoveryPanel";
 import type { BlockScene } from "./scene";
-import { schematic } from "./schematic";
+import { ShareMenu } from "./ShareMenu";
+import { label } from "./suggestions";
 import { ThemeToggle } from "./ThemeToggle";
 import { Timeline } from "./Timeline";
 import { type BuildRef, useBuild } from "./useBuild";
@@ -28,6 +27,7 @@ import { type Framing, type Mode, RenderFailed, ViewControls, Viewer } from "./V
 
 const STEP_MS = 900;
 const TITLE = document.title;
+const NEW_BUILD = "New build";
 const CENTER_TABS = [
   { id: "model", label: "Model" },
   { id: "code", label: "Code" },
@@ -52,21 +52,19 @@ const linkTo = (ref: BuildRef) => `${window.location.origin}/?${new URLSearchPar
 
 const same = (a: BuildRef | null, b: BuildRef | null) => a?.id === b?.id && a?.source === b?.source;
 
-function save(blob: Blob, name: string) {
-  const link = document.createElement("a");
-  link.href = URL.createObjectURL(blob);
-  link.download = name;
-  link.click();
-  setTimeout(() => URL.revokeObjectURL(link.href));
-}
-
 export default function App({ account }: { account: Account }) {
   const [ref, setRef] = useState<BuildRef | null>(urlBuild);
   const opened = useRef(ref);
   opened.current = ref;
   const [libraryOpen, setLibraryOpen] = useState(urlLibrary);
   const buildId = ref?.id ?? null;
-  const { build: live, activity, error, syncError } = useBuild(ref);
+  const read = useBuild(ref);
+  /** What the user just asked for, shown as a starting build where they asked it, until its session answers. */
+  const [draft, setDraft] = useState<{ at: BuildRef | null; build: Build; since: number } | null>(null);
+  const drafted = draft && same(draft.at, ref) && read.build?.id !== draft.build.id ? draft.build : null;
+  const live = drafted ?? read.build;
+  const activity = drafted ? { label: PHASES.idea, since: draft!.since, work: null } : read.activity;
+  const { error, syncError } = read;
   const edits = useEdits(live);
   /** The build as shown, with this browser's hand edits. */
   const build = edits.build;
@@ -87,6 +85,7 @@ export default function App({ account }: { account: Account }) {
   const palette = useMemo(() => Promise.resolve(PALETTE), []);
   const scene = useRef<BlockScene | null>(null);
   const last = (build?.steps.length ?? 0) - 1;
+  const built = !!build?.boxes.length;
 
   const latest = useRef(0);
   const refreshBuilds = useCallback(() => {
@@ -113,16 +112,19 @@ export default function App({ account }: { account: Account }) {
     ...new Set([
       ...(builds ?? [])
         .filter(
-          (b) => b.source === "session" && b.status === "building" && (b.id !== live?.id || live.status === "building"),
+          (b) =>
+            b.source === "session" &&
+            b.status === "building" &&
+            (b.id !== read.build?.id || read.build.status === "building"),
         )
         .map((b) => b.id),
-      ...(live?.status === "building" ? [live.id] : []),
+      ...(read.build?.status === "building" && ref?.source === "session" ? [read.build.id] : []),
     ]),
   ];
   useKeeper(running, refreshBuilds);
 
   const summary = builds?.find((b) => b.id === buildId && b.source === ref?.source);
-  const name = build?.name ?? summary?.name;
+  const heading = build ?? summary;
   const listed = builds?.find((b) => b.id === buildId && b.source === "public");
   /** The build as anyone opens it: a showcase, or in the public library. */
   const shared: BuildRef | null =
@@ -133,12 +135,12 @@ export default function App({ account }: { account: Account }) {
   }, [build?.id, build?.status, summary?.status]);
 
   useEffect(() => {
-    document.title = buildId && name ? `${name} · ${TITLE}` : TITLE;
-  }, [buildId, name]);
+    document.title = heading ? `${heading.name} · ${TITLE}` : TITLE;
+  }, [heading?.name]);
 
   useEffect(() => {
-    if (mode === "edit" && !edits.editable) setMode("view");
-  }, [mode, edits.editable]);
+    if ((mode === "edit" && !edits.editable) || (mode !== "view" && !built)) setMode("view");
+  }, [mode, edits.editable, built]);
 
   useEffect(() => {
     if (mode !== "edit") return;
@@ -148,6 +150,7 @@ export default function App({ account }: { account: Account }) {
 
   const show = useCallback((next: BuildRef | null) => {
     setRef(next);
+    setDraft(null);
     setCenter("model");
     setMode("view");
     setStep(Infinity);
@@ -201,13 +204,39 @@ export default function App({ account }: { account: Account }) {
     setFollowing(s >= last);
   };
 
-  /** Start a build and open it: a new one, or a remix of `from`. */
+  /** Start a build and show it at once: a new one, or a copy of `from` that Holo changes as asked, under the same name if it is the user's. */
   const start = async (prompt: string, images: string[], from?: Build) => {
-    const id = await (from ? remix(from, prompt, images) : create(prompt, images));
-    const title = from ? `${from.name} remix` : prompt || "Untitled build";
-    remember(id, { name: title.slice(0, 60), prompt });
-    open({ id, source: "session" });
-    refreshBuilds();
+    const name = from ? (owned ? from.name : `${from.name} remix`) : (label(prompt) ?? NEW_BUILD);
+    const at = opened.current;
+    const since = Date.now();
+    const build: Build = {
+      ...EMPTY_MODEL,
+      boxes: [],
+      id: "",
+      name,
+      status: "building",
+      open: false,
+      messages: [{ role: "user", text: prompt, images }],
+    };
+    setDraft({ at, build, since });
+    try {
+      const id = await (from ? remix(from, prompt, images) : create(prompt, images));
+      remember(id, { name: name.slice(0, 60), prompt });
+      refreshBuilds();
+      if (!same(opened.current, at)) return;
+      const next: BuildRef = { id, source: "session" };
+      open(next);
+      setDraft({ at: next, build: { ...build, id }, since });
+    } catch (e) {
+      setDraft((current) => (current?.build === build ? null : current));
+      throw e;
+    }
+  };
+
+  /** Open a listed build: the user's public builds as their session, when they have one. */
+  const openListed = (b: BuildSummary) => {
+    const session = b.source === "public" && builds?.some((s) => s.source === "session" && s.id === b.id);
+    open({ id: b.id, source: session ? "session" : b.source });
   };
 
   const saveThumbnail = async (png: Blob) => {
@@ -265,7 +294,7 @@ export default function App({ account }: { account: Account }) {
       "A showcase from the gallery: remix it to make your own."
     ) : ref?.source === "public" ? (
       `Shared by ${summary?.author ?? "an H builder"}: remix it to make your own.`
-    ) : live && !live.open && live.status !== "building" ? (
+    ) : live && !drafted && live.status === "error" ? (
       <RecoveryPanel
         key={live.id}
         build={live}
@@ -278,123 +307,128 @@ export default function App({ account }: { account: Account }) {
     ) : null;
   const recoveredFrom = ref?.source === "session" ? card(ref.id)?.recoveredFrom : undefined;
   const visibleStep = following ? last : Math.min(step, last);
-  const hasBlocks = !!build?.boxes.length;
-  const opening = `Opening ${name ?? "the build"}`;
-  const libraryShown = libraryOpen || !ref;
-
-  const downloadImage = async () => {
-    const png = await scene.current?.image();
-    if (png && build) save(png, `${build.name}.png`);
-  };
-
-  const downloadSchem = async () => {
-    if (build) save(await schematic(build), `${build.name}.schem`);
-  };
+  const opening = `Opening ${heading?.name ?? "the build"}`;
+  const home = !ref && !drafted;
+  /** The open build, once it is more than a request on its way. */
+  const actionable = drafted ? null : build;
+  const loading = error
+    ? null
+    : !build
+      ? buildId && opening
+      : !built
+        ? build.status === "building"
+          ? "Holo is getting its blocks ready. First blocks in a few minutes."
+          : null
+        : counts
+          ? null
+          : opening;
 
   return (
-    <div className={running.length ? "app has-running" : "app"}>
+    <div className={`app${home ? " home" : ""}${libraryOpen ? " library" : ""}`}>
       <header>
         <button className="brand" onClick={() => open(null)}>
           <img className="brand-logo" src="/logo.png" alt="" />
-          Blockyard
+          HoloBlocks
         </button>
         <button
-          className={libraryShown ? "library-toggle active" : "library-toggle"}
-          aria-pressed={libraryShown}
+          className={libraryOpen ? "quiet active" : "quiet"}
+          aria-pressed={libraryOpen}
           onClick={() => navigate(ref, !libraryOpen)}
         >
           <SquaresFourIcon size={16} /> <span>Library</span>
         </button>
-        {buildId && name && !error && (
-          <span className="title" title={name}>
-            {name}
+        {syncError && (
+          <span className="chip warn" role="status" title={syncError}>
+            Reconnecting…
           </span>
         )}
-        {build && !error && (
-          <>
-            {counts ? (
-              <span className="chip">{blockCount.toLocaleString()} blocks</span>
-            ) : (
-              !renderFailed && <span className="chip pending" />
-            )}
-            <span className="chip">{build.steps.length} steps</span>
-            <span className="chip">
-              {build.width}×{build.depth} site
-            </span>
-            {ref?.source === "public" && summary?.author && <span className="chip">by {summary.author}</span>}
-            {syncError && (
-              <span className="chip warn" role="status" title={syncError}>
-                Reconnecting…
-              </span>
-            )}
-          </>
-        )}
         <span className="spacer" />
-        {build && owned && (
-          <PublishButton
-            published={imported ? !summary?.private : ref?.source === "public" || !!listed}
-            imported={imported}
-            blocked={
-              build.status === "building" ? "Publish once Holo answers" : !hasBlocks ? "Nothing is built yet" : null
+        {actionable && !error && (
+          <ShareMenu
+            build={actionable}
+            link={shared && linkTo(shared)}
+            publishing={
+              owned
+                ? {
+                    published: imported ? !summary?.private : ref?.source === "public" || !!listed,
+                    imported,
+                    blocked:
+                      actionable.status === "building"
+                        ? "Publish once Holo answers"
+                        : !built
+                          ? "Nothing is built yet"
+                          : null,
+                    author: account.user.name,
+                    onPublish: imported ? republish : publishBuild,
+                    onUnpublish: unpublishBuild,
+                  }
+                : null
             }
-            author={account.user.name}
-            onPublish={imported ? republish : publishBuild}
-            onUnpublish={unpublishBuild}
+            onDelete={imported ? deleteBuild : null}
+            image={() => scene.current?.image() ?? Promise.resolve(null)}
+            onGif={() => setFilmBuild(actionable)}
           />
         )}
-        {build && shared && <CopyLink url={linkTo(shared)} />}
-        {build && imported && <DeleteButton name={build.name} onDelete={deleteBuild} />}
         <ThemeToggle />
-        {build && !error && hasBlocks && <DownloadMenu onSchem={downloadSchem} onImage={downloadImage} />}
         <AccountMenu account={account} building={running.length > 0} />
       </header>
-      {running.length > 0 && (
-        <div className="build-notice" role="note" aria-label="Keep Blockyard open">
-          <strong>Keep this tab open while Holo builds.</strong> Your browser renders the model for Holo. You can browse
-          within Blockyard; closing this tab, leaving the site or sleeping your device can interrupt the build.
-        </div>
-      )}
       <aside>
         <div className="aside-head">
-          <span className="aside-title">Chat</span>
-          {buildId && (
-            <button className="new-build" onClick={() => open(null)}>
+          <span className="aside-title" title={heading?.name}>
+            {heading?.name || "Chat"}
+          </span>
+          {ref && (
+            <button className="quiet" onClick={() => open(null)}>
               <PlusIcon size={14} weight="bold" />
               New build
             </button>
           )}
         </div>
-        {recoveredFrom && (
-          <p className="recovery-origin">
-            Recovery attempt ·{" "}
-            <a
-              href={linkTo({ id: recoveredFrom, source: "session" })}
-              onClick={(event) => {
-                event.preventDefault();
-                open({ id: recoveredFrom, source: "session" });
-              }}
-            >
-              Open original build
-            </a>
-          </p>
-        )}
-        <ChatPanel
-          key={ref ? `${ref.source}:${ref.id}` : "new"}
-          buildId={buildId}
-          build={live}
-          loadFailed={!!error}
-          activity={activity}
-          closed={closed}
-          onCreate={(prompt, images) => start(prompt, images)}
-          onSay={(text, images) => say(buildId!, text, images)}
-          onStop={async () => void (await stop(buildId!))}
-          onRemix={async (text, images) => {
-            if (build) await start(text, images, build);
-          }}
-        />
+        <div className="aside-body">
+          {recoveredFrom && (
+            <p className="recovery-origin">
+              Recovery attempt ·{" "}
+              <a
+                href={linkTo({ id: recoveredFrom, source: "session" })}
+                onClick={(event) => {
+                  event.preventDefault();
+                  open({ id: recoveredFrom, source: "session" });
+                }}
+              >
+                Open original build
+              </a>
+            </p>
+          )}
+          <ChatPanel
+            key={ref ? `${ref.source}:${ref.id}` : "new"}
+            buildId={buildId}
+            build={live}
+            loadFailed={!!error}
+            activity={activity}
+            closed={closed}
+            onCreate={(prompt, images) => start(prompt, images)}
+            onSay={async (text, images) => {
+              if (live?.id) await say(live.id, text, images);
+            }}
+            onStop={async () => {
+              if (live?.id) await stop(live.id);
+            }}
+            onRemix={async (text, images) => {
+              if (build) await start(text, images, build);
+            }}
+          />
+          {home && builds && (
+            <HomeShelves
+              builds={builds}
+              me={account.user.id}
+              onOpen={openListed}
+              onLibrary={() => navigate(null, true)}
+            />
+          )}
+        </div>
       </aside>
       <main>
-        <div className={buildId ? "workspace" : "workspace hidden"}>
+        <div className={home ? "workspace hidden" : "workspace"}>
           <div className="stage-head">
             <div className="tabs" role="tablist">
               {CENTER_TABS.map((t) => (
@@ -403,7 +437,7 @@ export default function App({ account }: { account: Account }) {
                   role="tab"
                   aria-selected={center === t.id}
                   className={center === t.id ? "active" : ""}
-                  disabled={t.id !== "model" && !build}
+                  disabled={t.id !== "model" && !actionable}
                   onClick={() => {
                     setCenter(t.id);
                     if (t.id !== "model") setMode("view");
@@ -418,8 +452,8 @@ export default function App({ account }: { account: Account }) {
                 framing={framing}
                 spin={spin}
                 mode={mode}
-                canEdit={edits.editable && hasBlocks}
-                canWalk={hasBlocks}
+                canEdit={edits.editable && built}
+                built={built}
                 onFrame={(next) => {
                   if (mode === "walk") setMode("view");
                   setFraming(next);
@@ -440,16 +474,14 @@ export default function App({ account }: { account: Account }) {
                 palette={palette}
                 onCounts={onCounts}
                 scene={scene}
-                loading={buildId && !counts && !error ? opening : null}
+                loading={loading}
                 failed={renderFailed}
                 onFailed={setRenderFailed}
                 mode={mode}
                 edits={edits}
                 onMode={setMode}
               />
-              {build && !build.boxes.length && build.status !== "building" && (
-                <div className="notice">Nothing built yet</div>
-              )}
+              {build && !built && build.status !== "building" && <div className="notice">Nothing built yet</div>}
             </div>
             {center !== "model" && (
               <div className="pane">
@@ -471,7 +503,7 @@ export default function App({ account }: { account: Account }) {
               </div>
             )}
           </div>
-          {!error && (
+          {!error && (!build || built) && (
             <Timeline
               build={build}
               step={visibleStep}
@@ -483,22 +515,19 @@ export default function App({ account }: { account: Account }) {
                 setPlaying(p);
               }}
               onSpeed={setSpeed}
-              onShare={() => setFilmBuild(build)}
+              blocks={counts ? blockCount : null}
               spaceKey={mode !== "walk"}
             />
           )}
         </div>
-        {libraryShown && (
+        {libraryOpen && (
           <LibraryPage
             builds={builds}
             failed={buildsFailed}
             active={ref}
             onRetry={refreshBuilds}
-            onClose={ref ? () => navigate(ref, false) : null}
-            onOpen={(b) => {
-              const mine = b.source === "public" && builds?.some((s) => s.source === "session" && s.id === b.id);
-              open({ id: b.id, source: mine ? "session" : b.source });
-            }}
+            onClose={() => navigate(ref, false)}
+            onOpen={openListed}
             me={account.user.id}
             mineActions={
               <ImportBuild

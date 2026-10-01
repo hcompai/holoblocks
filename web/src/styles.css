@@ -79,13 +79,6 @@ button.active {
   line-height: 16px;
 }
 
-.label {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-tertiary);
-  margin: 16px 0 8px;
-}
-
 .app {
   display: grid;
   grid-template-columns: 340px 1fr;
@@ -237,7 +230,8 @@ header {
   border-color: var(--background-primary);
 }
 
-.library-toggle {
+/* A borderless button that only shows its background on hover or while active. */
+.quiet {
   border: none;
   background: none;
   padding: 6px 10px;
@@ -248,22 +242,51 @@ header {
     background 0.15s;
 }
 
-.library-toggle:hover,
-.library-toggle.active {
+.quiet:hover,
+.quiet.active {
   color: var(--text-default);
   background: var(--background-muted);
 }
 
-.publish {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
+.menu > hr {
+  margin: 4px 0;
+  padding: 0;
+  border: none;
+  border-top: 1px solid var(--stroke-default);
+  border-radius: 0;
 }
 
-.publish-button.active {
-  color: var(--text-accent);
-  border-color: var(--text-accent);
+.menu > hr:hover {
+  background: none;
+}
+
+.menu > button:disabled:hover {
+  background: none;
+}
+
+.menu > button.danger,
+.menu > button.danger svg {
+  color: var(--text-error);
+}
+
+/* Who can open the build, above the way to change it. */
+.menu > .menu-state {
+  gap: 8px;
+  max-width: 260px;
+  margin: 0;
+  padding: 6px 10px;
+  white-space: normal;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--text-secondary);
+}
+
+.menu > .menu-state:hover {
+  background: none;
+}
+
+.menu > .menu-state > svg {
+  flex: none;
 }
 
 .menu.publish-confirm {
@@ -358,23 +381,6 @@ aside {
   gap: 8px;
 }
 
-.new-build {
-  border: none;
-  background: none;
-  padding: 5px 8px;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text-secondary);
-  transition:
-    color 0.15s,
-    background 0.15s;
-}
-
-.new-build:hover {
-  color: var(--text-default);
-  background: var(--background-muted);
-}
-
 aside > .aside-head + * {
   border-top: 1px solid var(--stroke-default);
   margin: 0 -16px;
@@ -382,7 +388,113 @@ aside > .aside-head + * {
 }
 
 .aside-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-weight: 600;
+}
+
+.aside-head > .quiet {
+  flex: none;
+  white-space: nowrap;
+}
+
+.aside-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+}
+
+/* Home is one column: the composer and the shelves, or the library over it. */
+.app.home {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.app.home main,
+.app.home.library aside,
+.app.home .aside-head {
+  display: none;
+}
+
+.app.home.library main {
+  display: flex;
+}
+
+.app.home aside {
+  border-right: none;
+  overflow-y: auto;
+}
+
+.app.home .aside-body {
+  flex: none;
+  gap: 32px;
+  width: min(1120px, 100%);
+  margin: 0 auto;
+  padding: 9vh 16px 32px;
+  border-top: none;
+}
+
+.home-intro {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  width: min(680px, 100%);
+  margin: 0 auto;
+  text-align: center;
+}
+
+.home-intro h1 {
+  margin: 0;
+  font-size: 40px;
+  line-height: 46px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.home-intro > p {
+  margin: 0 0 8px;
+  font-size: 16px;
+  color: var(--text-secondary);
+}
+
+.home-intro .composer {
+  align-self: stretch;
+  text-align: left;
+}
+
+.home-intro .composer textarea {
+  min-height: 120px;
+  font-size: 16px;
+  line-height: 24px;
+}
+
+.home-intro .chips {
+  justify-content: center;
+}
+
+.home-shelf h2 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 0 0 8px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+/* Cards in one scrolling row; the padding keeps their shadow inside the scroller. */
+.home-row {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 220px;
+  gap: 16px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  margin: -4px -16px -12px;
+  padding: 4px 16px 12px;
 }
 
 .chat-log {
@@ -393,18 +505,6 @@ aside > .aside-head + * {
   gap: 8px;
   padding-top: 12px;
   scrollbar-width: none;
-}
-
-.chat-intro h2 {
-  font-size: 24px;
-  line-height: 32px;
-  font-weight: 600;
-  margin: 8px 0 6px;
-}
-
-.chat-intro p {
-  color: var(--text-secondary);
-  margin: 0;
 }
 
 .chips {
@@ -963,29 +1063,6 @@ aside > .aside-head + * {
   color: var(--text-secondary);
 }
 
-.app.has-running {
-  grid-template-rows: 56px auto minmax(0, 1fr);
-}
-
-.build-notice {
-  grid-column: 1 / -1;
-  padding: 9px 20px;
-  font-size: 12px;
-  line-height: 1.5;
-  color: var(--text-secondary);
-  background: var(--background-muted);
-  border-bottom: 1px solid var(--stroke-default);
-}
-
-.build-notice strong {
-  color: var(--text-default);
-}
-
-.tab-hint {
-  font-size: 12px;
-  color: var(--text-secondary);
-}
-
 .load-failed {
   display: flex;
   align-items: center;
@@ -1248,6 +1325,22 @@ main {
 .sign-in-cube .cube-shadow {
   margin: 26px 0 0;
   animation: float-shadow 3.2s ease-in-out infinite;
+}
+
+.sign-in-cover {
+  width: min(320px, 80vw);
+  aspect-ratio: 1;
+  object-fit: cover;
+  margin-bottom: 16px;
+  border-radius: 16px;
+  background: var(--background-viewer);
+  border: 1px solid var(--stroke-default);
+}
+
+.sign-in-kicker {
+  margin: 0;
+  color: var(--text-secondary);
+  font-weight: 600;
 }
 
 .sign-in-page h1 {
@@ -1553,26 +1646,6 @@ main {
   border: 2px solid var(--background-primary);
 }
 
-.status {
-  font-size: 12px;
-  line-height: 16px;
-  border-radius: 999px;
-  padding: 4px 10px;
-  background: var(--background-muted);
-  color: var(--text-secondary);
-  white-space: nowrap;
-}
-
-.status.building {
-  background: var(--background-iris-alt);
-  color: var(--text-accent);
-}
-
-.status.error {
-  background: color-mix(in srgb, var(--text-error) 14%, transparent);
-  color: var(--text-error);
-}
-
 .parts {
   position: absolute;
   inset: 0;
@@ -1681,11 +1754,6 @@ main {
   word-break: break-word;
 }
 
-.timeline-export {
-  flex-shrink: 0;
-  white-space: nowrap;
-}
-
 @media (max-width: 1024px) {
   .timeline {
     flex-wrap: wrap;
@@ -1715,7 +1783,6 @@ main {
 }
 
 .film-heading,
-.film-progress-row,
 .film-actions {
   display: flex;
   align-items: center;
@@ -1739,7 +1806,7 @@ main {
 
 .film-heading p,
 .film-context,
-.film-result > p {
+.film-generation > p {
   color: var(--text-secondary);
 }
 
@@ -1776,20 +1843,19 @@ main {
 }
 
 .film-controls,
-.film-controls fieldset,
 .film-controls label,
 .film-generation,
-.film-result {
+.film-options[open] {
   display: flex;
   flex-direction: column;
   gap: 12px;
   min-width: 0;
 }
 
-.film-controls fieldset {
-  padding: 0;
-  margin: 0;
-  border: 0;
+.film-options summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--text-secondary);
 }
 
 .film-controls label {
@@ -1839,9 +1905,23 @@ main {
   flex-wrap: wrap;
 }
 
-.film-generation progress {
-  width: 100%;
-  accent-color: var(--text-accent);
+/* A button that fills with its own progress while it cannot be pressed yet. */
+.progress-button {
+  justify-content: center;
+  padding: 9px 12px;
+  border-color: var(--stroke-default);
+  background: linear-gradient(
+      to right,
+      color-mix(in srgb, var(--text-accent) 22%, var(--background-card)) var(--progress, 0%),
+      transparent var(--progress, 0%)
+    )
+    var(--background-card);
+  font-variant-numeric: tabular-nums;
+}
+
+.progress-button:disabled {
+  opacity: 1;
+  cursor: progress;
 }
 
 .film-error {

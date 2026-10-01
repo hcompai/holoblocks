@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { gunzipSync } from "node:zlib";
 import type { Model } from "../src/model";
 import { applyEdits, EDITED_STEP, validEdits } from "../src/voxelEdits";
-import { model, site } from "./fixtures";
+import { model, shareMenu, site } from "./fixtures";
 import { platform } from "./platform";
 
 /** Every block the boxes leave, by "x,y,z". */
@@ -90,12 +90,12 @@ async function open(page: Page) {
   return { ...box, cx: box.x + box.width / 2, cy: box.y + box.height / 2 };
 }
 
-const count = (page: Page) => page.locator("header .chip").first();
+const count = (page: Page) => page.locator(".scrub-label span");
 const toolbar = (page: Page) => page.getByRole("toolbar", { name: "Edit mode" });
 
 test("edit mode selects the block under the pointer, and its edits persist in this browser", async ({ page }) => {
   const { cx, cy } = await open(page);
-  await expect(count(page)).toHaveText("24 blocks");
+  await expect(count(page)).toHaveText(/^24 blocks ·/);
   await expect(toolbar(page)).toContainText("Click a block to select it");
   await page.mouse.move(cx, cy);
   await expect(page.locator(".viewer-canvas")).toHaveCSS("cursor", "pointer");
@@ -107,18 +107,18 @@ test("edit mode selects the block under the pointer, and its edits persist in th
   await expect(toolbar(page)).toContainText("1 change");
   await panel.getByRole("button", { name: "Delete" }).click();
   await expect(panel).toBeHidden();
-  await expect(count(page)).toHaveText("23 blocks");
+  await expect(count(page)).toHaveText(/^23 blocks ·/);
   await expect(page.locator(".viewer")).not.toHaveAttribute("data-revision", hut.revision);
   await page.getByRole("button", { name: "Undo" }).click();
-  await expect(count(page)).toHaveText("24 blocks");
+  await expect(count(page)).toHaveText(/^24 blocks ·/);
   await page.getByRole("button", { name: "Redo" }).click();
-  await expect(count(page)).toHaveText("23 blocks");
+  await expect(count(page)).toHaveText(/^23 blocks ·/);
 
   await page.reload();
-  await expect(count(page)).toHaveText("23 blocks");
+  await expect(count(page)).toHaveText(/^23 blocks ·/);
   await page.getByRole("button", { name: "Edit", exact: true }).click();
   await page.getByRole("button", { name: "Reset" }).click();
-  await expect(count(page)).toHaveText("24 blocks");
+  await expect(count(page)).toHaveText(/^24 blocks ·/);
   await expect(page.locator(".viewer")).toHaveAttribute("data-revision", hut.revision);
   expect(await page.evaluate(() => localStorage.getItem("blockyard.edits"))).toBe("{}");
 });
@@ -142,14 +142,14 @@ test("Shift-drag selects the blocks seen in a box, ⌘D duplicates them beside i
   expect(seen).toBeGreaterThan(12);
 
   await page.keyboard.press("ControlOrMeta+d");
-  await expect(count(page)).toHaveText(`${24 + seen} blocks`);
+  await expect(count(page)).toHaveText(new RegExp(`^${24 + seen} blocks ·`));
   await expect(label).toHaveText(`${seen} blocks`);
   await page.getByRole("button", { name: "Undo" }).click();
-  await expect(count(page)).toHaveText("24 blocks");
+  await expect(count(page)).toHaveText(/^24 blocks ·/);
   await expect(label).toBeHidden();
 
   await page.mouse.click(cx, cy, { button: "right" });
-  await expect(count(page)).toHaveText("25 blocks");
+  await expect(count(page)).toHaveText(/^25 blocks ·/);
   await expect(toolbar(page)).toContainText("1 change");
 });
 
@@ -167,10 +167,10 @@ test("picking a block replaces the selection with it, the build's own blocks lis
   await expect(panel.locator("b")).toHaveText("gold block");
   await expect(page.getByRole("button", { name: "Block in hand: gold block" })).toBeVisible();
 
-  await page.getByRole("button", { name: "Download" }).click();
+  const menu = await shareMenu(page);
   const [download] = await Promise.all([
     page.waitForEvent("download"),
-    page.getByRole("menuitem", { name: "Download .schem" }).click(),
+    menu.getByRole("menuitem", { name: "Download .schem" }).click(),
   ]);
   expect(gunzipSync(readFileSync((await download.path())!)).includes("minecraft:gold_block")).toBe(true);
   await page.getByRole("tab", { name: "Blocks" }).click();
@@ -196,7 +196,7 @@ test("edits wait while Holo builds, and edits on an earlier revision are offered
   await expect(page.locator(".viewer")).toHaveAttribute("data-revision", hut.revision);
   const notice = page.locator(".edit-notice");
   await expect(notice).toContainText("1 edit was made on an earlier revision of this build.");
-  await expect(count(page)).toHaveText("24 blocks");
+  await expect(count(page)).toHaveText(/^24 blocks ·/);
   await notice.getByRole("button", { name: "Discard" }).click();
   await expect(notice).toBeHidden();
   expect(JSON.parse((await page.evaluate(() => localStorage.getItem("blockyard.edits")))!)).not.toHaveProperty("hut");
@@ -204,6 +204,6 @@ test("edits wait while Holo builds, and edits on an earlier revision are offered
   await page.goto("/?build=live");
   await expect(page.locator(".viewer")).toHaveAttribute("data-revision", hut.revision);
   await expect(notice).toContainText("Your 1 edit is hidden while Holo builds.");
-  await expect(count(page)).toHaveText("24 blocks");
+  await expect(count(page)).toHaveText(/^24 blocks ·/);
   await expect(page.getByRole("button", { name: "Edit", exact: true })).toBeDisabled();
 });

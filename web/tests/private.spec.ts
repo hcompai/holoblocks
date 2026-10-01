@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { gzipSync } from "node:zlib";
 import type { Model } from "../src/model";
-import { ACCOUNT, model, site } from "./fixtures";
+import { ACCOUNT, model, shareMenu, site } from "./fixtures";
 
 const BLOB = "https://blob.test";
 
@@ -69,12 +69,14 @@ test("an imported build goes private and stays under Mine, goes public again, th
   await page.goto("/?public=import-1");
   await expect(page.locator(".viewer")).toHaveAttribute("data-revision", build.revision);
 
-  await page.getByRole("button", { name: "Public", exact: true }).click();
+  const menu = page.getByRole("menu");
+  await (await shareMenu(page)).getByRole("menuitem", { name: "Make private…" }).click();
   const confirm = page.getByRole("dialog", { name: "Make private" });
   await expect(confirm).toContainText("stays under Mine for you alone");
   await confirm.getByRole("button", { name: "Make private" }).click();
-  await expect(page.getByRole("button", { name: "Publish", exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Copy link" })).toHaveCount(0);
+  await shareMenu(page);
+  await expect(menu.getByRole("menuitem", { name: "Publish to the library…" })).toBeVisible();
+  await page.keyboard.press("Escape");
   expect(calls.find((c) => c.method === "PATCH")).toMatchObject({
     body: { id: "import-1", private: true },
     auth: `Bearer ${ACCOUNT.pass}`,
@@ -88,21 +90,22 @@ test("an imported build goes private and stays under Mine, goes public again, th
   await mine.click();
   await expect(page.locator(".viewer")).toHaveAttribute("data-revision", build.revision);
 
-  await page.getByRole("button", { name: "Publish", exact: true }).click();
+  await (await shareMenu(page)).getByRole("menuitem", { name: "Publish to the library…" }).click();
   await page.getByRole("dialog", { name: "Publish" }).getByRole("button", { name: "Publish" }).click();
-  await expect(page.getByRole("button", { name: "Public", exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Copy link" })).toBeVisible();
+  await shareMenu(page);
+  await expect(menu).toContainText("In the public library");
+  await expect(menu.getByRole("menuitem", { name: "Copy link" })).toBeEnabled();
   expect(calls.filter((c) => c.method === "PATCH").map((c) => c.body)).toEqual([
     { id: "import-1", private: true },
     { id: "import-1", private: false },
   ]);
 
-  await page.getByRole("button", { name: "Delete" }).click();
+  await menu.getByRole("menuitem", { name: "Delete…" }).click();
   const remove = page.getByRole("dialog", { name: "Delete" });
   await expect(remove).toContainText("Delete Granite house?");
   await remove.getByRole("button", { name: "Cancel" }).click();
   expect(calls.some((c) => c.method === "DELETE")).toBe(false);
-  await page.getByRole("button", { name: "Delete" }).click();
+  await (await shareMenu(page)).getByRole("menuitem", { name: "Delete…" }).click();
   await remove.getByRole("button", { name: "Delete" }).click();
   await expect(page).toHaveURL(/\?library$/);
   expect(calls.find((c) => c.method === "DELETE")).toMatchObject({ search: "?id=import-1" });

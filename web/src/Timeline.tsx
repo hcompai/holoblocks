@@ -1,4 +1,4 @@
-import { FilmStripIcon, PauseIcon, PlayIcon, SkipBackIcon, SkipForwardIcon } from "@phosphor-icons/react";
+import { PauseIcon, PlayIcon, SkipBackIcon, SkipForwardIcon } from "@phosphor-icons/react";
 import { type CSSProperties, useEffect } from "react";
 import type { Build } from "./model";
 
@@ -12,25 +12,27 @@ interface Props {
   onStep: (step: number) => void;
   onPlay: (playing: boolean) => void;
   onSpeed: (speed: number) => void;
-  onShare: () => void;
+  /** How many blocks the shown step has, once counted. */
+  blocks: number | null;
   /** Whether Space plays and pauses; walking takes Space to jump and fly. */
   spaceKey: boolean;
 }
 
-export function Timeline({ build, step, playing, speed, onStep, onPlay, onSpeed, onShare, spaceKey }: Props) {
+export function Timeline({ build, step, playing, speed, onStep, onPlay, onSpeed, blocks, spaceKey }: Props) {
   const steps = build?.steps ?? [];
   const last = steps.length - 1;
   const current = Math.min(step, last);
+  const failed = build?.status === "error" && current === last;
   const finished = build?.status === "done" && steps.length > 0 && current === last;
   const label = !build
     ? "Loading…"
     : !steps.length
       ? "No steps yet"
-      : finished
-        ? "Finished model"
-        : `Step ${current + 1} of ${steps.length}: ${steps[current]?.title ?? ""}`;
-  const status =
-    build?.status === "building" ? "Building…" : build?.status === "error" ? "Failed" : finished ? "Finished" : "";
+      : failed
+        ? "Stopped with an error"
+        : finished
+          ? "Finished model"
+          : `Step ${current + 1} of ${steps.length}: ${steps[current]?.title ?? ""}`;
 
   const toggle = () => {
     if (!playing && current >= last) onStep(0);
@@ -74,6 +76,7 @@ export function Timeline({ build, step, playing, speed, onStep, onPlay, onSpeed,
           <b>{label}</b>
           {build && (
             <span>
+              {blocks !== null && `${blocks.toLocaleString()} blocks · `}
               {current + 1}/{steps.length} steps
             </span>
           )}
@@ -89,10 +92,6 @@ export function Timeline({ build, step, playing, speed, onStep, onPlay, onSpeed,
           style={{ "--fill": `${last > 0 ? (current / last) * 100 : 0}%` } as CSSProperties}
         />
       </div>
-      <span aria-live="polite">{status && <span className={`status ${build?.status ?? "idle"}`}>{status}</span>}</span>
-      <button className="timeline-export" onClick={onShare} disabled={!build?.boxes.length}>
-        <FilmStripIcon size={16} /> Share a GIF
-      </button>
     </div>
   );
 }

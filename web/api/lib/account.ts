@@ -19,7 +19,7 @@ export const nameOf = (email: string) =>
     .join(" ");
 
 export function admit(user: { id: string; email: string }): User {
-  if (!user.email.toLowerCase().endsWith(DOMAIN)) throw new Refusal(403, "Blockyard is open to H Company accounts.");
+  if (!user.email.toLowerCase().endsWith(DOMAIN)) throw new Refusal(403, "HoloBlocks is open to H Company accounts.");
   return { ...user, name: nameOf(user.email) };
 }
 

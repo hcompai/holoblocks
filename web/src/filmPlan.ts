@@ -114,13 +114,13 @@ export function filmFilename(name: string, extension: string): string {
     .replace(/[. ]+$/g, "")
     .slice(0, 100)
     .trim();
-  return `${safe || "blockyard"}-build.${extension}`;
+  return `${safe || "holoblocks"}-build.${extension}`;
 }
 
 export function filmCaption(build: Pick<Build, "name" | "status">, blocks: number | null, branded: boolean): string {
   const count = blocks === null ? "" : `: ${blocks.toLocaleString("en-US")} Minecraft blocks`;
-  const author = branded ? `${HOLO_MODEL} by H Company` : "Blockyard";
+  const author = branded ? `${HOLO_MODEL} by H Company` : "HoloBlocks";
   const state = build.status === "building" ? " · work in progress" : "";
-  const tags = branded ? `#${HOLO_MODEL} #Blockyard #Minecraft` : "#Blockyard #Minecraft";
+  const tags = branded ? `#${HOLO_MODEL} #HoloBlocks #Minecraft` : "#HoloBlocks #Minecraft";
   return `${build.name}${count}, built with ${author}${state}. ${tags}`;
 }

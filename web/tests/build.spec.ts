@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { gunzipSync } from "node:zlib";
-import { model, site } from "./fixtures";
+import { model, shareMenu, site } from "./fixtures";
 import { platform } from "./platform";
 
 const PHOTO = {
@@ -76,10 +76,10 @@ test("a new build sends the toolkit and the photos; Stop makes Holo answer and t
   const agp = await platform(page);
   agp.refuse = [503];
   await page.goto("/");
-  const composer = page.getByPlaceholder("Describe what to build…");
+  const composer = page.getByPlaceholder("A castle on a cliff… or drop a photo");
   const prompt = "Le Mont-Saint-Michel à marée haute";
   await composer.fill(prompt);
-  await page.locator('.chat input[type="file"]').setInputFiles(PHOTO);
+  await page.locator('.composer input[type="file"]').setInputFiles(PHOTO);
   const send = page.getByRole("button", { name: "Send", exact: true });
   await send.click();
   await expect(page.getByText("The platform is unavailable.")).toBeVisible();
@@ -113,7 +113,7 @@ test("a new build sends the toolkit and the photos; Stop makes Holo answer and t
   agp.answer("new-build", "Stopped here: the abbey stands on the rock.");
   await expect(page.locator(".msg.assistant").last()).toHaveText("Stopped here: the abbey stands on the rock.");
 
-  await page.getByPlaceholder("Describe how to change it…").fill("Add the causeway");
+  await page.getByPlaceholder("Ask for a change").fill("Add the causeway");
   await send.click();
   await expect.poll(() => agp.posted("/messages")).toHaveLength(1);
   expect(agp.posted("/messages")[0]).toMatchObject({ message: "Add the causeway", files: [] });
@@ -123,7 +123,7 @@ test("a new build sends the toolkit and the photos; Stop makes Holo answer and t
     "The building service stopped unexpectedly. You can continue below.",
   );
   await expect(page.getByRole("button", { name: "Try again with same request" })).toBeVisible();
-  await expect(page.getByPlaceholder("Describe how to change it…")).toHaveCount(0);
+  await expect(page.getByPlaceholder("Ask for a change")).toHaveCount(0);
 });
 
 test("the library shows my builds by the names Holo gave them; showcases under Public, which download as .schem", async ({
@@ -154,10 +154,10 @@ test("the library shows my builds by the names Holo gave them; showcases under P
   await shown(page, showcase.revision);
   await expect(page.getByText("A showcase from the gallery: remix it to make your own.")).toBeVisible();
 
-  await page.getByRole("button", { name: "Download" }).click();
+  const menu = await shareMenu(page);
   const [download] = await Promise.all([
     page.waitForEvent("download"),
-    page.getByRole("menuitem", { name: "Download .schem" }).click(),
+    menu.getByRole("menuitem", { name: "Download .schem" }).click(),
   ]);
   expect(download.suggestedFilename()).toBe("Hut.schem");
   const nbt = gunzipSync(readFileSync((await download.path())!));
@@ -175,10 +175,11 @@ test("Holo's work shows as what it does now, then folds under its message", asyn
   agp.step("work", "", "The walls need a first course.", [run]);
   await page.goto("/?build=work");
   const live = page.locator(".msg.live");
-  await expect(live).toContainText("Building the model");
+  await expect(live).toContainText("Placing blocks");
 
   agp.result("work", run);
-  await expect(live).toContainText("Thinking");
+  agp.step("work", "", "Now the roof.", [{ tool_name: "look", args: {}, id: "look" }]);
+  await expect(live).toContainText("Checking every side");
 
   agp.now += 95_000;
   agp.step("work", "Built a tower.", "It stands.");
@@ -189,7 +190,7 @@ test("Holo's work shows as what it does now, then folds under its message", asyn
   await expect(holo.locator("summary")).toHaveText("Worked for 1m 36s");
   await holo.locator("summary").click();
   await expect(holo.locator(".work-steps")).toContainText("The walls need a first course.");
-  await expect(holo.locator(".work-action")).toHaveText(["Building the model"]);
+  await expect(holo.locator(".work-action")).toHaveText(["Building the model", "Looking at the model"]);
 });
 
 test("Holo keeps getting its renders while the user browses other builds", async ({ page }) => {
@@ -225,4 +226,35 @@ test("a lost connection says so until the platform answers again", async ({ page
   await expect(lost).toBeVisible();
   agp.offline = false;
   await expect(lost).toHaveCount(0);
+});
+
+test("an idea starts in one click and shows at once under its short label", async ({ page }) => {
+  await site(page);
+  const agp = await platform(page);
+  await page.goto("/");
+  await page.getByRole("button", { name: "A hilltop castle" }).click();
+  await expect(page.locator(".msg.user")).toHaveText("A hilltop castle");
+  await expect(page.locator(".aside-title")).toHaveText("A hilltop castle");
+  await expect(page).toHaveURL(/\?build=new-build$/);
+  expect(agp.posted("/api/v2/sessions")[0].messages[0].message).toMatch(/^A medieval castle crowning a rocky hill/);
+});
+
+test("a build whose session ended takes a change as a copy, under the same name", async ({ page }) => {
+  await site(page);
+  const agp = await platform(page);
+  agp.session("ended");
+  agp.say("ended", "A little hut");
+  agp.share("ended", model());
+  agp.answer("ended", "Built.");
+  agp.sessions.get("ended")!.status = "completed";
+  await page.goto("/?build=ended");
+  await shown(page, model().revision);
+  await expect(page.getByRole("region", { name: "Build recovery" })).toHaveCount(0);
+  await page.getByPlaceholder("Ask for a change").fill("Add a chimney");
+  await page.getByRole("button", { name: "Send", exact: true }).click();
+  await expect(page).toHaveURL(/\?build=new-build$/);
+  await expect(page.locator(".aside-title")).toHaveText("Little Hut");
+  const [first] = agp.posted("/api/v2/sessions")[0].messages;
+  expect(first.message).toBe("Add a chimney");
+  expect(first.files.map((f: { name: string }) => f.name)).toEqual(["blockyard.tgz", "remix.py"]);
 });

@@ -1,4 +1,4 @@
-/** The H platform Blockyard signs in with and builds on: VITE_PLATFORM=staging at build time picks staging. */
+/** The H platform HoloBlocks signs in with and builds on: VITE_PLATFORM=staging at build time picks staging. */
 const HOSTS = {
   production: {
     site: "https://blocks.hcompany.ai",

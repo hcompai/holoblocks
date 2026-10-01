@@ -8,7 +8,7 @@ const SCRIPT = 1_000_000;
 const BLOCK = /^([a-z0-9_]+)(?:\[[a-z0-9_]+=[a-z0-9_]+(?:,[a-z0-9_]+=[a-z0-9_]+)*\])?$/;
 
 const refuse = (why: string): never => {
-  throw new Refusal(400, `This is not a Blockyard model: ${why}.`);
+  throw new Refusal(400, `This is not a HoloBlocks model: ${why}.`);
 };
 
 const whole = (value: unknown): value is number => Number.isSafeInteger(value);

@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import { decompressFrames, parseGIF } from "gifuct-js";
 import { planFilm, rising } from "../src/filmPlan";
-import { model, site } from "./fixtures";
+import { model, shareMenu, site } from "./fixtures";
 
 const HUT = {
   steps: model().steps,
@@ -40,18 +40,18 @@ test("Share a GIF makes a looping GIF of the build and leaves the viewer on its 
   await page.goto("/?showcase=hut");
   await expect(page.locator(".viewer")).toHaveAttribute("data-revision", hut.revision);
   await page.getByRole("button", { name: "First step" }).click();
-  await page.getByRole("button", { name: "Share a GIF" }).click();
+  await (await shareMenu(page)).getByRole("menuitem", { name: "Share a GIF…" }).click();
 
   const dialog = page.getByRole("dialog");
   const caption = dialog.getByLabel("Suggested caption");
+  await dialog.getByText("Options", { exact: true }).click();
   await expect(dialog.getByRole("combobox", { name: "Duration" })).toHaveValue("8");
   await expect(caption).toHaveValue(
-    "Little Hut: 24 Minecraft blocks, built with HOLO4 by H Company. #HOLO4 #Blockyard #Minecraft",
+    "Little Hut: 24 Minecraft blocks, built with HOLO4 by H Company. #HOLO4 #HoloBlocks #Minecraft",
   );
   await dialog.getByRole("checkbox", { name: "H Company logo" }).uncheck();
-  await expect(caption).toHaveValue("Little Hut: 24 Minecraft blocks, built with Blockyard. #Blockyard #Minecraft");
+  await expect(caption).toHaveValue("Little Hut: 24 Minecraft blocks, built with HoloBlocks. #HoloBlocks #Minecraft");
   await dialog.getByRole("checkbox", { name: "H Company logo" }).check();
-  await dialog.getByRole("button", { name: "Generate GIF" }).click();
   const link = dialog.getByRole("link", { name: "Download GIF" });
   await expect(link).toBeVisible({ timeout: 240000 });
 

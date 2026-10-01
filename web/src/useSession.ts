@@ -69,10 +69,27 @@ export function useKeeper(running: string[], onSettled: () => void) {
     [],
   );
 
+  /** While a build runs: warn before leaving, and keep the screen awake, since a sleeping device stops the renders. */
   useEffect(() => {
     if (!running.length) return;
     const warn = (event: BeforeUnloadEvent) => event.preventDefault();
+    let lock: WakeLockSentinel | null = null;
+    let stopped = false;
+    const awake = () => {
+      if (stopped || document.visibilityState !== "visible" || (lock && !lock.released)) return;
+      navigator.wakeLock?.request("screen").then(
+        (held) => (stopped ? void held.release() : (lock = held)),
+        () => {},
+      );
+    };
+    awake();
+    document.addEventListener("visibilitychange", awake);
     window.addEventListener("beforeunload", warn);
-    return () => window.removeEventListener("beforeunload", warn);
+    return () => {
+      stopped = true;
+      void lock?.release();
+      document.removeEventListener("visibilitychange", awake);
+      window.removeEventListener("beforeunload", warn);
+    };
   }, [running.length > 0]);
 }
