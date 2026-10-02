@@ -24,6 +24,8 @@ const LIBRARY = "library/";
 /** Private entries sit apart, per owner, so listing the public library can never include them. */
 const shelf = (owner: string) => `private/${encodeURIComponent(owner)}/`;
 const folder = (id: string) => `builds/${id}/`;
+/** The platform keeps every session, so a deleted session's build is marked `<id>/<milliseconds>.json` here and hidden. */
+const trash = (owner: string) => `deleted/${encodeURIComponent(owner)}/`;
 
 async function listed(prefix: string) {
   const blobs = [];
@@ -107,4 +109,20 @@ export async function unlist(id: string, owner?: string) {
   await drop(`${LIBRARY}${id}/`);
   if (owner) await drop(`${shelf(owner)}${id}/`);
   await drop(folder(id));
+}
+
+/** Hide one of `owner`'s session builds from them for good. */
+export async function forget(owner: string, id: string) {
+  const at = Date.now();
+  await put(`${trash(owner)}${id}/${at}.json`, JSON.stringify({ at }), {
+    ...PUBLIC,
+    addRandomSuffix: false,
+    contentType: "application/json",
+  });
+}
+
+/** The ids of the session builds `owner` deleted. */
+export async function forgotten(owner: string): Promise<string[]> {
+  const prefix = trash(owner);
+  return [...new Set((await listed(prefix)).map((b) => b.pathname.slice(prefix.length).split("/")[0]))];
 }

@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Account } from "./account";
 import { AccountMenu } from "./AccountMenu";
 import { PHASES } from "./activity";
-import { create, remix, say, stop } from "./agent";
+import { cancel, create, remix, say, stop } from "./agent";
 import { BlockLoader } from "./BlockLoader";
 import { BlocksPanel } from "./BlocksPanel";
 import { ChatPanel } from "./ChatPanel";
@@ -12,7 +12,7 @@ import { useEdits } from "./edits";
 import { FilmExport } from "./FilmExport";
 import { HomeShelves } from "./HomeShelves";
 import { ImportBuild } from "./ImportBuild";
-import { card, library, publish, remember, setPrivate, type Shelf, thumbnail, unpublish } from "./library";
+import { card, library, publish, remember, remove, setPrivate, type Shelf, thumbnail, unpublish } from "./library";
 import { type Build, type BuildSummary, EMPTY_MODEL, PALETTE, type Source } from "./model";
 import { RecoveryPanel } from "./RecoveryPanel";
 import type { BlockScene } from "./scene";
@@ -246,6 +246,9 @@ export default function App({ account }: { account: Account }) {
   const owned = ref?.source === "session" || (ref?.source === "public" && summary?.owner === account.user.id);
   /** An imported build of theirs: it lives only in the library, with no session to fall back to. */
   const imported = owned && ref?.source === "public" && ref.id.startsWith("import-");
+  /** Theirs in the library, or one of the sessions the platform lists as theirs. */
+  const deletable =
+    owned && (ref?.source === "public" || !!builds?.some((b) => b.source === "session" && b.id === ref?.id));
 
   const publishBuild = async () => {
     if (!build) return;
@@ -274,7 +277,8 @@ export default function App({ account }: { account: Account }) {
 
   const deleteBuild = async () => {
     if (!build) return;
-    await unpublish(build.id);
+    if (build.status === "building") await cancel(build.id).catch(console.error);
+    await remove(build.id);
     open(null);
     await refreshBuilds();
   };
@@ -336,7 +340,7 @@ export default function App({ account }: { account: Account }) {
                   }
                 : null
             }
-            onDelete={imported ? deleteBuild : null}
+            onDelete={deletable ? deleteBuild : null}
             image={() => scene.current?.image() ?? Promise.resolve(null)}
             onGif={() => setFilmBuild(actionable)}
           />

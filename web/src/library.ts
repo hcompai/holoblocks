@@ -8,6 +8,7 @@ import type { Edit } from "./voxelEdits";
 const GALLERY = "/gallery";
 const API = "/api/builds";
 const IMPORTS = "/api/imports";
+const DELETED = "/api/deleted";
 const STORE = "blockyard.library";
 
 /** What the browser remembers of a session's model, since the platform keeps only its chat. */
@@ -209,13 +210,23 @@ export async function unpublish(id: string) {
   await api(`${API}?id=${encodeURIComponent(id)}`, { method: "DELETE", headers: signed() });
 }
 
+/** Delete one of the signed-in user's builds for good: it leaves their builds and the library. */
+export async function remove(id: string) {
+  await api(DELETED, {
+    method: "POST",
+    headers: { ...signed(), "Content-Type": "application/json" },
+    body: JSON.stringify({ id }),
+  });
+}
+
 /** A part of the library that loads on its own. */
 export type Shelf = "mine" | "public";
 
 /** The signed-in user's builds, newest first, then everyone's public builds, then the showcases; with the shelves that failed to load. */
 export async function library(): Promise<{ builds: BuildSummary[]; failed: Shelf[] }> {
-  const [sessionsLoaded, sharedLoaded, hiddenLoaded, shownLoaded] = await Promise.allSettled([
+  const [sessionsLoaded, deletedLoaded, sharedLoaded, hiddenLoaded, shownLoaded] = await Promise.allSettled([
     current() ? sessions() : Promise.resolve([]),
+    current() ? api<string[]>(DELETED, { headers: signed() }) : Promise.resolve([]),
     community(),
     current() ? hidden() : Promise.resolve([]),
     showcases(),
@@ -227,7 +238,8 @@ export async function library(): Promise<{ builds: BuildSummary[]; failed: Shelf
     if (!failed.includes(shelf)) failed.push(shelf);
     return [];
   };
-  const mine = value(sessionsLoaded, "mine");
+  const deleted = new Set(value(deletedLoaded, "mine"));
+  const mine = failed.includes("mine") ? [] : value(sessionsLoaded, "mine").filter((s) => !deleted.has(s.id));
   const shared = value(sharedLoaded, "public");
   const own = value(hiddenLoaded, "mine");
   const shown = value(shownLoaded, "public");

@@ -16,7 +16,7 @@ Setup, architecture, deploy and the toolkit. The [main README](../README.md) is 
 
 - **Chat** to describe a build, with photos if you like, or start from one of the ideas in one click. The request shows at once and the build opens as soon as its session exists. Holo writes a Python build script on a hosted Workstation, and every revision it shares appears in 3D. While the canvas is empty, the first four phases (reading, preparing blocks, references, naming) have pausable visuals: a subject sketch, real palette textures, photos as Holo opens or shares them, and the title once named. Selected photos also arrive through `share_files`; user attachments appear in the design board immediately. Building and checking stay in chat. New blocks reveal quickly in step and layer order, with a short settling motion; existing blocks stay in place. Block sounds are on by default: quiet synthesized pops with material-specific tones, limited to audible beats for dense fills. The speaker button mutes them and remembers the choice. Reduced motion shows the completed model immediately. The chat names the phase Holo is in; its steps fold under its next message.
 - **Every block is checked** against a ~750-block palette and clipped to the 128x128 site, 100 blocks tall.
-- **Replay** the steps, read each step's code and browse the blocks. **Share** holds the rest: publish, copy the link, a GIF of the build rising (made as the dialog opens, 8 to 30 seconds), a WorldEdit `.schem` or a PNG.
+- **Replay** the steps, read each step's code and browse the blocks. **Share** holds the rest: publish, copy the link, a GIF of the build rising (made as the dialog opens, 8 to 30 seconds), a WorldEdit `.schem` or a PNG, and **Delete** for your own builds.
 - **Edit** by hand: choose **Edit**, click a block, Shift-drag a box around the blocks you see, then move, replace or delete them, or right-click a face to place the block in hand; undo, redo and reset. Edits are saved in this browser per build and revision, and publishing includes them. The **?** button or key lists every shortcut.
 - **Walk** through the build: choose **Walk**, click the model, then WASD and the mouse. Space jumps, Space twice flies, Esc leaves. Edit and Walk show once the build has blocks.
 - **Publish** a build to the home page's Public builds, **remix** any build (Holo starts from an exact copy: the build's own script, or a replay of its blocks), **import** a model file, **copy** a link that previews the build, even on the sign-in page.
@@ -66,6 +66,7 @@ signed in ──GET /api/builds──▶ the public library
 - Signing in again revokes the previous key. The key lives in the browser's local storage; the pass, signed with `BLOCKYARD_SECRET`, names its holder to the functions.
 - Publishing copies the session's model (with this browser's edits, which drop its script), transcript and images, so a public build stands on its own. Only its author can publish or unpublish a build; the emails in `BLOCKYARD_ADMINS` can unpublish any.
 - An imported build has no session, so it lives only in the library: **Make private** moves its entry to `private/<owner>/`, listed and opened only for its owner; its files keep their unguessable public URLs, so a shared link still opens it. **Delete** removes its entry and files.
+- The Agents API cannot delete a session, so **Delete** on a session's build stops Holo if it is building, unpublishes it, and marks it in `deleted/<owner>/` (`/api/deleted`): the home page leaves it out on every device, though its `?build=` link still opens.
 - Server environment: `BLOCKYARD_SECRET`, `BLOCKYARD_ADMINS`, and `BLOB_READ_WRITE_TOKEN` from the `blockyard-library` Blob store.
 
 ## Where to change things
@@ -111,5 +112,5 @@ cd web && npm ci && npx playwright install chromium && npm test && npm run build
 
 The server tests run the toolkit offline. The browser tests mock the Agents API and the library and render real
 geometry: a build that shares models and asks for renders, a new build with a photo, one-click ideas, a follow-up and
-Stop, a message mid-build, a change to an ended build, the home page's builds, publishing, remixes, imports, link previews, sign-in, edits, walking,
+Stop, a message mid-build, deleting a build, a change to an ended build, the home page's builds, publishing, remixes, imports, link previews, sign-in, edits, walking,
 the GIF export, recovery and the tab guard.

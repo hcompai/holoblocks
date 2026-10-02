@@ -5,7 +5,7 @@ import { ACCOUNT, model, shareMenu, site } from "./fixtures";
 
 const BLOB = "https://blob.test";
 
-/** The library API holding one imported build of the signed-in user's, with PATCH, ?mine=1 and DELETE. */
+/** The library API holding one imported build of the signed-in user's, with PATCH, ?mine=1, DELETE and /api/deleted. */
 async function library(page: Page, build: Model & { id: string }) {
   const entries = [
     {
@@ -21,7 +21,7 @@ async function library(page: Page, build: Model & { id: string }) {
       private: false,
     },
   ];
-  const calls: { method: string; search: string; body: unknown; auth: string | undefined }[] = [];
+  const calls: { method: string; path: string; search: string; body: unknown; auth: string | undefined }[] = [];
   await page.route(`${BLOB}/**`, (route) =>
     entries.length
       ? route.fulfill({
@@ -36,6 +36,7 @@ async function library(page: Page, build: Model & { id: string }) {
     const method = request.method();
     calls.push({
       method,
+      path: url.pathname,
       search: url.search.replace(/[?&]t=\d+/, ""),
       body: method === "PATCH" ? request.postDataJSON() : null,
       auth: request.headers().authorization,
@@ -56,6 +57,19 @@ async function library(page: Page, build: Model & { id: string }) {
       return entry ? route.fulfill({ json: entry }) : route.fulfill({ status: 404, json: { error: "Not public." } });
     }
     return route.fulfill({ json: entries.filter((e) => !e.private) });
+  });
+  await page.route("**/api/deleted", (route) => {
+    const request = route.request();
+    if (request.method() !== "POST") return route.fulfill({ json: [] });
+    calls.push({
+      method: "POST",
+      path: "/api/deleted",
+      search: "",
+      body: request.postDataJSON(),
+      auth: request.headers().authorization,
+    });
+    entries.splice(0, entries.length);
+    return route.fulfill({ status: 204 });
   });
   return calls;
 }
@@ -104,10 +118,12 @@ test("an imported build goes private and stays under the user's builds, goes pub
   const remove = page.getByRole("dialog", { name: "Delete" });
   await expect(remove).toContainText("Delete Granite house?");
   await remove.getByRole("button", { name: "Cancel" }).click();
-  expect(calls.some((c) => c.method === "DELETE")).toBe(false);
+  expect(calls.some((c) => c.path === "/api/deleted")).toBe(false);
   await (await shareMenu(page)).getByRole("menuitem", { name: "Delete…" }).click();
   await remove.getByRole("button", { name: "Delete" }).click();
   await expect(page).toHaveURL(/\/$/);
-  expect(calls.find((c) => c.method === "DELETE")).toMatchObject({ search: "?id=import-1" });
+  expect(calls.filter((c) => c.path === "/api/deleted")).toMatchObject([
+    { body: { id: "import-1" }, auth: `Bearer ${ACCOUNT.pass}` },
+  ]);
   await expect(mine).toHaveCount(0);
 });

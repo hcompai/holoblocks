@@ -31,7 +31,7 @@ export async function signedIn(page: Page, account = ACCOUNT) {
   await page.addInitScript((a) => localStorage.setItem("blockyard.account", JSON.stringify(a)), account);
 }
 
-/** Serve the toolkit and these showcases as the static site would; the Agents API has no sessions and the public library is empty. `account` is signed in, if any. */
+/** Serve the toolkit and these showcases as the static site would; the Agents API has no sessions and the public library is empty. `account` is signed in, if any. Returns the ids of the builds the user deletes. */
 export async function site(
   page: Page,
   showcases: (Model & { id: string })[] = [],
@@ -49,6 +49,12 @@ export async function site(
       ? route.fulfill({ status: 404, json: { error: "This build is not public." } })
       : route.fulfill({ json: [] }),
   );
+  const deleted: string[] = [];
+  await page.route("**/api/deleted", (route) => {
+    if (route.request().method() !== "POST") return route.fulfill({ json: deleted });
+    deleted.push(route.request().postDataJSON().id);
+    return route.fulfill({ status: 204 });
+  });
   await page.route("**/blockyard.tgz", (route) => route.fulfill({ contentType: "application/gzip", body: "toolkit" }));
   await page.route("**/gallery/builds.json", (route) =>
     route.fulfill({
@@ -61,6 +67,7 @@ export async function site(
       route.fulfill({ json: { ...s, status: "done", messages } }),
     );
   }
+  return deleted;
 }
 
 /** Opens the open build's Share menu. */
