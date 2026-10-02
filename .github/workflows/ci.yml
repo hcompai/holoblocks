@@ -83,4 +83,13 @@ jobs:
           cache-dependency-path: web/package-lock.json
       - working-directory: web
         run: npm ci && npx playwright install --with-deps chromium && npm install --global vercel@60
-      - run: scripts/deploy.sh --prod
+      # Deploys finish in whatever order their tests do: only the branch's latest commit may reach production.
+      - name: Deploy, unless a newer commit landed, which deploys itself
+        run: |
+          git fetch --quiet --depth=1 origin "$GITHUB_REF"
+          latest=$(git rev-parse FETCH_HEAD)
+          if [ "$latest" != "$GITHUB_SHA" ]; then
+            echo "::notice::Skipped: ${latest::7} is newer and deploys itself."
+            exit 0
+          fi
+          scripts/deploy.sh --prod
