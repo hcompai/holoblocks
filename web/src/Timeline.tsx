@@ -32,17 +32,19 @@ export function Timeline({ build, step, playing, speed, onStep, onPlay, onSpeed,
         ? "Stopped with an error"
         : finished
           ? "Finished model"
-          : `Step ${current + 1} of ${steps.length}: ${steps[current]?.title ?? ""}`;
+          : current < 0
+            ? "Empty canvas"
+            : `Step ${current + 1} of ${steps.length}: ${steps[current]?.title ?? ""}`;
 
   const toggle = () => {
-    if (!playing && current >= last) onStep(0);
+    if (!playing && current >= last) onStep(-1);
     onPlay(!playing);
   };
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!spaceKey) return;
-      if (e.key !== " " || e.repeat || e.ctrlKey || e.metaKey || e.altKey || steps.length < 2) return;
+      if (e.key !== " " || e.repeat || e.ctrlKey || e.metaKey || e.altKey || !steps.length) return;
       if (e.target instanceof Element && e.target.closest("input, textarea, select, button, a, [contenteditable]"))
         return;
       if (document.querySelector("dialog[open]")) return;
@@ -58,7 +60,7 @@ export function Timeline({ build, step, playing, speed, onStep, onPlay, onSpeed,
       <button className="icon" disabled={!steps.length} onClick={() => onStep(0)} title="First step">
         <SkipBackIcon size={16} weight="fill" />
       </button>
-      <button className="play" disabled={steps.length < 2} onClick={toggle} title={playing ? "Pause" : "Play"}>
+      <button className="play" disabled={!steps.length} onClick={toggle} title={playing ? "Pause" : "Play"}>
         {playing ? <PauseIcon size={14} weight="fill" /> : <PlayIcon size={14} weight="fill" />}
       </button>
       <button className="icon" disabled={current >= last} onClick={() => onStep(last)} title="Last step">
@@ -84,12 +86,12 @@ export function Timeline({ build, step, playing, speed, onStep, onPlay, onSpeed,
         <input
           type="range"
           aria-label="Step"
-          min={0}
+          min={-1}
           max={Math.max(last, 0)}
-          value={Math.max(current, 0)}
+          value={Math.max(current, -1)}
           disabled={!steps.length}
           onChange={(e) => onStep(Number(e.target.value))}
-          style={{ "--fill": `${last > 0 ? (current / last) * 100 : 0}%` } as CSSProperties}
+          style={{ "--fill": `${steps.length ? ((current + 1) / steps.length) * 100 : 0}%` } as CSSProperties}
         />
       </div>
     </div>

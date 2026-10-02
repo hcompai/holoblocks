@@ -6,6 +6,45 @@ import type { UV } from "../src/atlas";
 import { model, site } from "./fixtures";
 import { platform } from "./platform";
 
+for (const singleStep of [false, true]) {
+  test(`replay starts empty and animates the first step (${singleStep ? "one step, Space" : "multiple steps, Play"})`, async ({
+    page,
+  }) => {
+    const seed = model();
+    const build = {
+      ...seed,
+      id: "replay",
+      ...(singleStep ? { steps: seed.steps.slice(0, 1), boxes: seed.boxes.slice(0, 8) } : {}),
+    };
+    await site(page, [build]);
+    await page.goto(`/?showcase=${build.id}`);
+    const viewer = page.locator(".viewer");
+    const slider = page.getByRole("slider", { name: "Step", exact: true });
+    await expect(viewer).toHaveAttribute("data-revision", build.revision);
+    await page.getByRole("button", { name: "0.5×", exact: true }).click();
+    if (singleStep) {
+      await page.locator(".scrub-label").click();
+      await page.keyboard.press("Space");
+    } else await page.getByTitle("Play", { exact: true }).click();
+    await expect(slider).toHaveValue("-1");
+    await page.getByTitle("Pause", { exact: true }).click();
+    await expect(page.locator(".scrub-label")).toHaveText(`Empty canvas0 blocks · 0/${build.steps.length} steps`);
+    await expect(slider).toHaveCSS("--fill", "0%");
+    await page.waitForTimeout(150);
+    await expect(slider).toHaveValue("-1");
+
+    await page.getByTitle("Play", { exact: true }).click();
+    await page.getByRole("button", { name: "Pause block placement", exact: true }).click();
+    await expect(slider).toHaveValue("0");
+    await expect(viewer).toHaveAttribute("data-placement-total", "16");
+    await page.getByRole("button", { name: "Skip", exact: true }).click();
+    await expect(page.locator(".scrub-label b")).toHaveText("Finished model");
+    await expect(slider).toHaveValue(String(build.steps.length - 1));
+    await expect(slider).toHaveCSS("--fill", "100%");
+    await expect(page.getByTitle("Play", { exact: true })).toBeEnabled();
+  });
+}
+
 const palette: Palette = { stone: { tex: "stone" }, oak_planks: { tex: "oak_planks" } };
 const box = (step: number, y0: number, y1 = y0, block = "stone"): Box => ({
   x0: 0,
