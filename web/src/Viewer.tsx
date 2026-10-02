@@ -17,6 +17,7 @@ import { useTheme } from "./theme";
 import { Thinking } from "./Thinking";
 import type { Hit, Vec3 } from "./voxels";
 import { WalkHud } from "./WalkHud";
+import { useWalkFullscreen } from "./useWalkFullscreen";
 import { PlacementSoundToggle } from "./PlacementSound";
 
 /** Hand edits come in bursts; the library tile waits for a pause. */
@@ -133,6 +134,7 @@ export function Viewer(props: Props) {
   const { build, step, framing, spin, onThumbnail, palette, onCounts, scene, loading, thinking, failed, onFailed } =
     props;
   const { mode, edits, onMode } = props;
+  const walkScreen = useWalkFullscreen(mode === "walk");
   const container = useRef<HTMLDivElement>(null);
   const framedBuild = useRef<string | null>(null);
   const thumbnailed = useRef(new Set<string>());
@@ -415,7 +417,8 @@ export function Viewer(props: Props) {
 
   return (
     <div
-      className="viewer"
+      ref={walkScreen.ref}
+      className={walkScreen.fullscreen ? "viewer walk-fullscreen" : "viewer"}
       data-revision={drawn ?? undefined}
       data-placing={placement ? "true" : undefined}
       data-placed={placement?.placed}
@@ -450,7 +453,15 @@ export function Viewer(props: Props) {
       {editing && shown && selected.length > 0 && (
         <EditPanel label={label} onAction={act} onClose={() => setSelected(NONE)} />
       )}
-      {mode === "walk" && shown && <WalkHud locked={locked} flying={flying} />}
+      {mode === "walk" && shown && (
+        <WalkHud
+          locked={locked}
+          flying={flying}
+          fullscreen={walkScreen.fullscreen}
+          onFullscreen={walkScreen.toggle}
+          onLeave={() => onMode("view")}
+        />
+      )}
       {placement && mode === "view" && (
         <div className="placement-hud">
           <span>
