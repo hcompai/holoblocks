@@ -1,6 +1,6 @@
-import { GoogleLogoIcon } from "@phosphor-icons/react";
+import { EnvelopeSimpleIcon, GoogleLogoIcon } from "@phosphor-icons/react";
 import { useEffect, useState } from "react";
-import { signIn, signInError } from "./account";
+import { signIn, signInError, signInOnPlatform } from "./account";
 import { Cube } from "./BlockLoader";
 
 /** The build a shared link opens, read back from the link preview tags api/preview.ts wrote; null on any other page. */
@@ -17,9 +17,11 @@ function sharedBuild(): { name: string; author: string | null; cover: string | n
   };
 }
 
-/** All a signed-out visitor sees: the build a colleague shared, if any, and the way in with an H Company Google account. */
+/** All a signed-out visitor sees: the build a colleague shared, if any, and the ways in with an H account. */
 export function SignInPage() {
   const [leaving, setLeaving] = useState(false);
+  const [onPlatform, setOnPlatform] = useState(false);
+  const [blocked, setBlocked] = useState(false);
   const [shared] = useState(sharedBuild);
   const [coverFailed, setCoverFailed] = useState(false);
   useEffect(() => {
@@ -54,7 +56,7 @@ export function SignInPage() {
         </>
       )}
       <button
-        className="sign-in-google"
+        className="sign-in-method sign-in-google"
         disabled={leaving}
         onClick={() => {
           setLeaving(true);
@@ -64,9 +66,24 @@ export function SignInPage() {
         <GoogleLogoIcon size={18} weight="bold" />
         {leaving ? "Opening Google…" : "Continue with Google"}
       </button>
-      {signInError && (
+      <button
+        className="sign-in-method"
+        disabled={leaving || onPlatform}
+        onClick={() => {
+          setOnPlatform(true);
+          setBlocked(false);
+          void signInOnPlatform().then((opened) => {
+            setOnPlatform(false);
+            setBlocked(!opened);
+          });
+        }}
+      >
+        <EnvelopeSimpleIcon size={18} weight="bold" />
+        {onPlatform ? "Finish signing in in the popup…" : "Sign in with email"}
+      </button>
+      {(blocked || signInError) && (
         <p className="sign-in-error" role="alert">
-          {signInError}
+          {blocked ? "Your browser blocked the sign-in popup: allow popups for this site and try again." : signInError}
         </p>
       )}
       <p className="sign-in-fine">HoloBlocks is open to everyone at H Company.</p>

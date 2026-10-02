@@ -1869,16 +1869,13 @@ main {
   font-size: 15px;
 }
 
-.sign-in-google {
+.sign-in-method {
   justify-content: center;
   gap: 10px;
   min-width: 240px;
   height: 44px;
   padding: 0 20px;
   border-radius: 999px;
-  border-color: transparent;
-  background: var(--background-primary);
-  color: var(--text-on-primary);
   font-size: 15px;
   font-weight: 600;
   transition:
@@ -1886,7 +1883,13 @@ main {
     box-shadow 0.15s;
 }
 
-.sign-in-google:hover:not(:disabled) {
+.sign-in-google {
+  border-color: transparent;
+  background: var(--background-primary);
+  color: var(--text-on-primary);
+}
+
+.sign-in-method:hover:not(:disabled) {
   transform: translateY(-1px);
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
 }
