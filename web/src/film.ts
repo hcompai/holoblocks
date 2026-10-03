@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { cameraBounds, planBuildCamera, sampleBuildCamera, type CameraLayer } from "./buildCamera";
 import { type Build, PALETTE } from "./model";
 import {
   filmSteps,
@@ -148,6 +149,7 @@ export class FilmRenderer {
   private steps: FilmStepBoxes[];
   /** Each step's block bounds, in step order. */
   private boxes: THREE.Box3[];
+  private solidBoxes: THREE.Box3[][];
   private final = new Hull();
   /** Keeps what lies below the rising cut, and what lies above it. */
   private cuts = [new THREE.Plane(new THREE.Vector3(0, -1, 0)), new THREE.Plane(new THREE.Vector3(0, 1, 0))];
@@ -176,6 +178,20 @@ export class FilmRenderer {
       return known;
     };
     this.boxes = this.steps.map((step) => blockBounds(step, build, isAir));
+    this.solidBoxes = this.steps.map((step) =>
+      step.boxes.flatMap((b) => {
+        const { name, info } = parseState(b.block, PALETTE);
+        if (
+          name === "air" ||
+          info.transparent ||
+          info.cutout ||
+          info.liquid ||
+          !["cube", "log"].includes(info.shape ?? "cube")
+        )
+          return [];
+        return [blockBounds({ ...step, boxes: [b] }, build, isAir)];
+      }),
+    );
     for (const box of this.boxes) this.final.add(box);
   }
 
@@ -320,11 +336,56 @@ export class FilmRenderer {
     return start + ORBIT_DEGREES + fading + surge * turntable * (s / 2 - Math.sin(2 * Math.PI * s) / (4 * Math.PI));
   }
 
-  /** The camera for every frame, framing what is built a moment ahead, smoothed so it glides. */
+  /** Follow build holds each step still; alternative modes keep their chosen orbit or fixed view. */
   private track(options: FilmOptions, plan: FilmPlan): Pose[] {
     const { fps, width, height } = options;
+    if (!options.camera || options.camera === "follow") {
+      const layers: CameraLayer[] = [];
+      for (const step of plan.steps) {
+        const box = this.boxes[step.number - 1];
+        if (box.isEmpty()) continue;
+        for (let y = box.min.y; y < box.max.y; y++) {
+          const layer = box.clone();
+          layer.min.y = y;
+          layer.max.y = Math.min(y + 1, box.max.y);
+          const span = step.top - step.bottom;
+          layers.push({
+            step: step.index,
+            start: step.start + ((y - step.bottom) / span) * (step.end - step.start),
+            end: step.start + ((y + 1 - step.bottom) / span) * (step.end - step.start),
+            bounds: cameraBounds(layer),
+            solids: this.solidBoxes[step.number - 1].flatMap((solid) => {
+              if (solid.min.y >= layer.max.y || solid.max.y <= layer.min.y || solid.isEmpty()) return [];
+              const slice = solid.clone();
+              slice.min.y = Math.max(slice.min.y, layer.min.y);
+              slice.max.y = Math.min(slice.max.y, layer.max.y);
+              return [cameraBounds(slice)];
+            }),
+          });
+        }
+      }
+      const track = planBuildCamera(
+        layers,
+        null,
+        { aspect: width / height, fov: FOV, caption: CAPTION },
+        plan.assembled,
+        plan.hold - plan.assembled,
+      );
+      if (track) return Array.from({ length: frameCount(options) }, (_, i) => sampleBuildCamera(track, i / fps));
+    }
     const tan = Math.tan(THREE.MathUtils.degToRad(FOV / 2));
     const [tanX, tanY] = [(tan * width) / height, tan * (1 - CAPTION)];
+    if (options.camera === "fixed") {
+      const direction = toward(HERO_ANGLE, ELEVATION.end);
+      const whole = fit(this.final.points, direction, tanX, tanY);
+      const distance = whole.distance * MARGIN;
+      const pose = {
+        target: whole.target,
+        position: whole.target.clone().addScaledVector(direction, distance),
+        distance,
+      };
+      return Array.from({ length: frameCount(options) }, () => pose);
+    }
     const built = new Hull();
     let included = 0;
     const raw = Array.from({ length: frameCount(options) }, (_, i) => {

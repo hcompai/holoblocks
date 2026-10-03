@@ -17,7 +17,8 @@ test("a film raises each step in order, bottom layer first, before the turntable
     const plan = planFilm(HUT, seconds);
     const [floor, cube] = plan.steps;
     expect(plan.steps.map((s) => s.title)).toEqual(["Floor", "Cube"]);
-    expect(floor.end).toBeCloseTo(cube.start, 9);
+    expect(cube.start - floor.end).toBeCloseTo(0.3, 9);
+    expect(rising(plan, floor.end + 0.15)).toEqual({ step: 0, layers: 1 });
     expect(cube.end).toBeCloseTo(plan.assembled, 9);
     expect(plan.hold).toBe(seconds - 1);
     expect(rising(plan, 0)).toEqual({ step: -1, layers: 0 });
@@ -46,6 +47,12 @@ test("Share a GIF makes a looping GIF of the build and leaves the viewer on its 
   const caption = dialog.getByLabel("Suggested caption");
   await dialog.getByText("Options", { exact: true }).click();
   await expect(dialog.getByRole("combobox", { name: "Duration" })).toHaveValue("8");
+  await expect(dialog.getByRole("combobox", { name: "Camera", exact: true })).toHaveValue("follow");
+  await expect(dialog.getByRole("combobox", { name: "Camera", exact: true }).locator("option")).toHaveText([
+    "Follow build",
+    "Orbit",
+    "Fixed",
+  ]);
   await expect(caption).toHaveValue(
     "Little Hut: 24 Minecraft blocks, built with HOLO4 by H Company. #HOLO4 #HoloBlocks #Minecraft",
   );
@@ -68,8 +75,16 @@ test("Share a GIF makes a looping GIF of the build and leaves the viewer on its 
   const frames = decompressFrames(gif, false);
   expect(frames).toHaveLength(8 * 20);
   expect(frames.every((f) => f.delay === 50)).toBe(true);
-  const moving = frames.slice(1).filter((f) => f.pixels.some((p) => p !== f.transparentIndex));
-  expect(moving.length).toBeGreaterThan(frames.length / 2);
+  // Held shots deliberately produce identical frames between layer placements.
+  const sceneChanges = (i: number) =>
+    frames[i].pixels.some((p, j) => p !== frames[i].transparentIndex && j < gif.lsd.width * gif.lsd.height * 0.8);
+  const plan = planFilm(HUT, 8);
+  const [floor, cube] = plan.steps;
+  expect(sceneChanges(Math.ceil(floor.start * 20))).toBe(true);
+  expect(sceneChanges(Math.round(((floor.start + floor.end) / 2) * 20))).toBe(false);
+  expect(sceneChanges(Math.round(((floor.end + cube.start) / 2) * 20))).toBe(true);
+  expect(sceneChanges(Math.ceil(((cube.start + cube.end) / 2) * 20))).toBe(true);
+  expect(sceneChanges(Math.round((plan.assembled + 0.5) * 20))).toBe(true);
 
   await page.evaluate(() => {
     Object.defineProperty(navigator, "canShare", { configurable: true, value: () => true });

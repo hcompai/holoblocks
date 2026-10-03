@@ -1,0 +1,13 @@
+.camera-preview {
+  grid-template-columns: 1fr;
+}
+.camera-preview main {
+  grid-column: 1;
+}
+.camera-preview .stage-head {
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.camera-preview header select {
+  margin-left: 16px;
+}

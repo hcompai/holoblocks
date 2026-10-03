@@ -1,4 +1,5 @@
 import type { Box, Build } from "./model";
+import { CAMERA_MOVE_SECONDS } from "./buildTiming";
 
 export const HOLO_MODEL = "HOLO4";
 
@@ -11,6 +12,7 @@ export type FilmAspect = keyof typeof FILM_ASPECTS;
 export const FILM_SECONDS = [8, 12, 20, 30];
 export const MIN_SECONDS = 6;
 export const MAX_SECONDS = 60;
+export type FilmCamera = "follow" | "orbit" | "fixed";
 
 export interface FilmOptions {
   width: number;
@@ -19,6 +21,7 @@ export interface FilmOptions {
   fps: number;
   /** The H Company logo in the corner. */
   branded: boolean;
+  camera?: FilmCamera;
 }
 
 const INTRO_S = 0.4;
@@ -73,7 +76,7 @@ export function filmSteps(build: Pick<Build, "boxes" | "steps">): FilmStepBoxes[
 }
 
 /**
- * Steps rise layer by layer, back to back, the last as the turntable starts. Each gets time by the cube root of its
+ * Steps rise layer by layer, with brief camera moves between steps. Each gets time by the cube root of its
  * volume, its size along a side, so a whole terrain rises quickly and a single block still gets a beat.
  */
 export function planFilm(build: Pick<Build, "boxes" | "steps">, seconds: number): FilmPlan {
@@ -87,9 +90,12 @@ export function planFilm(build: Pick<Build, "boxes" | "steps">, seconds: number)
   const groups = filmSteps(build);
   const weights = groups.map((g) => Math.cbrt(g.volume));
   const total = weights.reduce((a, b) => a + b, 0);
+  const move = Math.min(CAMERA_MOVE_SECONDS, ((assembled - INTRO_S) * 0.2) / Math.max(groups.length - 1, 1));
+  const placement = assembled - INTRO_S - move * (groups.length - 1);
   let time = INTRO_S;
   const steps = groups.map(({ index, title, bottom, top }, i) => {
-    const window = ((assembled - INTRO_S) * weights[i]) / total;
+    if (i) time += move;
+    const window = (placement * weights[i]) / total;
     const step = { index, title, bottom, top, number: i + 1, start: time, end: time + window };
     time += window;
     return step;

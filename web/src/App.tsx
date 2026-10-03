@@ -1,3 +1,4 @@
+import { replayDelay } from "./buildTiming";
 import { PlusIcon } from "@phosphor-icons/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Account } from "./account";
@@ -24,7 +25,6 @@ import { type BuildRef, useBuild } from "./useBuild";
 import { useKeeper } from "./useSession";
 import { type Framing, type Mode, RenderFailed, ViewControls, Viewer } from "./Viewer";
 
-const STEP_MS = 900;
 const TITLE = document.title;
 const NEW_BUILD = "New build";
 const CENTER_TABS = [
@@ -77,6 +77,7 @@ export default function App({ account }: { account: Account }) {
   const [renderFailed, setRenderFailed] = useState(false);
   const [framing, setFraming] = useState<Framing>({ view: "iso" });
   const [spin, setSpin] = useState(false);
+  const [followCamera, setFollowCamera] = useState(true);
   const [filmBuild, setFilmBuild] = useState<Build | null>(null);
   const palette = useMemo(() => Promise.resolve(PALETTE), []);
   const scene = useRef<BlockScene | null>(null);
@@ -137,6 +138,7 @@ export default function App({ account }: { account: Account }) {
 
   useEffect(() => {
     if ((mode === "edit" && !edits.editable) || (mode !== "view" && !built)) setMode("view");
+    if (mode !== "view") setFollowCamera(false);
   }, [mode, edits.editable, built]);
 
   useEffect(() => {
@@ -153,6 +155,8 @@ export default function App({ account }: { account: Account }) {
     setStep(Infinity);
     setFollowing(true);
     setPlaying(false);
+    setFollowCamera(true);
+    setSpin(false);
   }, []);
 
   /** Show this build, or home for none, and put it in the URL. */
@@ -184,7 +188,7 @@ export default function App({ account }: { account: Account }) {
       setFollowing(true);
       return;
     }
-    const timer = setTimeout(() => setStep((s) => s + 1), STEP_MS / speed);
+    const timer = setTimeout(() => setStep((s) => s + 1), replayDelay(step, speed));
     return () => clearTimeout(timer);
   }, [playing, placing, speed, step, last]);
 
@@ -436,15 +440,27 @@ export default function App({ account }: { account: Account }) {
               <ViewControls
                 framing={framing}
                 spin={spin}
+                followCamera={followCamera && mode === "view"}
+                onFollowCamera={(follow) => {
+                  setFollowCamera(follow);
+                  if (follow) setSpin(false);
+                }}
                 mode={mode}
                 canEdit={edits.editable && built}
                 built={built}
                 onFrame={(next) => {
                   if (mode === "walk") setMode("view");
+                  setFollowCamera(false);
                   setFraming(next);
                 }}
-                onSpin={setSpin}
-                onMode={setMode}
+                onSpin={(next) => {
+                  setFollowCamera(false);
+                  setSpin(next);
+                }}
+                onMode={(next) => {
+                  if (next !== "view") setFollowCamera(false);
+                  setMode(next);
+                }}
               />
             )}
           </div>
@@ -455,6 +471,8 @@ export default function App({ account }: { account: Account }) {
                 step={visibleStep}
                 framing={framing}
                 spin={spin}
+                followCamera={followCamera}
+                onFollowCamera={setFollowCamera}
                 onThumbnail={saveThumbnail}
                 palette={palette}
                 onCounts={onCounts}

@@ -1,4 +1,11 @@
 import * as THREE from "three";
+import {
+  planBuildCamera,
+  restoreCameraPlan,
+  sampleBuildCamera,
+  type CameraPose,
+  type BuildCameraPlan,
+} from "./buildCamera";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { PointerLockControls } from "three/examples/jsm/controls/PointerLockControls.js";
 import type { Box, Palette, RenderRequest } from "./model";
@@ -9,6 +16,7 @@ import { collision, type Hit, type Kind, packBoxes, raycast, type Vec3, VoxelWor
 import { Solids, WALK, Walker } from "./walker";
 import { type PlacementPlan, placedCount, SETTLE_SECONDS } from "./placement";
 import { placementPop } from "./blockAudio";
+import { CAMERA_MOVE_SECONDS } from "./buildTiming";
 
 export type View = "iso" | "isoBack" | "front" | "top";
 
@@ -174,7 +182,7 @@ function placementMaterials(source: Materials, time: { value: number }): Materia
 
 function toModel({ meshes, outline, counts, bounds, placement }: MeshReply, materials: Materials): Model {
   const group = new THREE.Group();
-  const time = { value: 0 };
+  const time = { value: placement ? -1 : 0 };
   const animated = placement && placementMaterials(materials, time);
   for (const { kind, positions, normals, uvs, colors, indices, placement: timing, temporary } of meshes) {
     const geometry = new THREE.BufferGeometry();
@@ -293,6 +301,15 @@ export class BlockScene {
   private placing: { model: Model; elapsed: number; lastReport: number; placed: number } | null = null;
   private placementSpeed = 1;
   private placementPaused = false;
+  private followBuild = true;
+  private buildComplete = false;
+  private cameraMotion: {
+    plan: Pick<PlacementPlan, "camera" | "duration">;
+    track: BuildCameraPlan;
+    elapsed: number;
+    from: CameraPose;
+    approach: number;
+  } | null = null;
   /** Set once the user orbits or zooms, so live framing stops fighting them. */
   userMoved = false;
   onCounts: ((counts: Map<string, number>) => void) | null = null;
@@ -301,6 +318,7 @@ export class BlockScene {
   onWalkLock: ((locked: boolean) => void) | null = null;
   onFly: ((flying: boolean) => void) | null = null;
   onPlacement: ((progress: PlacementProgress) => void) | null = null;
+  onFollowBuild: ((following: boolean) => void) | null = null;
 
   constructor(
     private container: HTMLElement,
@@ -331,7 +349,11 @@ export class BlockScene {
 
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableDamping = true;
-    this.controls.addEventListener("start", () => (this.userMoved = true));
+    this.controls.addEventListener("start", () => {
+      this.userMoved = true;
+      this.setFollowBuild(false);
+      this.onFollowBuild?.(false);
+    });
     this.controls.autoRotateSpeed = 1.2;
 
     this.hover.visible = false;
@@ -357,7 +379,11 @@ export class BlockScene {
       const seconds = Math.min(this.timer.update(time).getDelta(), 0.1);
       this.advancePlacement(seconds);
       if (this.walking) this.walk(seconds);
-      else if (this.controls.update()) this.dirty = true;
+      else {
+        this.controls.enableDamping = !this.followingBuild;
+        if (this.controls.update()) this.dirty = true;
+      }
+      this.advanceCamera(seconds);
       if (!this.dirty) return;
       this.dirty = false;
       this.renderer.render(this.scene, this.camera);
@@ -389,11 +415,14 @@ export class BlockScene {
     this.renderer.setSize(w, h);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
+    if (this.cameraMotion)
+      this.planCamera(this.cameraMotion.plan, Math.min(this.cameraMotion.elapsed, this.cameraMotion.plan.duration));
     this.dirty = true;
   }
 
   /** Show this site's boxes up to `step`. */
   show(site: Site | null, step = Infinity, options: { animate?: boolean; reset?: boolean } = {}) {
+    this.cameraMotion = null;
     this.skipPlacement();
     if (options.reset) this.shown = null;
     this.animate = !!options.animate && !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -435,6 +464,7 @@ export class BlockScene {
       this.placing = { model, elapsed: 0, lastReport: -Infinity, placed: 0 };
       this.placementPaused = false;
       this.renderer.shadowMap.enabled = false;
+      if (this.followingBuild) this.planCamera(model.placement.plan);
       this.reportPlacement(true, 0);
     } else this.onPlacement?.({ active: false, placed: 0, total: 0, layer: 0 });
     if (this.failed) this.onFailure?.();
@@ -456,6 +486,7 @@ export class BlockScene {
     const request: MeshRequest = { id, width: site.width, height: site.height, depth: site.depth, blocks, boxes };
     const transfer: ArrayBuffer[] = [boxes.buffer];
     if (animate) {
+      request.camera = { aspect: this.camera.aspect, fov: this.camera.fov };
       request.steps = Int32Array.from(
         site.boxes.filter((box) => box.step <= step),
         (box) => box.step,
@@ -484,6 +515,74 @@ export class BlockScene {
     this.placementPaused = paused;
   }
 
+  get followingBuild() {
+    return this.followBuild && !this.walking && !this.controls.autoRotate && !this.userMoved;
+  }
+
+  setFollowBuild(follow: boolean) {
+    this.followBuild = follow;
+    if (!follow) this.cameraMotion = null;
+    else {
+      this.userMoved = false;
+      this.controls.autoRotate = false;
+      const animation = this.placing?.model.placement;
+      if (animation) this.planCamera(animation.plan, this.placing!.elapsed);
+    }
+  }
+
+  setBuildComplete(complete: boolean) {
+    if (this.buildComplete === complete) return;
+    this.buildComplete = complete;
+    if (this.cameraMotion)
+      this.planCamera(this.cameraMotion.plan, Math.min(this.cameraMotion.elapsed, this.cameraMotion.plan.duration));
+  }
+
+  private planCamera(plan: Pick<PlacementPlan, "camera" | "duration">, elapsed = 0) {
+    const cached = plan.camera.framing;
+    const lens = { aspect: this.camera.aspect, fov: this.camera.fov };
+    const track =
+      cached && cached.lens.aspect === lens.aspect && cached.lens.fov === lens.fov
+        ? restoreCameraPlan(cached.plan)
+        : planBuildCamera(plan.camera.layers, plan.camera.initial, lens, plan.duration, 0, plan.camera.initialSolids);
+    if (!track) return;
+    track.revealSeconds = this.buildComplete ? 1.8 : 0;
+    this.cameraMotion = {
+      plan: { camera: plan.camera, duration: plan.duration },
+      track,
+      elapsed,
+      approach: 0,
+      from: {
+        position: this.camera.position.clone(),
+        target: this.controls.target.clone(),
+        distance: this.camera.position.distanceTo(this.controls.target),
+      },
+    };
+  }
+
+  private advanceCamera(seconds: number) {
+    const motion = this.cameraMotion;
+    if (!motion || !this.followingBuild || this.placementPaused || document.hidden) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      this.cameraMotion = null;
+      return;
+    }
+    const end = motion.plan.duration + motion.track.revealSeconds;
+    if (motion.elapsed >= end) return;
+    motion.approach = Math.min(motion.approach + seconds, CAMERA_MOVE_SECONDS);
+    motion.elapsed = this.placing?.elapsed ?? Math.min(motion.elapsed + seconds, end);
+    const pose = sampleBuildCamera(motion.track, motion.elapsed);
+    const t = motion.approach / CAMERA_MOVE_SECONDS;
+    const ease = t * t * (3 - 2 * t);
+    this.camera.position.copy(motion.from.position).lerp(pose.position, ease);
+    this.controls.target.copy(motion.from.target).lerp(pose.target, ease);
+    this.camera.near = Math.max(0.1, pose.distance / 100);
+    this.camera.far = Math.max(5000, pose.distance * 100);
+    this.camera.updateProjectionMatrix();
+    this.camera.lookAt(this.controls.target);
+    this.dirty = true;
+    // Retain the plan for a live run's later completion signal.
+  }
+
   private reportPlacement(active: boolean, placed: number) {
     const plan = this.placing?.model.placement?.plan;
     if (!plan || !this.site) return;
@@ -505,6 +604,7 @@ export class BlockScene {
       return;
     }
     if (this.placementPaused) return;
+    if (this.cameraMotion && this.cameraMotion.approach < CAMERA_MOVE_SECONDS) return;
     current.elapsed += seconds * this.placementSpeed;
     animation.time.value = current.elapsed;
     const placed = placedCount(animation.plan, current.elapsed);
@@ -523,6 +623,7 @@ export class BlockScene {
     const current = this.placing;
     const animation = current?.model.placement;
     if (!current || !animation || !this.materials) return;
+    if (this.cameraMotion) this.cameraMotion.elapsed = animation.plan.duration;
     this.reportPlacement(false, animation.plan.cells.length);
     for (const child of [...current.model.group.children]) {
       if (!(child instanceof THREE.Mesh)) continue;

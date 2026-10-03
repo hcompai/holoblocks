@@ -4,7 +4,15 @@ import { BlockLoader } from "./BlockLoader";
 import type { Build } from "./model";
 import { FilmRenderer } from "./film";
 import { encodeGif } from "./filmGif";
-import { FILM_ASPECTS, FILM_SECONDS, filmCaption, filmFilename, type FilmAspect, type FilmOptions } from "./filmPlan";
+import {
+  FILM_ASPECTS,
+  FILM_SECONDS,
+  filmCaption,
+  filmFilename,
+  type FilmAspect,
+  type FilmCamera,
+  type FilmOptions,
+} from "./filmPlan";
 
 /** The long side of the preview and of the GIF. */
 const BROWSER_SIDE = 640;
@@ -16,11 +24,11 @@ interface Props {
   onClose: () => void;
 }
 
-function browserOptions(aspect: FilmAspect, seconds: number, branded: boolean): FilmOptions {
+function browserOptions(aspect: FilmAspect, seconds: number, branded: boolean, camera: FilmCamera): FilmOptions {
   const { width, height } = FILM_ASPECTS[aspect];
   const scale = BROWSER_SIDE / Math.max(width, height);
   const even = (v: number) => 2 * Math.round((v * scale) / 2);
-  return { width: even(width), height: even(height), seconds, fps: BROWSER_FPS, branded };
+  return { width: even(width), height: even(height), seconds, fps: BROWSER_FPS, branded, camera };
 }
 
 const megabytes = (bytes: number) => `${(bytes / 1024 / 1024).toFixed(1)} MB`;
@@ -35,6 +43,7 @@ export function FilmExport({ build, onClose }: Props) {
   const [aspect, setAspect] = useState<FilmAspect>("16:9");
   const [seconds, setSeconds] = useState(8);
   const [branded, setBranded] = useState(true);
+  const [camera, setCamera] = useState<FilmCamera>("follow");
   const [ready, setReady] = useState(false);
   const [blocks, setBlocks] = useState<number | null>(null);
   const [progress, setProgress] = useState(0);
@@ -44,7 +53,7 @@ export function FilmExport({ build, onClose }: Props) {
   const [notice, setNotice] = useState("");
   const [retry, setRetry] = useState(0);
   const caption = filmCaption(build, blocks, branded);
-  const size = browserOptions(aspect, seconds, branded);
+  const size = browserOptions(aspect, seconds, branded, camera);
   const canShare = !!file && !!navigator.canShare?.({ files: [file] });
 
   useEffect(() => {
@@ -104,7 +113,7 @@ export function FilmExport({ build, onClose }: Props) {
   const preview = () => {
     const r = renderer.current;
     if (!r) return;
-    r.configure(browserOptions(aspect, seconds, branded));
+    r.configure(browserOptions(aspect, seconds, branded, camera));
     r.render(r.frames - 1).catch((e: unknown) => {
       if (renderer.current === r) setError(e instanceof Error ? e.message : "Could not draw the preview.");
     });
@@ -118,7 +127,7 @@ export function FilmExport({ build, onClose }: Props) {
     setError("");
     setNotice("");
     try {
-      r.configure(browserOptions(aspect, seconds, branded));
+      r.configure(browserOptions(aspect, seconds, branded, camera));
       const blob = await encodeGif(r, BROWSER_FPS, signal, setProgress);
       signal.throwIfAborted();
       setFile(new File([blob], filmFilename(build.name, "gif"), { type: "image/gif" }));
@@ -135,7 +144,7 @@ export function FilmExport({ build, onClose }: Props) {
     const controller = new AbortController();
     queue.current = queue.current.then(() => generate(controller.signal));
     return () => controller.abort();
-  }, [ready, aspect, seconds, branded]);
+  }, [ready, aspect, seconds, branded, camera]);
 
   const share = async () => {
     if (!file || !canShare) return;
@@ -208,6 +217,14 @@ export function FilmExport({ build, onClose }: Props) {
           </div>
           <details className="film-options">
             <summary>Options</summary>
+            <label>
+              Camera
+              <select value={camera} onChange={(e) => setCamera(e.target.value as FilmCamera)}>
+                <option value="follow">Follow build</option>
+                <option value="orbit">Orbit</option>
+                <option value="fixed">Fixed</option>
+              </select>
+            </label>
             <label>
               Format
               <select value={aspect} onChange={(e) => setAspect(e.target.value as FilmAspect)}>

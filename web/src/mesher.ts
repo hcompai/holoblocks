@@ -2,6 +2,7 @@ import type { Palette } from "./model";
 import type { UV } from "./atlas";
 import { type MeshData, meshWorld, outline, type PackedBoxes, VoxelWorld } from "./voxels";
 import { type PlacementPlan, planPlacement } from "./placement";
+import { cameraPlanData, planBuildCamera, type CameraLens } from "./buildCamera";
 
 export interface MesherSetup {
   palette: Palette;
@@ -15,6 +16,7 @@ export interface MeshRequest extends PackedBoxes {
   depth: number;
   /** Only the interactive viewer requests placement timing; renders and exports use completed geometry. */
   steps?: Int32Array<ArrayBuffer>;
+  camera?: CameraLens;
   previous?: PackedBoxes & { width: number; height: number; depth: number };
 }
 
@@ -51,6 +53,17 @@ self.onmessage = ({ data }: MessageEvent<MesherSetup | MeshRequest>) => {
     }
     const placement = data.steps ? planPlacement(world, previous, data, data.steps) : undefined;
     const animated = placement?.cells.length ? placement : undefined;
+    if (animated && data.camera) {
+      const track = planBuildCamera(
+        animated.camera.layers,
+        animated.camera.initial,
+        data.camera,
+        animated.duration,
+        0,
+        animated.camera.initialSolids,
+      );
+      if (track) animated.camera.framing = { lens: data.camera, plan: cameraPlanData(track) };
+    }
     const meshes = meshWorld(world, setup.uvs, animated);
     const points = outline(meshes.filter((mesh) => !mesh.temporary));
     const reply: MeshReply = {

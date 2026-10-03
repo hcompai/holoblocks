@@ -1,5 +1,6 @@
 import {
   ArrowsClockwiseIcon,
+  VideoCameraIcon,
   PauseIcon,
   PencilSimpleIcon,
   PersonSimpleWalkIcon,
@@ -43,6 +44,8 @@ export type Mode = "view" | "edit" | "walk";
 interface ControlsProps {
   framing: Framing;
   spin: boolean;
+  followCamera: boolean;
+  onFollowCamera: (follow: boolean) => void;
   mode: Mode;
   canEdit: boolean;
   /** The build has blocks, so it can be edited or walked through. */
@@ -52,21 +55,42 @@ interface ControlsProps {
   onMode: (mode: Mode) => void;
 }
 
-export function ViewControls({ framing, spin, mode, canEdit, built, onFrame, onSpin, onMode }: ControlsProps) {
+export function ViewControls({
+  framing,
+  spin,
+  followCamera,
+  onFollowCamera,
+  mode,
+  canEdit,
+  built,
+  onFrame,
+  onSpin,
+  onMode,
+}: ControlsProps) {
   const toggle = (next: Mode) => onMode(mode === next ? "view" : next);
   return (
     <div className="tabs">
       {VIEWS.map((v) => (
         <button
           key={v.id}
-          className={framing.view === v.id ? "active" : ""}
-          aria-pressed={framing.view === v.id}
+          className={!followCamera && framing.view === v.id ? "active" : ""}
+          aria-pressed={!followCamera && framing.view === v.id}
           onClick={() => onFrame({ view: v.id })}
         >
           {v.label}
         </button>
       ))}
       <span className="tabs-sep" />
+      <button
+        className={followCamera ? "active" : ""}
+        aria-pressed={followCamera}
+        disabled={mode !== "view"}
+        title="Frame each step during builds and replay. Drag or zoom to take control."
+        onClick={() => onFollowCamera(!followCamera)}
+      >
+        <VideoCameraIcon size={14} weight="bold" />
+        Follow build
+      </button>
       <button className={spin ? "active" : ""} aria-pressed={spin} onClick={() => onSpin(!spin)}>
         <ArrowsClockwiseIcon size={14} weight="bold" />
         Spin
@@ -107,6 +131,8 @@ interface Props {
   step: number;
   framing: Framing;
   spin: boolean;
+  followCamera?: boolean;
+  onFollowCamera?: (follow: boolean) => void;
   /** Called with a thumbnail once a finished build is drawn to its last step. */
   onThumbnail: (png: Blob) => void;
   palette: Promise<Palette>;
@@ -196,6 +222,7 @@ export function Viewer(props: Props) {
       mode === "view" &&
       ((same && step > was.step) || (build.status === "building" && (!same || was.revision !== build.revision)));
     if (animate && build.boxes.length) props.onPlacing?.(true);
+    s.setBuildComplete(build.status === "done" && last);
     s.show(build, step, { animate, reset: !same });
     previous.current = { id: build.id, revision: build.revision, step };
     let current = true;
@@ -204,10 +231,10 @@ export function Viewer(props: Props) {
         setDrawn(build.revision);
         setOpened(build.id);
       }
-      if (!build.boxes.length) return;
-      if (framedBuild.current !== build.id || (build.status === "building" && !s.userMoved)) {
+      if (!current || !build.boxes.length) return;
+      if (framedBuild.current !== build.id || (build.status === "building" && s.followingBuild)) {
         framedBuild.current = build.id;
-        s.frameView(framing.view, width, depth);
+        if (!(animate && s.followingBuild)) s.frameView(framing.view, width, depth);
       }
     });
     return () => {
@@ -247,6 +274,13 @@ export function Viewer(props: Props) {
   }, [build?.id, build?.status, build?.revision, last]);
 
   useEffect(() => scene.current?.setSpin(spin), [spin]);
+  useEffect(() => {
+    const s = scene.current;
+    if (!s) return;
+    s.onFollowBuild = props.onFollowCamera ?? null;
+    s.setFollowBuild((props.followCamera ?? true) && mode === "view" && !spin);
+  }, [props.followCamera, props.onFollowCamera, mode, spin]);
+  useEffect(() => scene.current?.setBuildComplete(build?.status === "done" && last), [build?.status, last]);
   useEffect(() => scene.current?.setPlacementSpeed(props.placementSpeed ?? 1), [props.placementSpeed]);
 
   useEffect(() => scene.current?.setTheme(theme), [theme]);
