@@ -82,6 +82,7 @@ function agent(): HaiAgents.Agent {
     name: AGENT,
     description: "Designs Minecraft structures in code, step by step, in HoloBlocks.",
     model: MODEL,
+    reasoningEffort: "xhigh",
     instructions,
     environments: [{ kind: "workstation", id: AGENT }],
     tools: [LOOK],
