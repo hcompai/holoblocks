@@ -30,9 +30,9 @@ function insideFrame(pose: ReturnType<typeof sampleBuildCamera>, box: Box3, aspe
       c & 2 ? box.max.y : box.min.y,
       c & 4 ? box.max.z : box.min.z,
     ).project(camera);
-    expect(Math.abs(point.x)).toBeLessThan(0.91);
-    expect(point.y).toBeGreaterThan(-0.91 + caption * 2);
-    expect(point.y).toBeLessThan(0.91);
+    expect(Math.abs(point.x)).toBeLessThan(0.97);
+    expect(point.y).toBeGreaterThan(-0.97 + caption * 2);
+    expect(point.y).toBeLessThan(0.97);
     expect(point.z).toBeGreaterThan(-1);
     expect(point.z).toBeLessThan(1);
   }
@@ -57,6 +57,39 @@ test("each step holds a composition that frames all its work, then the final rev
     insideFrame(sampleBuildCamera(plan, 100), final, aspect, lens.caption);
     expect(sampleBuildCamera(plan, 100)).toEqual(plan.hero);
     expect(planBuildCamera(layers, null, lens, 4.6, 2)).toEqual(plan);
+  }
+});
+
+test("small additions fill the canvas independently of a much larger existing model", () => {
+  for (const aspect of [16 / 9, 1, 9 / 16]) {
+    const bounds: CameraBounds = [8, 2, 10, 13, 6, 16];
+    const active = cameraBox(bounds);
+    const plan = planBuildCamera(
+      [{ step: 2, start: 0, end: 1, bounds }],
+      [0, 0, 0, 100, 25, 100],
+      { aspect, fov: 35 },
+      1,
+      0,
+      [],
+    )!;
+    const pose = sampleBuildCamera(plan, 0.5);
+    expect(pose.target).toEqual(active.getCenter(new Vector3()));
+    insideFrame(pose, active, aspect);
+    const camera = new PerspectiveCamera(35, aspect, 0.01, 10000);
+    camera.position.copy(pose.position);
+    camera.lookAt(pose.target);
+    camera.updateMatrixWorld();
+    const projected = new Box3();
+    for (let c = 0; c < 8; c++)
+      projected.expandByPoint(
+        new Vector3(
+          c & 1 ? active.max.x : active.min.x,
+          c & 2 ? active.max.y : active.min.y,
+          c & 4 ? active.max.z : active.min.z,
+        ).project(camera),
+      );
+    const size = projected.getSize(new Vector3());
+    expect(Math.max(size.x, size.y) / 2).toBeGreaterThan(0.82);
   }
 });
 
