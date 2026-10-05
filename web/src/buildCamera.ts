@@ -64,20 +64,13 @@ function toward(azimuth: number, elevation: number): Vector3 {
   return new Vector3(Math.sin(a) * Math.cos(e), Math.sin(e), Math.cos(a) * Math.cos(e));
 }
 
-/** Keep enough surroundings to understand the addition, while letting old geometry leave the frame. */
-function workFrame(context: Box3, active: Box3): Box3 {
-  const size = context.getSize(new Vector3());
-  const padding = Math.max(3, Math.max(size.x, size.y, size.z) * 0.18);
-  return active.clone().expandByScalar(padding).intersect(context);
-}
-
-/** Required distance along a direction, retaining context even when the target follows an off-center addition. */
+/** Required distance along a direction, fitting the active work with a small edge margin. */
 export function cameraDistance(box: Box3, target: Vector3, direction: Vector3, lens: CameraLens): number {
   if (box.isEmpty()) return 0;
   const right = new Vector3().crossVectors(new Vector3(0, 1, 0), direction).normalize();
   const up = new Vector3().crossVectors(direction, right);
-  const tanY = Math.tan(MathUtils.degToRad(lens.fov / 2)) * (1 - (lens.caption ?? 0)) * 0.86;
-  const tanX = Math.tan(MathUtils.degToRad(lens.fov / 2)) * lens.aspect * 0.86;
+  const tanY = Math.tan(MathUtils.degToRad(lens.fov / 2)) * (1 - (lens.caption ?? 0)) * 0.94;
+  const tanX = Math.tan(MathUtils.degToRad(lens.fov / 2)) * lens.aspect * 0.94;
   const point = new Vector3();
   let distance = 1;
   for (let c = 0; c < 8; c++) {
@@ -123,9 +116,9 @@ export function restoreCameraPlan(plan: CameraPlanData): BuildCameraPlan {
   return { ...plan, steps: plan.steps.map((step) => ({ ...step, pose: pose(step.pose) })), hero: pose(plan.hero) };
 }
 
-function frame(context: Box3, active: Box3, direction: Vector3, lens: CameraLens): CameraPose {
-  const target = context.getCenter(new Vector3()).lerp(active.getCenter(new Vector3()), 0.82);
-  const distance = cameraDistance(workFrame(context, active), target, direction, lens);
+function frame(active: Box3, direction: Vector3, lens: CameraLens): CameraPose {
+  const target = active.getCenter(new Vector3());
+  const distance = cameraDistance(active, target, direction, lens);
   return { target, distance, position: target.clone().addScaledVector(direction, distance) };
 }
 
@@ -172,7 +165,7 @@ export function planBuildCamera(
     candidates: for (const offset of [0, -30, 30, -60, 60, -90, 90, -135, 135, 180])
       for (const height of [elevation, 55, 72, 85]) {
         const direction = toward(base + offset, height);
-        const pose = frame(context, active, direction, lens);
+        const pose = frame(active, direction, lens);
         const penalty = Math.abs(offset) * 0.035 + Math.abs(height - elevation) * 0.12;
         let exposed = 1;
         for (const check of checks) {
@@ -188,7 +181,7 @@ export function planBuildCamera(
         if (score === 100) break candidates;
       }
     preferred = best;
-    return { start: group[0].start, end: group.at(-1)!.end, pose: frame(context, active, best, lens) };
+    return { start: group[0].start, end: group.at(-1)!.end, pose: frame(active, best, lens) };
   });
   const size = context.getSize(new Vector3());
   const direction = toward(MathUtils.clamp(MathUtils.radToDeg(Math.atan2(size.z, size.x)), 22, 68) + 26, 28);
