@@ -1,6 +1,6 @@
 import { replayDelay } from "./buildTiming";
-import { PlusIcon } from "@phosphor-icons/react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { CaretLeftIcon, PlusIcon } from "@phosphor-icons/react";
+import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { Account } from "./account";
 import { AccountMenu } from "./AccountMenu";
 import { PHASES } from "./activity";
@@ -23,10 +23,17 @@ import { ThemeToggle } from "./ThemeToggle";
 import { Timeline } from "./Timeline";
 import { type BuildRef, useBuild } from "./useBuild";
 import { useKeeper } from "./useSession";
+import { useSheet } from "./useSheet";
 import { type Framing, type Mode, RenderFailed, ViewControls, Viewer } from "./Viewer";
 
 const TITLE = document.title;
 const NEW_BUILD = "New build";
+/** The phone breakpoint of styles.css. */
+const PHONE = window.matchMedia("(max-width: 760px)");
+const onPhoneChange = (change: () => void) => {
+  PHONE.addEventListener("change", change);
+  return () => PHONE.removeEventListener("change", change);
+};
 const CENTER_TABS = [
   { id: "model", label: "Model" },
   { id: "code", label: "Code" },
@@ -79,6 +86,9 @@ export default function App({ account }: { account: Account }) {
   const [spin, setSpin] = useState(false);
   const [followCamera, setFollowCamera] = useState(true);
   const [filmBuild, setFilmBuild] = useState<Build | null>(null);
+  const phone = useSyncExternalStore(onPhoneChange, () => PHONE.matches);
+  const [dock, setDock] = useState<HTMLElement | null>(null);
+  const sheet = useSheet(dock);
   const palette = useMemo(() => Promise.resolve(PALETTE), []);
   const scene = useRef<BlockScene | null>(null);
   const last = (build?.steps.length ?? 0) - 1;
@@ -309,14 +319,45 @@ export default function App({ account }: { account: Account }) {
   /** The open build, once it is more than a request on its way. */
   const actionable = drafted ? null : build;
   const loading = error ? null : !build ? buildId && opening : !built ? null : counts ? null : opening;
+  /** On a phone, the chat is a bottom sheet over the model, and holds the code and blocks too. */
+  const sheeted = phone && !home;
+  const pick = (id: (typeof CENTER_TABS)[number]["id"]) => {
+    setCenter(id);
+    if (id !== "model") setMode("view");
+    if (sheeted && id !== "model" && sheet.detent === "peek") sheet.setDetent("half");
+  };
+  const panel =
+    center === "code" && build ? (
+      <CodePanel build={build} step={visibleStep} onStep={scrub} />
+    ) : center === "blocks" && counts ? (
+      <BlocksPanel counts={counts} palette={palette} />
+    ) : center === "blocks" && renderFailed ? (
+      <RenderFailed />
+    ) : (
+      !error && <BlockLoader label={opening} />
+    );
 
   return (
-    <div className={home ? "app home" : "app"}>
+    <div
+      className={home ? "app home" : "app"}
+      style={sheeted ? ({ "--peek": `${sheet.peek}px` } as CSSProperties) : undefined}
+    >
       <header>
-        <button className="brand" onClick={() => open(null)}>
-          <img className="brand-logo" src="/logo.png" alt="" />
-          HoloBlocks
-        </button>
+        {sheeted ? (
+          <button className="back" aria-label="All builds" title="All builds" onClick={() => open(null)}>
+            <CaretLeftIcon size={20} weight="bold" />
+          </button>
+        ) : (
+          <button className="brand" onClick={() => open(null)}>
+            <img className="brand-logo" src="/logo.png" alt="" />
+            HoloBlocks
+          </button>
+        )}
+        {sheeted && heading && (
+          <span className="title" title={heading.name}>
+            {heading.name}
+          </span>
+        )}
         {syncError && (
           <span className="chip warn" role="status" title={syncError}>
             Reconnecting…
@@ -349,22 +390,54 @@ export default function App({ account }: { account: Account }) {
             onGif={() => setFilmBuild(actionable)}
           />
         )}
-        <ThemeToggle />
-        <AccountMenu account={account} building={running.length > 0} />
+        {!sheeted && <ThemeToggle />}
+        {!sheeted && <AccountMenu account={account} building={running.length > 0} />}
       </header>
-      <aside>
-        <div className="aside-head">
-          <span className="aside-title" title={heading?.name}>
-            {heading?.name || "Chat"}
-          </span>
-          {ref && (
-            <button className="quiet" onClick={() => open(null)}>
-              <PlusIcon size={14} weight="bold" />
-              New build
-            </button>
-          )}
-        </div>
+      <aside
+        className={sheeted ? `sheet${center !== "model" ? " panel" : ""}` : undefined}
+        data-detent={sheeted ? sheet.detent : undefined}
+        style={sheeted ? sheet.style : undefined}
+        onFocus={(e) => {
+          if (sheeted && e.target instanceof HTMLTextAreaElement && sheet.detent === "peek") sheet.setDetent("half");
+        }}
+      >
+        {sheeted && (
+          <div className="sheet-handle" {...sheet.handle}>
+            <span />
+          </div>
+        )}
+        {sheeted ? (
+          <div className="aside-head" {...sheet.handle}>
+            <div className="tabs" role="tablist">
+              {CENTER_TABS.map((t) => (
+                <button
+                  key={t.id}
+                  role="tab"
+                  aria-selected={center === t.id}
+                  className={center === t.id ? "active" : ""}
+                  disabled={t.id !== "model" && !actionable}
+                  onClick={() => pick(t.id)}
+                >
+                  {t.id === "model" ? "Chat" : t.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div className="aside-head">
+            <span className="aside-title" title={heading?.name}>
+              {heading?.name || "Chat"}
+            </span>
+            {ref && (
+              <button className="quiet" onClick={() => open(null)}>
+                <PlusIcon size={14} weight="bold" />
+                New build
+              </button>
+            )}
+          </div>
+        )}
         <div className="aside-body">
+          {sheeted && center !== "model" && <div className="sheet-panel">{panel}</div>}
           {recoveredFrom && (
             <p className="recovery-origin">
               Recovery attempt ·{" "}
@@ -396,6 +469,7 @@ export default function App({ account }: { account: Account }) {
             onRemix={async (text, images) => {
               if (build) await start(text, images, build);
             }}
+            dockRef={setDock}
           />
           {home && (
             <HomeShelves
@@ -427,16 +501,13 @@ export default function App({ account }: { account: Account }) {
                   aria-selected={center === t.id}
                   className={center === t.id ? "active" : ""}
                   disabled={t.id !== "model" && !actionable}
-                  onClick={() => {
-                    setCenter(t.id);
-                    if (t.id !== "model") setMode("view");
-                  }}
+                  onClick={() => pick(t.id)}
                 >
                   {t.label}
                 </button>
               ))}
             </div>
-            {center === "model" && !error && (
+            {(center === "model" || sheeted) && !error && (
               <ViewControls
                 framing={framing}
                 spin={spin}
@@ -465,7 +536,7 @@ export default function App({ account }: { account: Account }) {
             )}
           </div>
           <div className="stage">
-            <div className={center === "model" ? "pane" : "pane hidden"}>
+            <div className={center === "model" || sheeted ? "pane" : "pane hidden"}>
               <Viewer
                 build={build}
                 step={visibleStep}
@@ -491,19 +562,7 @@ export default function App({ account }: { account: Account }) {
                 <div className="notice">There's nothing here yet, so ask Holo in the chat to start building.</div>
               )}
             </div>
-            {center !== "model" && (
-              <div className="pane">
-                {center === "code" && build ? (
-                  <CodePanel build={build} step={visibleStep} onStep={scrub} />
-                ) : center === "blocks" && counts ? (
-                  <BlocksPanel counts={counts} palette={palette} />
-                ) : center === "blocks" && renderFailed ? (
-                  <RenderFailed />
-                ) : (
-                  !error && <BlockLoader label={opening} />
-                )}
-              </div>
-            )}
+            {center !== "model" && !sheeted && <div className="pane">{panel}</div>}
             {error && (
               <div className="pane notice" role="alert">
                 <b>{error}</b>
