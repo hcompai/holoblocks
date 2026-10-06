@@ -1165,6 +1165,10 @@ main {
   margin: 12px 16px;
 }
 
+.view-toggle {
+  display: none;
+}
+
 .tabs-sep {
   width: 1px;
   background: var(--stroke-strong);
@@ -2780,10 +2784,17 @@ main {
   }
 }
 
-@keyframes rise {
+@keyframes sheet-rise {
   from {
     opacity: 0;
     transform: translateY(24px);
+  }
+}
+
+@keyframes unfold {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.96);
   }
 }
 
@@ -2838,7 +2849,7 @@ main {
     box-shadow:
       0 0 0 100vmax rgba(0, 0, 0, 0.32),
       0 -8px 48px rgba(0, 0, 0, 0.2);
-    animation: rise 0.32s var(--spring);
+    animation: sheet-rise 0.32s var(--spring);
   }
 
   .menu > * {
@@ -2936,12 +2947,35 @@ main {
     z-index: 10;
     top: calc(var(--bar) + 4px);
     right: max(12px, env(safe-area-inset-right));
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 8px;
     margin: 0;
   }
 
   .app:not(.home) .stage-head > .tabs[role="tablist"],
-  .app:not(.home) .stage-head .menu-anchor {
+  .app:not(.home) .stage-head .menu-anchor,
+  .app:not(.home) .stage-head > .view-tabs:not(.open) {
     display: none;
+  }
+
+  .app:not(.home) .view-toggle {
+    display: grid;
+    place-items: center;
+    width: 46px;
+    height: 46px;
+    padding: 0;
+    border: 0.5px solid var(--glass-stroke);
+    border-radius: 50%;
+    background: var(--glass);
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
+    box-shadow: var(--glass-shadow);
+    color: var(--text-default);
+  }
+
+  .app:not(.home) .stage-head > .view-tabs.open {
+    animation: unfold 0.28s var(--spring);
   }
 
   .app:not(.home) .stage-head > .tabs {
