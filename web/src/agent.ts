@@ -10,7 +10,7 @@ const MODEL = "holo4-27b";
 const MAX_STEPS = 300;
 const MAX_TIME_S = 3 * 3600;
 /** How long a finished build keeps its Workstation for a follow-up message. */
-const IDLE_TIMEOUT_S = 3600;
+const IDLE_TIMEOUT_S = 600;
 const TOOLKIT = "/blockyard.tgz";
 const DOWNLOAD_S = 60;
 
