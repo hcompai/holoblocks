@@ -133,16 +133,16 @@ function BlockPicker({ hand, used, selected, onPick }: PickerProps) {
   );
 }
 
+const HINT = matchMedia("(any-pointer: fine)").matches
+  ? "Click a block to select it; right-click a face to place the block in hand"
+  : "Tap a block to select it";
+
 /** The edit toolbar: how many changes, the block in hand, undo, redo and reset. */
 export function EditBar({ edits, ...picker }: { edits: Edits } & PickerProps) {
   const count = edits.edits.length;
   return (
     <div className="edit-bar" role="toolbar" aria-label="Edit mode">
-      <span>
-        {count
-          ? `${count} change${count === 1 ? "" : "s"}`
-          : "Click a block to select it; right-click a face to place the block in hand"}
-      </span>
+      <span>{count ? `${count} change${count === 1 ? "" : "s"}` : HINT}</span>
       <BlockPicker {...picker} />
       <button className="icon-button" onClick={edits.undo} disabled={!count} title="Undo (⌘Z)" aria-label="Undo">
         <ArrowUUpLeftIcon size={16} weight="bold" />

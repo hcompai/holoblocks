@@ -89,11 +89,11 @@ export function ViewControls({
         onClick={() => onFollowCamera(!followCamera)}
       >
         <VideoCameraIcon size={14} weight="bold" />
-        Follow build
+        <span className="button-label">Follow build</span>
       </button>
       <button className={spin ? "active" : ""} aria-pressed={spin} onClick={() => onSpin(!spin)}>
         <ArrowsClockwiseIcon size={14} weight="bold" />
-        Spin
+        <span className="button-label">Spin</span>
       </button>
       {built && (
         <>
@@ -106,7 +106,7 @@ export function ViewControls({
             onClick={() => toggle("edit")}
           >
             <PencilSimpleIcon size={14} weight="bold" />
-            Edit
+            <span className="button-label">Edit</span>
           </button>
           <button
             className={mode === "walk" ? "active" : ""}
@@ -115,7 +115,7 @@ export function ViewControls({
             onClick={() => toggle("walk")}
           >
             <PersonSimpleWalkIcon size={14} weight="bold" />
-            Walk
+            <span className="button-label">Walk</span>
           </button>
         </>
       )}
