@@ -20,7 +20,7 @@ Setup, architecture, deploy and the toolkit. The [main README](../README.md) is 
 - **Edit** by hand: choose **Edit**, click a block, Shift-drag a box around the blocks you see, then move, replace or delete them, or right-click a face to place the block in hand; undo, redo and reset. Edits are saved in this browser per build and revision, and publishing includes them. The **?** button or key lists every shortcut.
 - **Walk** through the build: choose **Walk**, click the model, then WASD and the mouse. Space jumps, Space twice flies, Esc leaves. Edit and Walk show once the build has blocks.
 - **Publish** a build to the home page's Public builds, **remix** any build (Holo starts from an exact copy: the build's own script, or a replay of its blocks), **import** a model file, **copy** a link that previews the build, even on the sign-in page.
-- **Follow up** on a build for an hour, even while Holo builds: a message reaches it at once and Holo folds it in at its next step, without stopping. Once its session ended, a change starts a copy under the same name. **Stop** (shown while the composer is empty) makes Holo wrap up with an answer, and the build stays open.
+- **Follow up** on a build for 10 minutes after it ends, or while Holo builds: a message reaches it at once and Holo folds it in at its next step, without stopping. Once its session ended, a change starts a copy under the same name. **Stop** (shown while the composer is empty) makes Holo wrap up with an answer, and the build stays open.
 
 ## How it works
 
