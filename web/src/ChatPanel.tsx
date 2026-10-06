@@ -136,10 +136,12 @@ interface Props {
   onStop: () => Promise<void>;
   /** Start a new build from a copy of this one, changed as asked: a closed build, or one whose session ended. */
   onRemix: (text: string, images: string[]) => Promise<void>;
+  /** Receives the notes and composer under the chat log, which a phone's sheet keeps in view. */
+  dockRef?: (dock: HTMLDivElement | null) => void;
 }
 
 export function ChatPanel(props: Props) {
-  const { buildId, build, loadFailed, activity, closed, onCreate, onSay, onStop, onRemix } = props;
+  const { buildId, build, loadFailed, activity, closed, onCreate, onSay, onStop, onRemix, dockRef } = props;
   const [text, setText] = useState("");
   const [remixing, setRemixing] = useState(false);
   const [images, setImages] = useState<string[]>([]);
@@ -182,6 +184,16 @@ export function ChatPanel(props: Props) {
     if (jump) pinned.current = true;
     if (pinned.current) log.current?.scrollTo({ top: log.current.scrollHeight, behavior: jump ? "instant" : "smooth" });
   }, [build?.id, build?.messages.length, busy, waiting.length]);
+
+  useEffect(() => {
+    const el = log.current;
+    if (!el) return;
+    const observer = new ResizeObserver(() => {
+      if (pinned.current) el.scrollTop = el.scrollHeight;
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [changing]);
 
   useEffect(() => {
     if (!buildId) composer.current?.focus();
@@ -312,7 +324,7 @@ export function ChatPanel(props: Props) {
       )}
       <textarea
         ref={composer}
-        rows={2}
+        rows={changing ? 1 : 2}
         value={text}
         autoFocus={remixing}
         aria-label={remixing || ended ? "Remix this build" : changing ? "Change this build" : "Describe a new build"}
@@ -455,19 +467,21 @@ export function ChatPanel(props: Props) {
         ))}
       </div>
       {lightboxDialog}
-      {problem}
-      {closed && !remixing ? (
-        <div className="gallery-note">
-          {typeof closed === "string" ? <p>{closed}</p> : closed}
-          {!!build?.boxes.length && (
-            <button onClick={() => setRemixing(true)} title="Start your own build from a copy of this one">
-              <ShuffleIcon size={14} weight="bold" /> {typeof closed === "string" ? "Remix" : "Remix a copy"}
-            </button>
-          )}
-        </div>
-      ) : (
-        !loadFailed && input
-      )}
+      <div className="chat-dock" ref={dockRef}>
+        {problem}
+        {closed && !remixing ? (
+          <div className="gallery-note">
+            {typeof closed === "string" ? <p>{closed}</p> : closed}
+            {!!build?.boxes.length && (
+              <button onClick={() => setRemixing(true)} title="Start your own build from a copy of this one">
+                <ShuffleIcon size={14} weight="bold" /> {typeof closed === "string" ? "Remix" : "Remix a copy"}
+              </button>
+            )}
+          </div>
+        ) : (
+          !loadFailed && input
+        )}
+      </div>
     </div>
   );
 }

@@ -117,7 +117,7 @@ export function ShareMenu({ build, link, publishing, onDelete, image, onGif }: P
         aria-expanded={open}
       >
         <ExportIcon size={16} />
-        Share
+        <span className="button-label">Share</span>
       </button>
       {open &&
         (ask ? (
