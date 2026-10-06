@@ -2947,10 +2947,20 @@ main {
     z-index: 10;
     top: calc(var(--bar) + 4px);
     right: max(12px, env(safe-area-inset-right));
+    bottom: 10px;
     flex-direction: column;
     align-items: flex-end;
     gap: 8px;
     margin: 0;
+    pointer-events: none;
+  }
+
+  .app:not(.home) .stage-head:has(.view-tabs.open) {
+    z-index: 11;
+  }
+
+  .app:not(.home) .stage-head > * {
+    pointer-events: auto;
   }
 
   .app:not(.home) .stage-head > .tabs[role="tablist"],
@@ -2982,6 +2992,8 @@ main {
     flex-direction: column;
     gap: 2px;
     width: 46px;
+    min-height: 0;
+    overflow-y: auto;
     padding: 3px;
     border: 0.5px solid var(--glass-stroke);
     border-radius: 16px;
@@ -2992,6 +3004,7 @@ main {
   }
 
   .app:not(.home) .stage-head > .tabs button {
+    flex: none;
     width: auto;
     height: 38px;
     padding: 0;
