@@ -413,8 +413,9 @@ export function Viewer(props: Props) {
       s?.setOrbit(true);
       setBox(null);
       if (Math.hypot(event.clientX - box.x0, event.clientY - box.y0) <= CLICK_SLOP) return;
-      const seen = s?.cellsSeenIn(box.x0, box.y0, event.clientX, event.clientY) ?? [];
-      const all = new Map([...selected, ...seen].map((cell) => [cell.join(), cell]));
+      const within = event.altKey ? s?.cellsIn : s?.cellsSeenIn;
+      const inside = within?.call(s, box.x0, box.y0, event.clientX, event.clientY) ?? [];
+      const all = new Map([...selected, ...inside].map((cell) => [cell.join(), cell]));
       setSelected([...all.values()]);
       return;
     }

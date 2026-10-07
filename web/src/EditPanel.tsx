@@ -1,10 +1,10 @@
 import {
   ArrowDownIcon,
+  ArrowDownLeftIcon,
   ArrowLeftIcon,
-  ArrowLineDownIcon,
-  ArrowLineUpIcon,
   ArrowRightIcon,
   ArrowUpIcon,
+  ArrowUpRightIcon,
   ArrowUUpLeftIcon,
   ArrowUUpRightIcon,
   CaretDownIcon,
@@ -20,27 +20,31 @@ import { PALETTE, textureSheet, type TextureSheet } from "./model";
 /** What the selected blocks can do; moves follow the screen, snapped to the build's axes. */
 export type Action = "left" | "right" | "forward" | "back" | "up" | "down" | "duplicate" | "delete";
 
-/** Keys for each action in edit mode, as `KeyboardEvent.key`. */
+/** Keys for each action in edit mode, as `KeyboardEvent.key`: arrows move across the screen, W/S into it. */
 export const ACTION_KEYS: Record<string, Action> = {
   ArrowLeft: "left",
+  a: "left",
   ArrowRight: "right",
-  ArrowUp: "forward",
-  ArrowDown: "back",
-  PageUp: "up",
+  d: "right",
+  ArrowUp: "up",
   e: "up",
-  PageDown: "down",
+  PageUp: "up",
+  ArrowDown: "down",
   q: "down",
+  PageDown: "down",
+  w: "forward",
+  s: "back",
   Delete: "delete",
   Backspace: "delete",
 };
 
 const MOVES: { action: Action; label: string; icon: ReactNode }[] = [
-  { action: "forward", label: "Move forward (↑)", icon: <ArrowUpIcon size={16} weight="bold" /> },
-  { action: "left", label: "Move left (←)", icon: <ArrowLeftIcon size={16} weight="bold" /> },
-  { action: "right", label: "Move right (→)", icon: <ArrowRightIcon size={16} weight="bold" /> },
-  { action: "back", label: "Move back (↓)", icon: <ArrowDownIcon size={16} weight="bold" /> },
-  { action: "up", label: "Move up (E, Page Up)", icon: <ArrowLineUpIcon size={16} weight="bold" /> },
-  { action: "down", label: "Move down (Q, Page Down)", icon: <ArrowLineDownIcon size={16} weight="bold" /> },
+  { action: "up", label: "Move up (↑, E)", icon: <ArrowUpIcon size={16} weight="bold" /> },
+  { action: "forward", label: "Move away (W)", icon: <ArrowUpRightIcon size={16} weight="bold" /> },
+  { action: "left", label: "Move left (←, A)", icon: <ArrowLeftIcon size={16} weight="bold" /> },
+  { action: "down", label: "Move down (↓, Q)", icon: <ArrowDownIcon size={16} weight="bold" /> },
+  { action: "right", label: "Move right (→, D)", icon: <ArrowRightIcon size={16} weight="bold" /> },
+  { action: "back", label: "Move closer (S)", icon: <ArrowDownLeftIcon size={16} weight="bold" /> },
 ];
 
 const ALL_BLOCKS = Object.keys(PALETTE).sort();
