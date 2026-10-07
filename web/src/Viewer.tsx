@@ -5,6 +5,8 @@ import {
   PencilSimpleIcon,
   PersonSimpleWalkIcon,
   PlayIcon,
+  SlidersHorizontalIcon,
+  XIcon,
 } from "@phosphor-icons/react";
 import { type RefObject, useEffect, useRef, useState } from "react";
 import { BlockLoader } from "./BlockLoader";
@@ -71,64 +73,70 @@ export function ViewControls({
   onMode,
 }: ControlsProps) {
   const toggle = (next: Mode) => onMode(mode === next ? "view" : next);
+  const [open, setOpen] = useState(false);
   return (
-    <div className="tabs">
-      {VIEWS.map((v) => (
+    <>
+      <button className="view-toggle" aria-label="View controls" aria-expanded={open} onClick={() => setOpen(!open)}>
+        {open ? <XIcon size={16} weight="bold" /> : <SlidersHorizontalIcon size={16} weight="bold" />}
+      </button>
+      <div className={open ? "tabs view-tabs open" : "tabs view-tabs"}>
+        {VIEWS.map((v) => (
+          <button
+            key={v.id}
+            className={!followCamera && framing.view === v.id ? "active" : ""}
+            aria-pressed={!followCamera && framing.view === v.id}
+            onClick={() => onFrame({ view: v.id })}
+          >
+            {v.label}
+          </button>
+        ))}
+        <span className="tabs-sep" />
         <button
-          key={v.id}
-          className={!followCamera && framing.view === v.id ? "active" : ""}
-          aria-pressed={!followCamera && framing.view === v.id}
-          onClick={() => onFrame({ view: v.id })}
+          className={followCamera ? "active" : ""}
+          aria-pressed={followCamera}
+          disabled={mode !== "view"}
+          title="Frame each step during builds and replay. Drag or zoom to take control."
+          onClick={() => onFollowCamera(!followCamera)}
         >
-          {v.label}
+          <VideoCameraIcon size={14} weight="bold" />
+          <span className="button-label">Follow build</span>
         </button>
-      ))}
-      <span className="tabs-sep" />
-      <button
-        className={followCamera ? "active" : ""}
-        aria-pressed={followCamera}
-        disabled={mode !== "view"}
-        title="Frame each step during builds and replay. Drag or zoom to take control."
-        onClick={() => onFollowCamera(!followCamera)}
-      >
-        <VideoCameraIcon size={14} weight="bold" />
-        <span className="button-label">Follow build</span>
-      </button>
-      <button className={spin ? "active" : ""} aria-pressed={spin} onClick={() => onSpin(!spin)}>
-        <ArrowsClockwiseIcon size={14} weight="bold" />
-        <span className="button-label">Spin</span>
-      </button>
-      {built && (
-        <>
-          <span className="tabs-sep" />
-          <button
-            className={mode === "edit" ? "active" : ""}
-            aria-pressed={mode === "edit"}
-            disabled={!canEdit && mode !== "edit"}
-            title={
-              canEdit
-                ? "Select blocks to replace, move or delete them"
-                : (editHint ?? "Blocks can be edited once Holo is done")
-            }
-            onClick={() => toggle("edit")}
-          >
-            <PencilSimpleIcon size={14} weight="bold" />
-            <span className="button-label">Edit</span>
-          </button>
-          <button
-            className={mode === "walk" ? "active" : ""}
-            aria-pressed={mode === "walk"}
-            title="Walk through the build: WASD and the mouse"
-            onClick={() => toggle("walk")}
-          >
-            <PersonSimpleWalkIcon size={14} weight="bold" />
-            <span className="button-label">Walk</span>
-          </button>
-        </>
-      )}
-      <Shortcuts />
-      {built && <PlacementSoundToggle />}
-    </div>
+        <button className={spin ? "active" : ""} aria-pressed={spin} onClick={() => onSpin(!spin)}>
+          <ArrowsClockwiseIcon size={14} weight="bold" />
+          <span className="button-label">Spin</span>
+        </button>
+        {built && (
+          <>
+            <span className="tabs-sep" />
+            <button
+              className={mode === "edit" ? "active" : ""}
+              aria-pressed={mode === "edit"}
+              disabled={!canEdit && mode !== "edit"}
+              title={
+                canEdit
+                  ? "Select blocks to replace, move or delete them"
+                  : (editHint ?? "Blocks can be edited once Holo is done")
+              }
+              onClick={() => toggle("edit")}
+            >
+              <PencilSimpleIcon size={14} weight="bold" />
+              <span className="button-label">Edit</span>
+            </button>
+            <button
+              className={mode === "walk" ? "active" : ""}
+              aria-pressed={mode === "walk"}
+              title="Walk through the build: WASD and the mouse"
+              onClick={() => toggle("walk")}
+            >
+              <PersonSimpleWalkIcon size={14} weight="bold" />
+              <span className="button-label">Walk</span>
+            </button>
+          </>
+        )}
+        <Shortcuts />
+        {built && <PlacementSoundToggle />}
+      </div>
+    </>
   );
 }
 
