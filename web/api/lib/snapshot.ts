@@ -124,7 +124,7 @@ export async function snapshot(id: string, key: string, edited: unknown, keep: K
   return { ...withEdits(fork.seed.model, checked(edited)), status: "done", messages: [] };
 }
 
-/** A session's build; `start` is the model it started from, until it shares one of its own. */
+/** A session's build; a fork's session keeps the name of `start`, its starting model, and shows it until it shares one. */
 async function sessionSnapshot(id: string, key: string, edited: unknown, keep: Keep, start?: Model): Promise<Shared> {
   const agp = platform(key);
   const session = await mine(agp, id);
@@ -135,6 +135,6 @@ async function sessionSnapshot(id: string, key: string, edited: unknown, keep: K
   const latest = t.model ? await readJson<Model>(await download(t.model.url, key)) : start!;
   const model = withEdits(latest, checked(edited));
   const prompt = t.messages.find((m) => m.role === "user")?.text ?? "";
-  const name = model.name !== EMPTY_MODEL.name ? model.name : prompt.slice(0, 60) || model.name;
+  const name = start?.name ?? (model.name !== EMPTY_MODEL.name ? model.name : prompt.slice(0, 60) || model.name);
   return { ...model, name, status: state, messages: await copied(t.messages, key, keep) };
 }
