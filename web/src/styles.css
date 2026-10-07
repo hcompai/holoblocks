@@ -3515,11 +3515,11 @@ main {
 
 @media (max-width: 760px) {
   .app:not(.home) .stage-head {
-    gap: 6px;
-    align-items: flex-start;
+    justify-content: flex-start;
   }
 
   .app:not(.home) .stage-head > .history-tools {
+    order: 1;
     margin: 0;
   }
 
