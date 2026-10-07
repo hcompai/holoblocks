@@ -155,8 +155,8 @@ export async function publicBuild(id: string): Promise<Build> {
 /** A private cover as a data URL, so no credential sits in an img URL; null if it does not load. */
 async function privateImage(url: string, id: string): Promise<string | null> {
   if (!privateAsset(url, id)) return url;
-  const response = await fetch(url, { headers: signed() });
-  return response.ok ? dataUrl(await response.blob()) : null;
+  const response = await fetch(url, { headers: signed() }).catch(() => null);
+  return response?.ok ? dataUrl(await response.blob()) : null;
 }
 
 /** Send credentials only to this app's owner-authenticated file route. */

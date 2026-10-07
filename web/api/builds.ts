@@ -35,10 +35,7 @@ function thumbnail(value: unknown): { data: Buffer; type: string } | null {
 
 const OWN = { "Cache-Control": "private, no-store" };
 
-/**
- * The public library, or one public build with `?id=`. Signed in, `?mine=1` lists the caller's private builds,
- * `?id=` also finds one of them, and `?id=&file=` reads one of its files.
- */
+/** The public library, or build `?id=`; signed in, own private builds too: `?mine=1`, `?id=`, `?id=&file=`. */
 export const GET = route(async (request) => {
   const params = new URL(request.url).searchParams;
   if (params.has("mine")) return Response.json(await privateOf(holder(request).user.id), { headers: OWN });
@@ -53,7 +50,7 @@ export const GET = route(async (request) => {
   return Response.json(own, { headers: OWN });
 });
 
-/** Make one of the caller's imported builds private or public again: `{ id, private }`. Its link stays the same; its files move between the public and private stores. */
+/** Make one of the caller's imported builds private or public again: `{ id, private }`. Its files change store; its link stays. */
 export const PATCH = route(async (request) => {
   const { user } = holder(request);
   const given = await body<{ id?: unknown; private?: unknown }>(request);

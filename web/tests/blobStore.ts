@@ -4,10 +4,7 @@ import { MockAgent, getGlobalDispatcher, setGlobalDispatcher } from "undici";
 
 const PRIVATE_TOKEN = "vercel_blob_rw_testprivate_testsecret";
 
-/**
- * An isolated local transport for the real Blob SDK, with a public and a private store: objects in memory, no
- * production credentials or writes. Call `start()` in beforeAll and `stop()` in afterAll.
- */
+/** An in-memory public and private store behind the real Blob SDK; `start()` in beforeAll, `stop()` in afterAll. */
 export function blobStore() {
   const objects = new Map<string, Buffer>();
   const privateObjects = new Map<string, Buffer>();
