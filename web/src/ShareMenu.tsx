@@ -14,6 +14,8 @@ import { Confirm } from "./Confirm";
 import type { Build } from "./model";
 import { schematic } from "./schematic";
 import { useMenu } from "./useMenu";
+import { usePhone } from "./usePhone";
+import { ImageShare } from "./ImageShare";
 
 const COPIED_MS = 2000;
 
@@ -79,9 +81,11 @@ const deleteAsk = (name: string, action: () => Promise<void>): Ask => ({
 
 /** Every way to take the build elsewhere: who can open it, its link, a GIF, the schematic or an image. */
 export function ShareMenu({ build, link, publishing, onDelete, image, onGif }: Props) {
+  const phone = usePhone();
   const { open, setOpen, root } = useMenu();
   const [ask, setAsk] = useState<Ask | null>(null);
   const [copied, setCopied] = useState(false);
+  const [capture, setCapture] = useState<{ name: string; building: boolean; image: Promise<Blob | null> } | null>(null);
   const built = build.boxes.length > 0;
 
   useEffect(() => {
@@ -124,6 +128,25 @@ export function ShareMenu({ build, link, publishing, onDelete, image, onGif }: P
           <Confirm {...ask} onClose={() => setOpen(false)} />
         ) : (
           <div className="menu" role="menu">
+            {phone && (
+              <>
+                <button role="menuitem" disabled={!built} onClick={then(onGif)}>
+                  <FilmStripIcon size={18} />
+                  GIF
+                </button>
+                <button
+                  role="menuitem"
+                  disabled={!built}
+                  onClick={then(() =>
+                    setCapture({ name: build.name, building: build.status === "building", image: image() }),
+                  )}
+                >
+                  <ImageIcon size={18} />
+                  Image
+                </button>
+                <hr />
+              </>
+            )}
             {publishing && (
               <>
                 <p className="menu-state">
@@ -151,11 +174,15 @@ export function ShareMenu({ build, link, publishing, onDelete, image, onGif }: P
                 <hr />
               </>
             )}
-            <button role="menuitem" disabled={!built} onClick={then(onGif)}>
-              <FilmStripIcon size={16} />
-              Share a GIF…
-            </button>
-            <hr />
+            {!phone && (
+              <>
+                <button role="menuitem" disabled={!built} onClick={then(onGif)}>
+                  <FilmStripIcon size={16} />
+                  Share a GIF…
+                </button>
+                <hr />
+              </>
+            )}
             <button
               role="menuitem"
               disabled={!built}
@@ -164,14 +191,16 @@ export function ShareMenu({ build, link, publishing, onDelete, image, onGif }: P
               <CubeIcon size={16} />
               Download .schem
             </button>
-            <button
-              role="menuitem"
-              disabled={!built}
-              onClick={then(() => void image().then((png) => png && save(png, "png")))}
-            >
-              <ImageIcon size={16} />
-              Download image
-            </button>
+            {!phone && (
+              <button
+                role="menuitem"
+                disabled={!built}
+                onClick={then(() => void image().then((png) => png && save(png, "png")))}
+              >
+                <ImageIcon size={16} />
+                Download image
+              </button>
+            )}
             {onDelete && (
               <>
                 <hr />
@@ -183,6 +212,14 @@ export function ShareMenu({ build, link, publishing, onDelete, image, onGif }: P
             )}
           </div>
         ))}
+      {capture && (
+        <ImageShare
+          name={capture.name}
+          building={capture.building}
+          capture={capture.image}
+          onClose={() => setCapture(null)}
+        />
+      )}
     </div>
   );
 }

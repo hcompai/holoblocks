@@ -1,6 +1,6 @@
 import { replayDelay } from "./buildTiming";
 import { CaretLeftIcon, PlusIcon } from "@phosphor-icons/react";
-import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Account } from "./account";
 import { AccountMenu } from "./AccountMenu";
 import { PHASES } from "./activity";
@@ -24,16 +24,11 @@ import { Timeline } from "./Timeline";
 import { type BuildRef, useBuild } from "./useBuild";
 import { useKeeper } from "./useSession";
 import { useSheet } from "./useSheet";
+import { usePhone } from "./usePhone";
 import { type Framing, type Mode, RenderFailed, ViewControls, Viewer } from "./Viewer";
 
 const TITLE = document.title;
 const NEW_BUILD = "New build";
-/** The phone breakpoint of styles.css. */
-const PHONE = window.matchMedia("(max-width: 760px)");
-const onPhoneChange = (change: () => void) => {
-  PHONE.addEventListener("change", change);
-  return () => PHONE.removeEventListener("change", change);
-};
 const CENTER_TABS = [
   { id: "model", label: "Model" },
   { id: "code", label: "Code" },
@@ -86,7 +81,7 @@ export default function App({ account }: { account: Account }) {
   const [spin, setSpin] = useState(false);
   const [followCamera, setFollowCamera] = useState(true);
   const [filmBuild, setFilmBuild] = useState<Build | null>(null);
-  const phone = useSyncExternalStore(onPhoneChange, () => PHONE.matches);
+  const phone = usePhone();
   const [dock, setDock] = useState<HTMLElement | null>(null);
   const sheet = useSheet(dock);
   const palette = useMemo(() => Promise.resolve(PALETTE), []);
