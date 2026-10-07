@@ -223,6 +223,9 @@ test("edits wait while Holo builds, and edits on an earlier revision are offered
   await expect(hint).toBeInViewport();
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
   await page.screenshot({ path: testInfo.outputPath("edit-hint-phone.png") });
+  await page.getByRole("button", { name: "View controls" }).click();
+  await expect(editing).toBeDisabled();
+  await expect(editing).toHaveAccessibleDescription("Edit after Holo stops");
 
   agp.answer("live", "The hut is ready.");
   await expect(editing).toBeEnabled();
