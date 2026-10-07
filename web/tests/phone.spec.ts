@@ -35,6 +35,10 @@ test("on a phone the model fills the screen under a chat sheet that peeks, expan
   });
   expect(badge.x).toBeGreaterThan(placeholderEnd);
   expect(badge.x + badge.width).toBeLessThanOrEqual(send.x);
+  const spin = page.getByRole("button", { name: "Spin", exact: true });
+  await expect(spin).toBeHidden();
+  await page.getByRole("button", { name: "View controls" }).click();
+  await expect(spin).toBeInViewport();
   await page.screenshot({ path: testInfo.outputPath("phone-peek.png") });
 
   await page.locator(".sheet-handle").click();
@@ -57,4 +61,23 @@ test("on a phone the model fills the screen under a chat sheet that peeks, expan
   await expect(page.getByPlaceholder("Ask for a change")).toBeInViewport();
   await page.getByPlaceholder("Ask for a change").fill("Make it taller");
   await expect(page.getByLabel("Model: Holo4 27B", { exact: true })).toBeHidden();
+});
+
+test.describe("on a short touch screen", () => {
+  test.use({ viewport: { width: 375, height: 500 }, hasTouch: true });
+
+  test("every view control stays tappable", async ({ page }) => {
+    await site(page);
+    const agp = await platform(page);
+    agp.session("short", "idle");
+    agp.say("short", "A little hut");
+    agp.share("short", model());
+    agp.answer("short", "The hut is ready.");
+    await page.goto("/?build=short");
+    await page.getByRole("button", { name: "View controls" }).tap();
+    const sound = page.locator(".view-tabs .placement-sound");
+    const pressed = await sound.getAttribute("aria-pressed");
+    await sound.tap();
+    await expect(sound).not.toHaveAttribute("aria-pressed", pressed!);
+  });
 });
