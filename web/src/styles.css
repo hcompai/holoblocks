@@ -2608,6 +2608,30 @@ main {
   gap: 10px;
 }
 
+.edit-panel.asking {
+  width: 300px;
+  max-width: calc(100% - 24px);
+}
+
+.selection-prompt {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.selection-prompt textarea {
+  width: 100%;
+  min-height: 90px;
+  max-height: 180px;
+  resize: vertical;
+  border: 1px solid var(--stroke-strong);
+  border-radius: var(--radius-medium);
+  padding: 10px;
+  color: var(--text-default);
+  background: var(--background-page);
+  font: inherit;
+}
+
 .edit-panel-head {
   display: flex;
   align-items: center;
@@ -2631,13 +2655,14 @@ main {
 .edit-moves {
   display: grid;
   grid-template-areas:
-    ". forward up"
-    "left back right"
-    ". . down";
-  grid-template-columns: repeat(3, 1fr);
+    ". up . forward"
+    "left down right back";
+  grid-template-columns: repeat(4, 1fr);
   gap: 6px;
 }
 
+.edit-panel > button,
+.selection-prompt button,
 .edit-moves button,
 .edit-actions button {
   justify-content: center;
@@ -3127,11 +3152,13 @@ main {
     width: calc(100% - 84px);
   }
 
-  .edit-panel {
+  .edit-panel,
+  .edit-panel.asking {
     left: 12px;
     right: 12px;
     bottom: 82px;
     width: auto;
+    max-width: none;
   }
 
   .app:not(.home) > aside.sheet {

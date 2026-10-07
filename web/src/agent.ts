@@ -134,11 +134,11 @@ export const create = async (text: string, photos: string[], attached: Record<st
   begin([await message(text, photos, { "blockyard.tgz": await toolkit(), ...attached })]);
 
 /** Start a build from an exact copy of `build`, which Holo then changes as `text` asks. */
-export const remix = (build: Build, text: string, photos: string[]) =>
-  create(text, photos, { "remix.py": new Blob([script(build)], { type: "text/x-python" }) });
+export const remix = (build: Build, text: string, photos: string[], attached: Record<string, Blob> = {}) =>
+  create(text, photos, { ...attached, "remix.py": new Blob([script(build)], { type: "text/x-python" }) });
 
-export async function say(id: string, text: string, photos: string[]) {
-  await client.session(id).sendMessage(await message(text, photos, {}));
+export async function say(id: string, text: string, photos: string[], attached: Record<string, Blob> = {}) {
+  await client.session(id).sendMessage(await message(text, photos, attached));
 }
 
 /** Holo ends its current step and answers; the session stays open for the next message. */

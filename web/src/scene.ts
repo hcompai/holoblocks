@@ -55,6 +55,8 @@ const HOVER_COLOR = 0x5eb1ff;
 const SELECTED_COLOR = 0xffa133;
 /** Rays cast at most across a selection box, at least a few pixels apart. */
 const BOX_RAYS = 20000;
+/** Blocks a box takes at most through the model, so the selection stays light to draw and save. */
+const BOX_CELLS = 20000;
 
 /** Unit cube edges a hair outside the cell, so they draw over its faces. */
 const CELL_EDGES = new THREE.EdgesGeometry(new THREE.BoxGeometry(1.01, 1.01, 1.01));
@@ -962,6 +964,30 @@ export class BlockScene {
         if (hit && !hit.ground) cells.set(hit.cell.join(), hit.cell);
       }
     return [...cells.values()];
+  }
+
+  /** The blocks shown whose middle falls inside the client rectangle, hidden ones included: the nearest `max`. */
+  cellsIn(x0: number, y0: number, x1: number, y1: number, max = BOX_CELLS): Vec3[] {
+    const world = this.visible();
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    if (!world || !rect.width || !rect.height) return [];
+    const [left, right] = [Math.min(x0, x1), Math.max(x0, x1)];
+    const [top, bottom] = [Math.min(y0, y1), Math.max(y0, y1)];
+    this.camera.updateMatrixWorld();
+    const middle = new THREE.Vector3();
+    const found: { far: number; cell: Vec3 }[] = [];
+    for (let y = 0; y < world.height; y++)
+      for (let z = 0; z < world.depth; z++)
+        for (let x = 0; x < world.width; x++) {
+          if (!world.ids[world.at(x, y, z)]) continue;
+          const ndc = middle.set(x + 0.5, y + 0.5, z + 0.5).project(this.camera);
+          if (ndc.z > 1) continue;
+          const sx = rect.left + ((ndc.x + 1) / 2) * rect.width;
+          const sy = rect.top + ((1 - ndc.y) / 2) * rect.height;
+          if (sx >= left && sx <= right && sy >= top && sy <= bottom) found.push({ far: ndc.z, cell: [x, y, z] });
+        }
+    if (found.length > max) found.sort((a, b) => a.far - b.far);
+    return found.slice(0, max).map((f) => f.cell);
   }
 
   /** Let the mouse orbit the camera, or not while it draws a selection box. */
