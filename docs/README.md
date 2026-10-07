@@ -19,7 +19,9 @@ Setup, architecture, deploy and the toolkit. The [main README](../README.md) is 
 - **Replay** the steps, read each step's code and browse the blocks. **Share** holds the rest: publish, copy the link, a GIF of the build rising (made as the dialog opens, 8 to 30 seconds), a WorldEdit `.schem` or a PNG, and **Delete** for your own builds.
 - **Edit** by hand: choose **Edit**, click a block, Shift-drag a box around the blocks you see, then move, replace or delete them, or right-click a face to place the block in hand; undo, redo and reset. Edits are saved in this browser per build and revision, and publishing includes them. The **?** button or key lists every shortcut.
 - **Walk** through the build: choose **Walk**, click the model, then WASD and the mouse. Space jumps, Space twice flies, Esc leaves. Edit and Walk show once the build has blocks.
-- **Publish** a build to the home page's Public builds, **remix** any build (Holo starts from an exact copy: the build's own script, or a replay of its blocks), **import** a model file, **copy** a link that previews the build, even on the sign-in page.
+- **Publish** a build to the home page's Public builds, **fork** any build or any of its versions (a private copy, saved at once; Holo starts on its first message from an exact copy: the build's own script, or a replay of its blocks), **import** a model file, **copy** a link that previews the build, even on the sign-in page.
+- **History** lists every model Holo shared in a build, numbered V1, V2…; picking one previews it read only (`?version=<n>` links to it), and **Fork** continues from it.
+- **Rename** a build of yours from its title, or from the **…** on its card, which also publishes it, makes it private or deletes it.
 - **Follow up** on a build for 10 minutes after it ends, or while Holo builds: a message reaches it at once and Holo folds it in at its next step, without stopping. Once its session ended, a change starts a copy under the same name. **Stop** (shown while the composer is empty) makes Holo wrap up with an answer, and the build stays open.
 
 ## How it works
@@ -64,9 +66,11 @@ signed in ──GET /api/builds──▶ the public library
 - `web/api/` holds the Vercel functions; `web/scripts/build-api.mjs` bundles them, and `npm run dev` serves them too. Deployed, `/?public=<id>` and `/?showcase=<id>` go to `/api/preview`: the app's page, with that build's name, step count, author and cover in its link preview. The sign-in page reads those tags back to show a signed-out visitor what was shared with them.
 - The portal's cookie never reaches a local dev server, so there the portal sends a one-time code instead (PKCE, RFC 8252); it only redirects to `127.0.0.1`, where `localhost` forwards.
 - Signing in again revokes the previous key. The key lives in the browser's local storage; the pass, signed with `BLOCKYARD_SECRET`, names its holder to the functions.
-- Publishing copies the session's model (with this browser's edits, which drop its script), transcript and images, so a public build stands on its own. Only its author can publish or unpublish a build; the emails in `BLOCKYARD_ADMINS` can unpublish any.
+- Publishing copies the session's model (with this browser's edits, which drop its script), transcript and images, so a public build stands on its own. Only its author can publish, unpublish, rename or delete a build; the emails in `BLOCKYARD_ADMINS` can take anyone's out of the public library, which makes it private for its owner.
+- A fork is `forks/<owner>/<id>/` (`/api/forks`), with its starting model at an unguessable `seeds/<owner>/` URL. Its first message starts a session in the fork's group, which the fork records; it continues in that session only.
+- A name its owner gives a build is `names/<owner>/<id>/` (`/api/names`), and renames its library entry too.
 - An imported build has no session, so it lives only in the library: **Make private** moves its entry to `private/<owner>/`, listed and opened only for its owner; its files keep their unguessable public URLs, so a shared link still opens it. **Delete** removes its entry and files.
-- The Agents API cannot delete a session, so **Delete** on a session's build stops Holo if it is building, unpublishes it, and marks it in `deleted/<owner>/` (`/api/deleted`): the home page leaves it out on every device, though its `?build=` link still opens.
+- The Agents API cannot delete a session, so **Delete** on a session's build stops Holo if it is building, unpublishes it, and marks it in `deleted/<owner>/` (`/api/deleted`): the home page leaves it out on every device, though its `?build=` link still opens. Deleting a fork deletes its starting model, record and name, and marks the session it continued in.
 - Server environment: `BLOCKYARD_SECRET`, `BLOCKYARD_ADMINS`, and `BLOB_READ_WRITE_TOKEN` from the `blockyard-library` Blob store.
 
 ## Where to change things
@@ -112,5 +116,5 @@ cd web && npm ci && npx playwright install chromium && npm test && npm run build
 
 The server tests run the toolkit offline. The browser tests mock the Agents API and the library and render real
 geometry: a build that shares models and asks for renders, a new build with a photo, one-click ideas, a follow-up and
-Stop, a message mid-build, deleting a build, a change to an ended build, the home page's builds, publishing, remixes, imports, link previews, sign-in, edits, walking,
+Stop, a message mid-build, deleting a build, a change to an ended build, the home page's builds, publishing, forks, history, renaming, the card menu, imports, link previews, sign-in, edits, walking,
 the GIF export, recovery and the tab guard.
