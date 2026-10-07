@@ -6,6 +6,8 @@ import {
   PencilSimpleIcon,
   PersonSimpleWalkIcon,
   PlayIcon,
+  SlidersHorizontalIcon,
+  XIcon,
 } from "@phosphor-icons/react";
 import { type RefObject, useEffect, useId, useRef, useState } from "react";
 import { BlockLoader } from "./BlockLoader";
@@ -80,9 +82,13 @@ export function ViewControls({
   const blocked = built && !canEdit && mode !== "edit";
   const hint = blocked && editHint;
   const toggle = (next: Mode) => onMode(mode === next ? "view" : next);
+  const [open, setOpen] = useState(false);
   return (
     <>
-      <div className="tabs">
+      <button className="view-toggle" aria-label="View controls" aria-expanded={open} onClick={() => setOpen(!open)}>
+        {open ? <XIcon size={16} weight="bold" /> : <SlidersHorizontalIcon size={16} weight="bold" />}
+      </button>
+      <div className={open ? "tabs view-tabs open" : "tabs view-tabs"}>
         {VIEWS.map((v) => (
           <button
             key={v.id}
