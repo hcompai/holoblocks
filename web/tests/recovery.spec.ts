@@ -119,3 +119,28 @@ test("a missing photo or starting model starts nothing", async ({ page }) => {
   await expect(page.getByRole("alert")).toContainText("The starting model could not be retrieved");
   expect(agp.posted("/api/v2/sessions")).toHaveLength(0);
 });
+
+test("recovery fetches external reference photos without the Agents key", async ({ page }) => {
+  await site(page);
+  const agp = await platform(page);
+  const url = "https://images.example.org/reference.png";
+  const requests: { authorization?: string }[] = [];
+  await page.route(url, (route) => {
+    requests.push({ authorization: route.request().headers().authorization });
+    return route.fulfill({
+      contentType: "image/png",
+      body: Buffer.from(PHOTO.split(",")[1], "base64"),
+      headers: { "access-control-allow-origin": "*" },
+    });
+  });
+  agp.session("external-photo", "failed");
+  agp.say("external-photo", "Build a hut", [{ type: "url", source: url }]);
+  agp.share("external-photo", model());
+  await page.goto("/?build=external-photo");
+  await page.getByRole("button", { name: "Continue from saved version" }).click();
+  await expect(page).toHaveURL(/build=new-build$/);
+  expect(requests.length).toBeGreaterThanOrEqual(1);
+  expect(requests.every((r) => !r.authorization)).toBe(true);
+  const [created] = agp.posted("/api/v2/sessions");
+  expect(created.messages[0].images).toEqual([PHOTO]);
+});
