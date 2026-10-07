@@ -61,6 +61,25 @@ export async function privateWrite(path: string, data: string | Buffer, contentT
   });
 }
 
+/** Write `value` at `path` unless a value is there already; returns what the first writer wrote. */
+export async function privateClaim<T>(path: string, value: T): Promise<T> {
+  const token = privateToken();
+  try {
+    await put(path, JSON.stringify(value), {
+      token,
+      access: "private",
+      addRandomSuffix: false,
+      allowOverwrite: false,
+      contentType: "application/json",
+    });
+    return value;
+  } catch (error) {
+    const claimed = await privateRead(path);
+    if (!claimed) throw error;
+    return (await claimed.json()) as T;
+  }
+}
+
 export async function privateDelete(paths: string[]) {
   if (paths.length) await del(paths, { token: privateToken() });
 }

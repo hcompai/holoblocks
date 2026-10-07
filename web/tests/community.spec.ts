@@ -89,7 +89,7 @@ test("a colleague's public build opens from the home page's public builds, under
   await card.click();
   await expect(page).toHaveURL(/\?public=hut$/);
   await shown(page, hut.revision);
-  await expect(page.locator(".gallery-note")).toHaveText(/^Shared by Ada Lovelace: remix it to make your own\./);
+  await expect(page.locator(".gallery-note")).toHaveText(/^By Ada Lovelace · Fork to edit/);
   const menu = await shareMenu(page);
   await expect(menu.getByRole("menuitem", { name: /Publish/ })).toHaveCount(0);
 });
@@ -138,27 +138,43 @@ test("a colleague's public build can be edited but not asked about", async ({ pa
   await expect(page.getByRole("button", { name: "Ask Holo" })).toHaveCount(0);
 });
 
-test("a remix of a public build starts a private session from a script rebuilding each of its boxes, step by step", async ({
+test("forking a public build saves a private copy at once; its first message starts Holo from a script of its boxes", async ({
   page,
 }) => {
   const hut = { ...model(), id: "hut", name: "Ada's hut" };
-  await site(page);
+  const { forks } = await site(page);
   const agp = await platform(page);
   await library(page, [entry(hut, "Ada Lovelace", "u-ada")], [hut]);
   await page.goto("/?public=hut");
   await shown(page, hut.revision);
 
-  await page.locator(".gallery-note").getByRole("button", { name: "Remix" }).click();
-  await page.getByPlaceholder("What should Holo change?").fill("Make it twice as tall");
+  await page.locator(".gallery-note").getByRole("button", { name: "Fork" }).click();
+  await expect(page).toHaveURL(/\?fork=fork-[a-f0-9-]{36}$/);
+  await shown(page, hut.revision);
+  await expect(page.locator(".aside-title")).toHaveText("Ada's hut · Fork");
+  await expect(page.locator(".recovery-origin")).toHaveText("Fork of Ada's hut");
+  const [fork] = forks.values();
+  expect(fork.seed.origin).toMatchObject({ id: "hut", source: "public", revision: hut.revision });
+  expect(agp.posted("/api/v2/sessions")).toHaveLength(0);
+
+  await page.getByPlaceholder("Ask for a change").fill("Make it twice as tall");
   await page.getByRole("button", { name: "Send", exact: true }).click();
-  await expect(page).toHaveURL(/\?build=new-build$/);
-  await expect(page.locator(".aside-title")).toHaveText("Ada's hut remix");
-  const [first] = agp.posted("/api/v2/sessions")[0].messages;
+  await expect.poll(() => fork.sessionId).toBe("new-build");
+  await expect(page).toHaveURL(new RegExp(`\\?fork=${fork.id}$`));
+  const [created] = agp.posted("/api/v2/sessions");
+  expect(created.group_id).toBe(fork.id);
+  const [first] = created.messages;
   expect(first.message).toBe("Make it twice as tall");
-  expect(first.files.map((f: { name: string }) => f.name)).toEqual(["blockyard.tgz", "remix.py"]);
-  expect(Buffer.from(first.files[1].source, "base64").toString()).toBe(
+  expect(first.files.map((f: { name: string }) => f.name)).toEqual([
+    "blockyard.tgz",
+    "blockyard-fork.json.gz",
+    "remix.py",
+  ]);
+  expect(Buffer.from(first.files[2].source, "base64").toString()).toBe(
     'step("Floor")\nfill(0, 0, 0, 3, 0, 3, "stone")\nstep("Cube")\nfill(1, 1, 1, 2, 2, 2, "oak_planks")\n',
   );
+  await expect(page.locator(".msg.user")).toHaveText(["Make it twice as tall"]);
+  await shown(page, hut.revision);
 });
 
 test("a public build's link copies to the clipboard", async ({ page, context }) => {

@@ -94,6 +94,9 @@ export function blobStore() {
   return {
     objects,
     privateObjects,
+    get base() {
+      return base;
+    },
     async start() {
       setGlobalDispatcher(mock);
       process.env.BLOCKYARD_PRIVATE_BLOB_READ_WRITE_TOKEN = PRIVATE_TOKEN;

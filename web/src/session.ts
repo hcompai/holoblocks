@@ -4,6 +4,13 @@ import type { Message, Status, Work } from "./model";
 
 export const AGENT = "blockyard";
 export const MODEL_FILE = "model.json.gz";
+export const FORK_FILE = "blockyard-fork.json.gz";
+
+/** A model the builder shared, and when. */
+export interface ModelAttachment {
+  url: string;
+  at: string;
+}
 
 /** JSON from a file, gunzipped when it is gzipped. */
 export async function readJson<T>(blob: Blob): Promise<T> {
@@ -25,6 +32,10 @@ export interface Transcript {
   state: "running" | "idle" | "awaiting_tool_results";
   /** URL of the model the builder shared last, and how many models it shared up to it. */
   model: { url: string; shared: number } | null;
+  /** Every model the builder shared, in order. */
+  models: ModelAttachment[];
+  /** URL of the fork's starting model, for a session started on a fork. */
+  fork: string | null;
   /** `look` calls awaiting a render, with how many models were shared when each was made. */
   looks: { call: HaiAgents.ToolRequest; shared: number }[];
   references: Reference[];
@@ -42,6 +53,8 @@ export const EMPTY_TRANSCRIPT: Transcript = {
   since: 0,
   state: "running",
   model: null,
+  models: [],
+  fork: null,
   looks: [],
   references: [],
   title: null,
@@ -122,11 +135,16 @@ function step(t: Transcript, event: HaiAgents.SessionEvent): Transcript {
     }
     case "AttachmentEvent": {
       const { origin, name, url } = (event as HaiAgents.SessionEventZero.AttachmentEvent).data;
+      if (origin === "user" && name === FORK_FILE) return { ...t, fork: t.fork ?? url };
       if (origin !== "agent") return t;
       if (/\.(jpe?g|png|webp)$/i.test(name))
         return references(t, [{ id: name, src: url, caption: name, kind: "photo" }]);
       if (name !== MODEL_FILE) return t;
-      return { ...t, model: { url, shared: (t.model?.shared ?? 0) + 1 } };
+      return {
+        ...t,
+        model: { url, shared: (t.model?.shared ?? 0) + 1 },
+        models: [...t.models, { url, at: new Date(event.timestamp).toISOString() }],
+      };
     }
     case "AgentErrorEvent":
       return { ...t, error: (event as HaiAgents.SessionEventZero.AgentErrorEvent).data.error };

@@ -4,6 +4,7 @@ import { platformAsset, externalImage, assetBlob } from "../../src/assetUrl";
 import { EMPTY_MODEL, type Message, type Model, type Shared } from "../../src/model";
 import { AGENT, EMPTY_TRANSCRIPT, read, readJson, status, type Transcript } from "../../src/session";
 import { applyEdits, type Edit, validEdits } from "../../src/voxelEdits";
+import { readFork } from "./forks";
 import { Refusal } from "./http";
 import { imported } from "./imported";
 
@@ -39,6 +40,9 @@ async function mine(agp: HaiAgentsClient, id: string): Promise<HaiAgents.Session
   if (!own.items.some((s) => s.id === id)) throw new Refusal(403, "Only its author can publish a build.");
   return session;
 }
+
+/** One of the caller's HoloBlocks sessions. */
+export const ownedSession = (id: string, key: string) => mine(platform(key), id);
 
 async function transcript(agp: HaiAgentsClient, id: string): Promise<Transcript> {
   let t = EMPTY_TRANSCRIPT;
@@ -112,15 +116,25 @@ function withEdits(model: Model, edited: Edited | null): Model {
 }
 
 /** The caller's finished build as the public sees it: its latest model with any hand edits, and its chat. */
-export async function snapshot(id: string, key: string, edited: unknown, keep: Keep): Promise<Shared> {
+export async function snapshot(id: string, key: string, edited: unknown, keep: Keep, owner?: string): Promise<Shared> {
+  if (!id.startsWith("fork-")) return sessionSnapshot(id, key, edited, keep);
+  const fork = owner ? await readFork(owner, id) : null;
+  if (!fork) throw new Refusal(404, "No such build.");
+  if (fork.sessionId) return sessionSnapshot(fork.sessionId, key, edited, keep, fork.seed.model);
+  return { ...withEdits(fork.seed.model, checked(edited)), status: "done", messages: [] };
+}
+
+/** A session's build; a fork's session keeps the name of `start`, its starting model, and shows it until it shares one. */
+async function sessionSnapshot(id: string, key: string, edited: unknown, keep: Keep, start?: Model): Promise<Shared> {
   const agp = platform(key);
   const session = await mine(agp, id);
   const state = status(session.status.status);
   if (state === "building") throw new Refusal(409, "Holo is still building: publish once it answers.");
   const t = await transcript(agp, id);
-  if (!t.model) throw new Refusal(409, "Nothing is built yet.");
-  const model = withEdits(await readJson<Model>(await download(t.model.url, key)), checked(edited));
+  if (!t.model && !start) throw new Refusal(409, "Nothing is built yet.");
+  const latest = t.model ? await readJson<Model>(await download(t.model.url, key)) : start!;
+  const model = withEdits(latest, checked(edited));
   const prompt = t.messages.find((m) => m.role === "user")?.text ?? "";
-  const name = model.name !== EMPTY_MODEL.name ? model.name : prompt.slice(0, 60) || model.name;
+  const name = start?.name ?? (model.name !== EMPTY_MODEL.name ? model.name : prompt.slice(0, 60) || model.name);
   return { ...model, name, status: state, messages: await copied(t.messages, key, keep) };
 }

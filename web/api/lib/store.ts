@@ -95,9 +95,11 @@ async function entries(prefix: string, id?: string): Promise<Published[]> {
   return found.filter((p): p is Published => p !== null).sort((a, b) => b.published - a.published);
 }
 
-/** Put the build in the library, then delete the files its previous publication used and this one does not. */
+/** Put the build in the library, then delete any private copy and the files its previous publication used and this one does not. */
 export async function enter(published: Published, before: string[], written: string[]) {
   await write(LIBRARY, published);
+  await drop(`${shelf(published.owner)}${published.id}/`);
+  if (privateConfigured()) await removePrivate(published.owner, published.id);
   const gone = before.filter((url) => !written.includes(url));
   if (gone.length) await del(gone);
 }
@@ -196,7 +198,6 @@ async function reveal(owner: string, id: string) {
   const build = await restored(MODEL);
   const thumbnail = stored.thumbnail ? await restored(COVER) : null;
   await enter({ ...stored, build, thumbnail }, before, written);
-  await removePrivate(owner, id);
 }
 
 async function removePrivate(owner: string, id: string) {
@@ -233,6 +234,14 @@ export async function migratePrivate(dryRun = false): Promise<number> {
     if (!dryRun) await setPrivate(published, true);
   }
   return builds.size;
+}
+
+/** Rename one of `owner`'s builds in the library, public or private; its files and link stay. */
+export async function rename(owner: string, id: string, name: string) {
+  const own = await ownPrivate(owner, id);
+  if (own) await privateWrite(privateEntry(owner, id), JSON.stringify({ ...own, name }), "application/json");
+  const [published] = await entries(LIBRARY, id);
+  if (published?.owner === owner) await write(LIBRARY, { ...published, name });
 }
 
 /** Every public build, newest first. */

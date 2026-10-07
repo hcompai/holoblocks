@@ -113,8 +113,8 @@ export async function toolkit(): Promise<Blob> {
   return response.blob();
 }
 
-/** Start a session with all its first messages in one request, so it never sits empty and any browser lists it by its prompt; `group` ties a recovery to its build. */
-export async function begin(messages: HaiAgents.UserMessageEvent[], group?: string): Promise<string> {
+/** A checked session request, started when called: a caller can note it is sending before the side effect. */
+export function prepared(messages: HaiAgents.UserMessageEvent[], group?: string): () => Promise<string> {
   const request = {
     agent: agent(),
     messages,
@@ -126,12 +126,19 @@ export async function begin(messages: HaiAgents.UserMessageEvent[], group?: stri
   };
   assertRequestUnderLimit(request);
   // Creating a run is a side effect: never retry an ambiguous response automatically.
-  return (await client.sessions.createSession({ body: request }, { maxRetries: 0 })).id;
+  return async () => (await client.sessions.createSession({ body: request }, { maxRetries: 0 })).id;
 }
+
+/** Start a session with all its first messages in one request, so it never sits empty and any browser lists it by its prompt; `group` ties a recovery or a fork to its build. */
+export const begin = (messages: HaiAgents.UserMessageEvent[], group?: string) => prepared(messages, group)();
+
+/** A build's first message: the toolkit, `attached` and the photos. */
+export const firstMessage = async (text: string, photos: string[], attached: Record<string, Blob> = {}) =>
+  message(text, photos, { "blockyard.tgz": await toolkit(), ...attached });
 
 /** Start a build: its message carries the toolkit, `attached` and the photos. */
 export const create = async (text: string, photos: string[], attached: Record<string, Blob> = {}) =>
-  begin([await message(text, photos, { "blockyard.tgz": await toolkit(), ...attached })]);
+  begin([await firstMessage(text, photos, attached)]);
 
 /** Start a build from an exact copy of `build`, which Holo then changes as `text` asks. */
 export const remix = (build: Build, text: string, photos: string[], attached: Record<string, Blob> = {}) =>
@@ -146,6 +153,12 @@ export const stop = (id: string) => client.session(id).forceAnswer();
 
 /** Holo stops for good, without answering. */
 export const cancel = (id: string) => client.sessions.cancelSession({ id });
+
+/** The caller's session started on fork `group`, if any: the first one, should a retry have started two. */
+export async function forkSession(group: string): Promise<string | null> {
+  const { items } = await client.sessions.listSessions({ owner: "me", groupId: group, size: 100 });
+  return [...items].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())[0]?.id ?? null;
+}
 
 export async function sessions(): Promise<HaiAgents.SessionSummary[]> {
   // hai-agents 1.0.13 sends the `agent` list as a JSON string, which matches no session.

@@ -1,5 +1,5 @@
 import { replayDelay } from "./buildTiming";
-import { CaretLeftIcon, PlusIcon } from "@phosphor-icons/react";
+import { CaretLeftIcon, ClockCounterClockwiseIcon, GitForkIcon, PlusIcon } from "@phosphor-icons/react";
 import { type CSSProperties, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { Account } from "./account";
 import { AccountMenu } from "./AccountMenu";
@@ -11,18 +11,37 @@ import { type ChatHandle, ChatPanel } from "./ChatPanel";
 import { CodePanel } from "./CodePanel";
 import { useEdits } from "./edits";
 import { FilmExport } from "./FilmExport";
+import { startFork } from "./fork";
+import { type ForkSeed, forkSeed } from "./forkModel";
+import { HistoryPanel } from "./HistoryPanel";
+import { design, useHistory, type Version } from "./history";
 import { HomeShelves } from "./HomeShelves";
 import { ImportBuild } from "./ImportBuild";
-import { card, library, publish, remember, remove, setPrivate, type Shelf, thumbnail, unpublish } from "./library";
-import { type Build, type BuildSummary, EMPTY_MODEL, PALETTE, type Source } from "./model";
+import {
+  card,
+  library,
+  LibraryError,
+  publish,
+  remember,
+  remove,
+  saveFork,
+  setPrivate,
+  type Shelf,
+  thumbnail,
+  unpublish,
+} from "./library";
+import { type Build, type BuildSummary, EMPTY_MODEL, pack, PALETTE, type Source, unpack } from "./model";
+import type { ProjectActions } from "./ProjectMenu";
+import { ProjectTitle } from "./ProjectTitle";
 import { RecoveryPanel } from "./RecoveryPanel";
 import type { BlockScene } from "./scene";
 import { selectedArea } from "./selectedArea";
-import { ShareMenu } from "./ShareMenu";
+import { SESSION_DELETE_NOTE, ShareMenu } from "./ShareMenu";
 import { label } from "./suggestions";
 import { ThemeToggle } from "./ThemeToggle";
 import { Timeline } from "./Timeline";
 import { type BuildRef, useBuild } from "./useBuild";
+import { useProjectNames } from "./useProjectNames";
 import { useKeeper } from "./useSession";
 import { useSheet } from "./useSheet";
 import { usePhone } from "./usePhone";
@@ -38,7 +57,9 @@ const CENTER_TABS = [
   { id: "blocks", label: "Blocks" },
 ] as const;
 /** The URL parameter naming the open build, by where it is read from. */
-const PARAMS: Record<Source, string> = { session: "build", public: "public", showcase: "showcase" };
+const PARAMS: Record<Source, string> = { session: "build", public: "public", showcase: "showcase", fork: "fork" };
+/** The URL parameter naming the previewed version of the open build. */
+const VERSION = "version";
 
 function urlBuild(): BuildRef | null {
   const params = new URLSearchParams(window.location.search);
@@ -49,9 +70,21 @@ function urlBuild(): BuildRef | null {
   return null;
 }
 
-const linkTo = (ref: BuildRef) => `${window.location.origin}/?${new URLSearchParams({ [PARAMS[ref.source]]: ref.id })}`;
+function urlVersion(): number | null {
+  const n = Number(new URLSearchParams(window.location.search).get(VERSION));
+  return Number.isSafeInteger(n) && n > 0 ? n : null;
+}
+
+const linkTo = (ref: BuildRef, version: number | null = null) =>
+  `${window.location.origin}/?${new URLSearchParams({
+    [PARAMS[ref.source]]: ref.id,
+    ...(version !== null && { [VERSION]: String(version) }),
+  })}`;
 
 const same = (a: BuildRef | null, b: BuildRef | null) => a?.id === b?.id && a?.source === b?.source;
+
+/** A build of a session, rather than a fork or an import: the platform keeps every session, so deleting one hides it. */
+const isSession = (id: string) => !id.startsWith("fork-") && !id.startsWith("import-");
 
 export default function App({ account }: { account: Account }) {
   const [ref, setRef] = useState<BuildRef | null>(urlBuild);
@@ -59,26 +92,55 @@ export default function App({ account }: { account: Account }) {
   opened.current = ref;
   const buildId = ref?.id ?? null;
   const read = useBuild(ref);
+  const { names, rename } = useProjectNames(account.user.id);
   /** What the user just asked for, shown as a starting build where they asked it, until its session answers. */
   const [draft, setDraft] = useState<{ at: BuildRef | null; build: Build; since: number } | null>(null);
   const drafted = draft && same(draft.at, ref) && read.build?.id !== draft.build.id ? draft.build : null;
-  const live = useMemo(() => {
+  const unnamed = useMemo(() => {
     if (drafted) return drafted;
     if (draft && same(draft.at, ref) && read.build && !read.build.messages.some((m) => m.role === "user"))
       return { ...read.build, messages: [...draft.build.messages, ...read.build.messages] };
     return read.build;
   }, [drafted, draft, ref, read.build]);
+  const named = ref && names[ref.id];
+  const live = useMemo(() => (unnamed && named ? { ...unnamed, name: named.name } : unnamed), [unnamed, named]);
   const observed = drafted ? { label: PHASES.idea, since: draft!.since, work: null } : read.activity;
   const activity =
     observed && !live?.boxes.length && (observed.label === PHASES.blocks || observed.label === PHASES.checking)
       ? { ...observed, label: PHASES.draft }
       : observed;
-  const { error, syncError } = read;
+  const { error, syncError, models, seed, runId, attachSession } = read;
   const edits = useEdits(live);
-  /** The build as shown, with this browser's hand edits. */
-  const build = edits.build;
+  const [historyOpen, setHistoryOpen] = useState(() => urlVersion() !== null);
+  /** The version the URL asks for, until the history has loaded it. */
+  const [wantedVersion, setWantedVersion] = useState<number | null>(urlVersion);
+  const [selected, setSelected] = useState<Version | null>(null);
+  const history = useHistory(
+    ref?.source === "session" || ref?.source === "fork" ? ref.id : null,
+    models,
+    seed?.model ?? null,
+    historyOpen || wantedVersion !== null,
+  );
+  /** An earlier version is shown, read only: the builder, the chat and the hand edits stay on the latest. */
+  const previewing = selected !== null || wantedVersion !== null;
+  const previewed = useMemo(() => selected && unpack(selected.model), [selected]);
+  /** The build as shown: a previewed version, or the latest with this browser's hand edits. */
+  const build =
+    wantedVersion !== null
+      ? null
+      : previewed && live
+        ? { ...live, ...previewed, name: live.name, open: false }
+        : edits.build;
+  const [forking, setForking] = useState(false);
+  const [forkError, setForkError] = useState("");
+  /** The fork being saved for this design: a retry after a lost response saves the same fork. */
+  const forkAttempt = useRef<{ key: string; id: string; seed: ForkSeed } | null>(null);
   const [mode, setMode] = useState<Mode>("view");
-  const [builds, setBuilds] = useState<BuildSummary[] | null>(null);
+  const [loadedBuilds, setBuilds] = useState<BuildSummary[] | null>(null);
+  const builds = useMemo(
+    () => loadedBuilds?.map((b) => (names[b.id] ? { ...b, name: names[b.id].name } : b)) ?? null,
+    [loadedBuilds, names],
+  );
   const [buildsFailed, setBuildsFailed] = useState<Shelf[]>([]);
   const [center, setCenter] = useState<(typeof CENTER_TABS)[number]["id"]>("model");
   const [step, setStep] = useState(Infinity);
@@ -113,8 +175,9 @@ export default function App({ account }: { account: Account }) {
     return library().then(
       ({ builds: next, failed }) => {
         if (request !== latest.current) return;
+        const yours = (b: BuildSummary) => b.source === "session" || b.source === "fork";
         const kept = (shelf: Shelf, previous: BuildSummary[] | null) =>
-          failed.includes(shelf) ? (previous ?? []).filter((b) => (b.source === "session") === (shelf === "mine")) : [];
+          failed.includes(shelf) ? (previous ?? []).filter((b) => yours(b) === (shelf === "mine")) : [];
         setBuilds((previous) => [...kept("mine", previous), ...next, ...kept("public", previous)]);
         setBuildsFailed(failed);
       },
@@ -132,18 +195,24 @@ export default function App({ account }: { account: Account }) {
     const field = document.activeElement;
     if (home && viewport && field instanceof HTMLTextAreaElement) field.scrollIntoView({ block: "nearest" });
   }, [home, viewport]);
+  /** Sessions this tab started, before the library lists them. */
+  const started = useRef(new Set<string>());
+  /** One of the user's sessions: started here, or listed as theirs, alone or behind a fork. */
+  const mine = (id: string) =>
+    started.current.has(id) ||
+    !!builds?.some((b) => (b.source === "session" || b.source === "fork") && (b.sessionId ?? b.id) === id);
   /** The user's sessions building now, which need this tab open. */
   const running = [
     ...new Set([
       ...(builds ?? [])
         .filter(
           (b) =>
-            b.source === "session" &&
+            (b.source === "session" || b.source === "fork") &&
             b.status === "building" &&
-            (b.id !== read.build?.id || read.build.status === "building"),
+            ((b.sessionId ?? b.id) !== runId || read.build?.status === "building"),
         )
-        .map((b) => b.id),
-      ...(read.build?.status === "building" && ref?.source === "session" ? [read.build.id] : []),
+        .map((b) => b.sessionId ?? b.id),
+      ...(read.build?.status === "building" && runId && mine(runId) ? [runId] : []),
     ]),
   ];
   useKeeper(running, refreshBuilds);
@@ -153,20 +222,34 @@ export default function App({ account }: { account: Account }) {
   const listed = builds?.find((b) => b.id === buildId && b.source === "public");
   /** The build as anyone opens it: a showcase, or in the public library. */
   const shared: BuildRef | null =
-    ref?.source === "session" ? (listed ? { id: ref.id, source: "public" } : null) : summary?.private ? null : ref;
+    ref?.source === "session" || ref?.source === "fork"
+      ? listed
+        ? { id: ref.id, source: "public" }
+        : null
+      : summary?.private
+        ? null
+        : ref;
 
   useEffect(() => {
-    if (build && builds && summary?.status !== build.status) refreshBuilds();
-  }, [build?.id, build?.status, summary?.status]);
+    if (live && builds && summary?.status !== live.status) refreshBuilds();
+  }, [live?.id, live?.status, summary?.status]);
 
   useEffect(() => {
     document.title = heading ? `${heading.name} · ${TITLE}` : TITLE;
   }, [heading?.name]);
 
   useEffect(() => {
-    if ((mode === "edit" && !edits.editable) || (mode !== "view" && !built)) setMode("view");
+    if ((mode === "edit" && (!edits.editable || previewing)) || (mode !== "view" && !built)) setMode("view");
     if (mode !== "view") setFollowCamera(false);
-  }, [mode, edits.editable, built]);
+  }, [mode, edits.editable, built, previewing]);
+
+  useEffect(() => {
+    if (wantedVersion === null || history.loading || history.error || read.loading) return;
+    const version = history.versions.find((v) => v.number === wantedVersion);
+    if (!version) return;
+    setSelected(version);
+    setWantedVersion(null);
+  }, [wantedVersion, history.versions, history.loading, history.error, read.loading]);
 
   useEffect(() => {
     if (mode !== "edit") return;
@@ -174,7 +257,7 @@ export default function App({ account }: { account: Account }) {
     setFollowing(true);
   }, [mode, edits.edits]);
 
-  const show = useCallback((next: BuildRef | null) => {
+  const show = useCallback((next: BuildRef | null, version: number | null = null) => {
     setRef(next);
     setDraft(null);
     setCenter("model");
@@ -184,22 +267,25 @@ export default function App({ account }: { account: Account }) {
     setPlaying(false);
     setFollowCamera(true);
     setSpin(false);
+    setHistoryOpen(version !== null);
+    setWantedVersion(version);
+    setSelected(null);
+    setForkError("");
+    forkAttempt.current = null;
   }, []);
 
-  /** Show this build, or home for none, and put it in the URL. */
-  const open = (next: BuildRef | null) => {
-    if (!same(next, opened.current)) show(next);
+  /** Show this build at its latest or at `version`, or home for none, and put it in the URL. */
+  const open = (next: BuildRef | null, version: number | null = null) => {
+    show(next, version);
     const url = new URL(window.location.href);
-    for (const param of Object.values(PARAMS)) url.searchParams.delete(param);
+    for (const param of [...Object.values(PARAMS), VERSION]) url.searchParams.delete(param);
     if (next) url.searchParams.set(PARAMS[next.source], next.id);
+    if (next && version !== null) url.searchParams.set(VERSION, String(version));
     if (url.href !== window.location.href) window.history.pushState(null, "", url);
   };
 
   useEffect(() => {
-    const sync = () => {
-      const next = urlBuild();
-      if (!same(next, opened.current)) show(next);
-    };
+    const sync = () => show(urlBuild(), urlVersion());
     window.addEventListener("popstate", sync);
     return () => window.removeEventListener("popstate", sync);
   }, [show]);
@@ -242,6 +328,7 @@ export default function App({ account }: { account: Account }) {
     setDraft({ at, build, since });
     try {
       const id = await (from ? remix(from, prompt, images, attached) : create(prompt, images));
+      started.current.add(id);
       remember(id, { name: name.slice(0, 60), prompt });
       refreshBuilds();
       if (!same(opened.current, at)) return;
@@ -256,12 +343,13 @@ export default function App({ account }: { account: Account }) {
 
   /** Open a listed build: the user's public builds as their session, when they have one. */
   const openListed = (b: BuildSummary) => {
-    const session = b.source === "public" && builds?.some((s) => s.source === "session" && s.id === b.id);
-    open({ id: b.id, source: session ? "session" : b.source });
+    const own =
+      b.source === "public" && builds?.find((s) => (s.source === "session" || s.source === "fork") && s.id === b.id);
+    open({ id: b.id, source: own ? own.source : b.source });
   };
 
   const saveThumbnail = async (png: Blob) => {
-    if (ref?.source !== "session") return;
+    if (previewing || !owned || (ref?.source !== "session" && ref?.source !== "fork")) return;
     remember(ref.id, { thumbnail: await thumbnail(png) });
     refreshBuilds();
   };
@@ -273,63 +361,152 @@ export default function App({ account }: { account: Account }) {
     setBlockCount(n);
   }, []);
 
-  /** The signed-in user's build, from their session or as they published it. */
-  const owned = ref?.source === "session" || (ref?.source === "public" && summary?.owner === account.user.id);
+  /** The signed-in user's build: one of their sessions or forks, or as they published it. */
+  const owned =
+    ref?.source === "fork"
+      ? !!read.build
+      : ref?.source === "session"
+        ? mine(ref.id)
+        : ref?.source === "public" && summary?.owner === account.user.id;
   /** An imported build of theirs: it lives only in the library, with no session to fall back to. */
   const imported = owned && ref?.source === "public" && ref.id.startsWith("import-");
-  /** Theirs in the library, or one of the sessions the platform lists as theirs. */
-  const deletable =
-    owned && (ref?.source === "public" || !!builds?.some((b) => b.source === "session" && b.id === ref?.id));
+  const manageable = owned && !previewing;
 
   const publishBuild = async () => {
-    if (!build) return;
+    if (!live || previewing) return;
     const png = await scene.current?.thumbnail();
-    const edited = live && edits.edits.length ? { revision: live.revision, edits: edits.edits } : null;
-    await publish(build.id, png ? await thumbnail(png) : null, edited);
+    const hand = edits.edits.length ? { revision: live.revision, edits: edits.edits } : null;
+    await publish(live.id, png ? await thumbnail(png) : null, hand);
     await refreshBuilds();
   };
 
   const unpublishBuild = async () => {
-    if (!build) return;
+    if (!live) return;
     // Unpublishing would delete an imported build; making it private keeps it under the user's builds.
-    if (imported) await setPrivate(build.id, true);
+    if (imported) await setPrivate(live.id, true);
     else {
-      await unpublish(build.id);
-      if (ref?.source === "public") open({ id: build.id, source: "session" });
+      await unpublish(live.id);
+      if (ref?.source === "public") open({ id: live.id, source: live.id.startsWith("fork-") ? "fork" : "session" });
     }
     await refreshBuilds();
   };
 
   const republish = async () => {
-    if (!build) return;
-    await setPrivate(build.id, false);
+    if (!live) return;
+    await setPrivate(live.id, false);
     await refreshBuilds();
   };
 
   const deleteBuild = async () => {
-    if (!build) return;
-    if (build.status === "building") await cancel(build.id).catch(console.error);
-    await remove(build.id);
+    if (!live) return;
+    if (live.status === "building" && runId) await cancel(runId).catch(console.error);
+    await remove(live.id);
     open(null);
     await refreshBuilds();
   };
 
+  /** A card's menu, for one of the user's own builds: a session, a fork or an imported build. */
+  const manage = (b: BuildSummary, published: boolean): ProjectActions | null => {
+    if (b.source !== "session" && b.source !== "fork" && !(b.source === "public" && b.owner === account.user.id))
+      return null;
+    const isImport = b.id.startsWith("import-");
+    return {
+      name: b.name,
+      published,
+      imported: isImport,
+      onRename: (name) => rename(b.id, name),
+      onVisibility: async (makePublic) => {
+        if (isImport) await setPrivate(b.id, !makePublic);
+        else if (makePublic) await publish(b.id, b.thumbnail?.startsWith("data:image/") ? b.thumbnail : null, null);
+        else await unpublish(b.id);
+        await refreshBuilds();
+      },
+      onDelete: async () => {
+        if (b.status === "building") await cancel(b.sessionId ?? b.id).catch(console.error);
+        await remove(b.id);
+        if (opened.current?.id === b.id) open(null);
+        await refreshBuilds();
+      },
+      deleteNote: isSession(b.id) ? SESSION_DELETE_NOTE : undefined,
+    };
+  };
+
+  const selectVersion = (version: Version | null) => {
+    setWantedVersion(null);
+    const url = new URL(window.location.href);
+    if (version) url.searchParams.set(VERSION, String(version.number));
+    else url.searchParams.delete(VERSION);
+    window.history.replaceState(null, "", url);
+    setSelected(version);
+    setMode("view");
+    setCenter("model");
+    setFollowing(true);
+    setStep(Infinity);
+    setPlaying(false);
+  };
+
+  /** Save a private copy of the shown model, and open it; Holo starts on its first message. */
+  const beginFork = async () => {
+    if (!build?.boxes.length || !ref || wantedVersion !== null || forking) return;
+    const key = `${ref.source}:${ref.id}:${design(build)}`;
+    if (forkAttempt.current?.key !== key) {
+      const saved = [...history.versions].reverse().find((v) => design(v.model) === design(build));
+      const origin = {
+        ...ref,
+        name: build.name,
+        version: selected?.number ?? saved?.number ?? null,
+        revision: build.revision,
+      };
+      const seed = forkSeed({ ...build, ...pack(build.boxes) }, origin, `${build.name.slice(0, 70)} · Fork`);
+      forkAttempt.current = { key, id: `fork-${crypto.randomUUID()}`, seed };
+    }
+    const attempt = forkAttempt.current;
+    setForking(true);
+    setForkError("");
+    try {
+      await saveFork(attempt.id, attempt.seed);
+      if (same(ref, opened.current)) open({ id: attempt.id, source: "fork" });
+      refreshBuilds();
+    } catch (e) {
+      setForkError(e instanceof LibraryError ? e.message : "Couldn't fork it. Try again.");
+    } finally {
+      setForking(false);
+    }
+  };
+
   const closed =
     ref?.source === "showcase" ? (
-      "A showcase from the gallery: remix it to make your own."
+      "Showcase · Fork to edit"
     ) : ref?.source === "public" ? (
-      `Shared by ${summary?.author ?? "an H builder"}: remix it to make your own.`
+      `By ${summary?.author ?? "an H builder"} · Fork to edit`
     ) : live && !drafted && live.status === "error" ? (
       <RecoveryPanel
         key={live.id}
-        build={live}
+        build={runId ? { ...live, id: runId } : live}
         edited={edits.edits.length > 0}
         onOpen={(id) => {
-          if (opened.current?.source === "session" && opened.current.id === live.id) open({ id, source: "session" });
+          started.current.add(id);
+          if (same(ref, opened.current)) open({ id, source: "session" });
           refreshBuilds();
         }}
       />
     ) : null;
+  const preview = previewing && (
+    <>
+      <p>
+        {selected
+          ? `Previewing V${selected.number}, read only`
+          : history.loading || read.loading
+            ? "Opening the version…"
+            : "This version is unavailable."}
+      </p>
+      <button onClick={() => selectVersion(null)}>Latest</button>
+      <button disabled={!selected || forking} onClick={beginFork}>
+        <GitForkIcon size={14} weight="bold" /> Fork
+      </button>
+    </>
+  );
+  const renameTitle = ref && manageable ? (name: string) => rename(ref.id, name) : undefined;
   const recoveredFrom = ref?.source === "session" ? card(ref.id)?.recoveredFrom : undefined;
   const visibleStep = following ? last : Math.min(step, last);
   const opening = `Opening ${heading?.name ?? "the build"}`;
@@ -376,9 +553,12 @@ export default function App({ account }: { account: Account }) {
           </button>
         )}
         {sheeted && heading && (
-          <span className="title" title={heading.name}>
-            {heading.name}
-          </span>
+          <ProjectTitle
+            key={`${ref?.source}:${ref?.id}`}
+            className="title"
+            name={heading.name}
+            onRename={renameTitle}
+          />
         )}
         {syncError && (
           <span className="chip warn" role="status" title={syncError}>
@@ -389,9 +569,9 @@ export default function App({ account }: { account: Account }) {
         {actionable && !error && (
           <ShareMenu
             build={actionable}
-            link={shared && linkTo(shared)}
+            link={!previewing && shared ? linkTo(shared) : null}
             publishing={
-              owned
+              manageable
                 ? {
                     published: imported ? !summary?.private : ref?.source === "public" || !!listed,
                     imported,
@@ -407,7 +587,8 @@ export default function App({ account }: { account: Account }) {
                   }
                 : null
             }
-            onDelete={deletable ? deleteBuild : null}
+            onDelete={manageable ? deleteBuild : null}
+            deleteNote={ref && isSession(ref.id) ? SESSION_DELETE_NOTE : undefined}
             image={() => scene.current?.image() ?? Promise.resolve(null)}
             onGif={() => setFilmBuild(actionable)}
           />
@@ -447,9 +628,12 @@ export default function App({ account }: { account: Account }) {
           </div>
         ) : (
           <div className="aside-head">
-            <span className="aside-title" title={heading?.name}>
-              {heading?.name || "Chat"}
-            </span>
+            <ProjectTitle
+              key={`${ref?.source}:${ref?.id}`}
+              className="aside-title"
+              name={heading?.name || "Chat"}
+              onRename={heading ? renameTitle : undefined}
+            />
             {ref && (
               <button className="quiet" onClick={() => open(null)}>
                 <PlusIcon size={14} weight="bold" />
@@ -460,6 +644,21 @@ export default function App({ account }: { account: Account }) {
         )}
         <div className="aside-body">
           {sheeted && center !== "model" && <div className="sheet-panel">{panel}</div>}
+          {seed && (
+            <p className="recovery-origin">
+              Fork of{" "}
+              <a
+                href={linkTo(seed.origin, seed.origin.version)}
+                onClick={(event) => {
+                  event.preventDefault();
+                  open({ id: seed.origin.id, source: seed.origin.source }, seed.origin.version);
+                }}
+              >
+                {seed.origin.name}
+                {seed.origin.version ? ` · V${seed.origin.version}` : ""}
+              </a>
+            </p>
+          )}
           {recoveredFrom && (
             <p className="recovery-origin">
               Recovery attempt ·{" "}
@@ -482,18 +681,32 @@ export default function App({ account }: { account: Account }) {
             loadFailed={!!error}
             activity={activity}
             closed={closed}
+            preview={preview}
             onCreate={(prompt, images) => start(prompt, images)}
             onSay={async (text, images, attached) => {
-              if (live?.id) await say(live.id, text, images, attached);
+              if (!live?.id || previewing) return;
+              if (runId) await say(runId, text, images, attached);
+              else if (ref?.source === "fork" && seed) {
+                const id = await startFork(ref.id, seed, text, images, attached);
+                started.current.add(id);
+                attachSession(id);
+                refreshBuilds();
+              }
             }}
             onStop={async () => {
-              if (live?.id) await stop(live.id);
+              if (runId) await stop(runId);
             }}
             onRemix={async (text, images, attached) => {
-              if (build) await start(text, images, build, attached);
+              if (build && !previewing) await start(text, images, build, attached);
             }}
+            onFork={beginFork}
             dockRef={setDock}
           />
+          {forkError && (
+            <p className="chat-error" role="alert">
+              {forkError}
+            </p>
+          )}
           {home && (
             <HomeShelves
               builds={builds}
@@ -501,6 +714,7 @@ export default function App({ account }: { account: Account }) {
               me={account.user.id}
               onRetry={refreshBuilds}
               onOpen={openListed}
+              manage={manage}
               mineActions={
                 <ImportBuild
                   onImported={(id) => {
@@ -530,6 +744,29 @@ export default function App({ account }: { account: Account }) {
                 </button>
               ))}
             </div>
+            {live && !drafted && !error && (
+              <div className="tabs history-tools">
+                {(ref?.source === "session" || ref?.source === "fork") && (
+                  <button
+                    className={historyOpen ? "active" : ""}
+                    aria-pressed={historyOpen}
+                    title="The models Holo shared"
+                    onClick={() => setHistoryOpen(!historyOpen)}
+                  >
+                    <ClockCounterClockwiseIcon size={14} weight="bold" />
+                    <span className="button-label">History</span>
+                  </button>
+                )}
+                <button
+                  disabled={forking || !build?.boxes.length}
+                  title="Save a private copy of this model to change"
+                  onClick={beginFork}
+                >
+                  <GitForkIcon size={14} weight="bold" />
+                  <span className="button-label">{forking ? "Forking…" : "Fork"}</span>
+                </button>
+              </div>
+            )}
             {(center === "model" || sheeted) && !error && (
               <ViewControls
                 framing={framing}
@@ -540,13 +777,15 @@ export default function App({ account }: { account: Account }) {
                   if (follow) setSpin(false);
                 }}
                 mode={mode}
-                canEdit={edits.editable && built}
+                canEdit={!previewing && edits.editable && built}
                 editHint={
-                  live?.status === "building"
-                    ? "Edit after Holo stops"
-                    : edits.stale > 0
-                      ? "Discard earlier edits to edit"
-                      : undefined
+                  previewing
+                    ? "Go back to Latest, or fork this version, to edit it"
+                    : live?.status === "building"
+                      ? "Edit after Holo stops"
+                      : edits.stale > 0
+                        ? "Discard earlier edits to edit"
+                        : undefined
                 }
                 built={built}
                 size={size}
@@ -560,12 +799,22 @@ export default function App({ account }: { account: Account }) {
                   setSpin(next);
                 }}
                 onMode={(next) => {
+                  if (next === "edit" && previewing) return;
                   if (next !== "view") setFollowCamera(false);
                   setMode(next);
                 }}
               />
             )}
           </div>
+          {historyOpen && (
+            <HistoryPanel
+              {...history}
+              selected={selected?.id ?? null}
+              onRetry={history.retry}
+              onSelect={selectVersion}
+              onClose={() => setHistoryOpen(false)}
+            />
+          )}
           <div className="stage">
             <div className={center === "model" || sheeted ? "pane" : "pane hidden"}>
               <Viewer
@@ -586,14 +835,16 @@ export default function App({ account }: { account: Account }) {
                 failed={renderFailed}
                 onFailed={setRenderFailed}
                 mode={mode}
-                edits={edits}
+                edits={previewing ? { ...edits, editable: false, stale: 0, hidden: 0 } : edits}
                 onAsk={
-                  ref?.source === "showcase" || (owned && !closed)
+                  !previewing && (ref?.source === "showcase" || (owned && !closed))
                     ? (text, model, cells) =>
                         chat.current?.ask(text, selectedArea(model, cells)) ?? Promise.resolve(false)
                     : undefined
                 }
-                onMode={setMode}
+                onMode={(next) => {
+                  if (next !== "edit" || !previewing) setMode(next);
+                }}
               />
               {build && !built && build.status !== "building" && (
                 <div className="notice">There's nothing here yet, so ask Holo in the chat to start building.</div>

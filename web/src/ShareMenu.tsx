@@ -39,6 +39,8 @@ interface Props {
   publishing: Publishing | null;
   /** Deletes the build for good, or null when it cannot be deleted. */
   onDelete: (() => Promise<void>) | null;
+  /** What deleting does, when it is not the default. */
+  deleteNote?: string;
   image: () => Promise<Blob | null>;
   onGif: () => void;
 }
@@ -69,10 +71,15 @@ function publishAsk({ published, imported, author, onPublish, onUnpublish }: Pub
       };
 }
 
-const deleteAsk = (name: string, action: () => Promise<void>): Ask => ({
+const DELETE_NOTE = "It leaves your builds and the public library. This cannot be undone.";
+/** The platform keeps every session, so deleting one hides it. */
+export const SESSION_DELETE_NOTE =
+  "It leaves your builds and the public library. Its chat stays on H's platform, and its link still opens it. This cannot be undone.";
+
+export const deleteAsk = (name: string, action: () => Promise<void>, note = DELETE_NOTE): Ask => ({
   name: "Delete",
   question: `Delete ${name}?`,
-  note: "It leaves your builds and the public library. This cannot be undone.",
+  note,
   doing: "Deleting…",
   icon: <TrashIcon size={16} />,
   danger: true,
@@ -80,7 +87,7 @@ const deleteAsk = (name: string, action: () => Promise<void>): Ask => ({
 });
 
 /** Every way to take the build elsewhere: who can open it, its link, a GIF, the schematic or an image. */
-export function ShareMenu({ build, link, publishing, onDelete, image, onGif }: Props) {
+export function ShareMenu({ build, link, publishing, onDelete, deleteNote, image, onGif }: Props) {
   const phone = usePhone();
   const { open, setOpen, root } = useMenu();
   const [ask, setAsk] = useState<Ask | null>(null);
@@ -204,7 +211,11 @@ export function ShareMenu({ build, link, publishing, onDelete, image, onGif }: P
             {onDelete && (
               <>
                 <hr />
-                <button role="menuitem" className="danger" onClick={() => setAsk(deleteAsk(build.name, onDelete))}>
+                <button
+                  role="menuitem"
+                  className="danger"
+                  onClick={() => setAsk(deleteAsk(build.name, onDelete, deleteNote))}
+                >
                   <TrashIcon size={16} />
                   Delete…
                 </button>

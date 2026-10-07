@@ -82,11 +82,13 @@ export interface Build extends Omit<Model, "blocks" | "boxes"> {
   failure?: string | null;
 }
 
-/** Where a build is read from: a session of the signed-in user, the public library, or the showcases. */
-export type Source = "session" | "public" | "showcase";
+/** Where a build is read from: a session of the signed-in user, the public library, the showcases, or a fork. */
+export type Source = "session" | "public" | "showcase" | "fork";
 
 export interface BuildSummary {
   id: string;
+  /** The session a fork continues in, once its first message started one. */
+  sessionId?: string | null;
   name: string;
   prompt: string;
   status: Status;

@@ -1,4 +1,6 @@
 import type { Page } from "@playwright/test";
+import { gunzipSync } from "node:zlib";
+import type { SavedFork } from "../src/forkModel";
 import type { Message, Model } from "../src/model";
 
 /** A 4x4 stone floor, then a 2x2x2 oak cube on it: 16 + 8 = 24 blocks in two steps. */
@@ -31,13 +33,41 @@ export async function signedIn(page: Page, account = ACCOUNT) {
   await page.addInitScript((a) => localStorage.setItem("blockyard.account", JSON.stringify(a)), account);
 }
 
-/** Serve the toolkit and these showcases as the static site would; the Agents API has no sessions and the public library is empty. `account` is signed in, if any. Returns the ids of the builds the user deletes. */
+/**
+ * Serve the toolkit and these showcases as the static site would; the Agents API has no sessions and the public
+ * library is empty. `account` is signed in, if any. Returns the user's forks and names, and the ids they delete.
+ */
 export async function site(
   page: Page,
   showcases: (Model & { id: string })[] = [],
   account: typeof ACCOUNT | null = ACCOUNT,
 ) {
   if (account) await signedIn(page, account);
+  const names = new Map<string, { id: string; name: string; updated: number }>();
+  await page.route("**/api/names", (route) => {
+    if (route.request().method() !== "PATCH") return route.fulfill({ json: [...names.values()] });
+    const { id, name } = route.request().postDataJSON();
+    names.set(id, { id, name: name.trim(), updated: Date.now() });
+    return route.fulfill({ json: names.get(id) });
+  });
+  const forks = new Map<string, SavedFork>();
+  await page.route("**/api/forks*", (route) => {
+    const request = route.request();
+    if (request.method() === "POST") {
+      const { id, seed } = JSON.parse(gunzipSync(request.postDataBuffer()!).toString());
+      if (!forks.has(id))
+        forks.set(id, { id, seed, name: seed.model.name, steps: seed.model.steps.length, created: 2, sessionId: null });
+      return route.fulfill({ status: 201, json: forks.get(id) });
+    }
+    if (request.method() === "PATCH") {
+      const { id, sessionId } = request.postDataJSON();
+      forks.get(id)!.sessionId = sessionId;
+      return route.fulfill({ status: 204 });
+    }
+    const id = new URL(request.url()).searchParams.get("id");
+    if (id) return forks.has(id) ? route.fulfill({ json: forks.get(id) }) : route.fulfill({ status: 404, json: {} });
+    return route.fulfill({ json: [...forks.values()].map(({ seed, ...fork }) => fork) });
+  });
   await page.route("https://agp.eu.hcompany.ai/**", (route) =>
     route.fulfill({
       headers: { "access-control-allow-origin": "*", "access-control-allow-headers": "*" },
@@ -67,7 +97,7 @@ export async function site(
       route.fulfill({ json: { ...s, status: "done", messages } }),
     );
   }
-  return deleted;
+  return { forks, names, deleted };
 }
 
 /** Opens the open build's Share menu. */

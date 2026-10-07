@@ -18,6 +18,7 @@ interface Session {
   shared: number;
   group?: string;
   error?: string;
+  request?: any;
 }
 
 interface Request {
@@ -162,8 +163,12 @@ export async function platform(page: Page): Promise<Platform> {
       if (refused) return reply(refused, { detail: "The platform is unavailable." });
       agp.session("new-build", "pending");
       agp.sessions.get("new-build")!.group = body.group_id;
-      for (const message of body.messages ?? [])
+      agp.sessions.get("new-build")!.request = body;
+      for (const message of body.messages ?? []) {
         if (!agp.hold) agp.say("new-build", message.message, message.images ?? []);
+        for (const file of message.files ?? [])
+          if (file.type === "base64") agp.attach("new-build", file.name, Buffer.from(file.source, "base64"));
+      }
       if (body.messages?.length) agp.state("new-build", "running");
       if (agp.loseCreationResponse) {
         agp.loseCreationResponse = false;
@@ -172,6 +177,13 @@ export async function platform(page: Page): Promise<Platform> {
       return reply(200, { id: "new-build", request: body, status: "pending", created_at: NOW });
     }
     if (!session) return reply(404, { detail: "No such session" });
+    if (method === "GET" && !action)
+      return reply(200, {
+        id: session.id,
+        request: session.request ?? { agent: "blockyard", messages: [] },
+        status: { status: session.status },
+        created_at: NOW,
+      });
     if (method === "DELETE" && !action) {
       agp.state(session.id, "interrupted");
       return reply(204);

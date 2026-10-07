@@ -185,7 +185,7 @@ test("home shows my builds by the names Holo gave them; showcases under Public b
   await everyone.click();
   await expect(page).toHaveURL(/\?showcase=hut$/);
   await shown(page, showcase.revision);
-  await expect(page.getByText("A showcase from the gallery: remix it to make your own.")).toBeVisible();
+  await expect(page.getByText("Showcase · Fork to edit")).toBeVisible();
 
   const menu = await shareMenu(page);
   const [download] = await Promise.all([
@@ -232,7 +232,7 @@ test("a message sent while Holo builds reaches it without stopping, and shows as
 test("Delete takes a build out of my builds for good after a confirmation, and stops Holo if it is building", async ({
   page,
 }) => {
-  const deleted = await site(page);
+  const { deleted } = await site(page);
   const agp = await platform(page);
   agp.session("live");
   agp.say("live", "A tower");
