@@ -31,6 +31,11 @@ test("model size counts the blocks the whole build spans, fixed during replay, f
 
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(size).toBeHidden();
+  const controls = page.getByRole("button", { name: "View controls" });
+  await controls.click();
+  await expect(size).toBeInViewport({ ratio: 1 });
+  await controls.click();
+  await expect(size).toBeHidden();
   await page.setViewportSize({ width: 1280, height: 800 });
 
   agp.share("size", { ...model("0f0f0f0f0f0f"), blocks: [], boxes: [] });
