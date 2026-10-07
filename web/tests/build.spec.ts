@@ -127,6 +127,41 @@ test("a new build sends the toolkit and the photos; Stop makes Holo answer and t
   await expect(page.getByPlaceholder("Ask for a change")).toHaveCount(0);
 });
 
+test("Send keeps the request visible through session startup until its transcript arrives", async ({ page }) => {
+  await site(page);
+  const agp = await platform(page);
+  agp.hold = true;
+  await page.goto("/");
+  await page.getByLabel("Photos to attach").setInputFiles(PHOTO);
+  const composer = page.getByPlaceholder("A castle on a cliff… or drop a photo");
+  await composer.fill("A red lighthouse");
+  await composer.press("Enter");
+  await expect(page).toHaveURL(/\?build=new-build$/);
+  const hut = model();
+  agp.share("new-build", hut);
+  await shown(page, hut.revision);
+  await expect(page.locator(".msg.user")).toHaveText("A red lighthouse");
+  await expect(page.locator(".msg.user").getByRole("img", { name: "Attached image" })).toBeVisible();
+
+  const follow = page.getByPlaceholder("Ask for a change");
+  await follow.fill("Make it taller");
+  await follow.press("Enter");
+  await expect.poll(() => agp.posted("/messages")).toHaveLength(1);
+  await expect(page.locator(".msg.user")).toHaveText(["A red lighthouse", "Make it taller"]);
+
+  const [first] = agp.posted("/api/v2/sessions")[0].messages;
+  agp.say("new-build", first.message, first.images);
+  agp.step("new-build", "Starting the lighthouse.");
+  await expect(page.getByText("Starting the lighthouse.", { exact: true })).toBeVisible();
+  await expect(page.locator(".msg.user")).toHaveText(["A red lighthouse", "Make it taller"]);
+  await expect(page.locator(".msg.user.queued")).toHaveText("Make it taller");
+  await expect(page.getByRole("img", { name: "Attached image" })).toHaveCount(1);
+
+  agp.say("new-build", "Make it taller");
+  await expect(page.locator(".msg.user.queued")).toHaveCount(0);
+  await expect(page.locator(".msg.user")).toHaveText(["A red lighthouse", "Make it taller"]);
+});
+
 test("home shows my builds by the names Holo gave them; showcases under Public builds, which download as .schem", async ({
   page,
 }) => {
@@ -238,11 +273,11 @@ test("Holo's work shows as what it does now, then folds under its message", asyn
   agp.step("work", "", "The walls need a first course.", [run]);
   await page.goto("/?build=work");
   const live = page.locator(".msg.live");
-  await expect(live).toContainText("Placing blocks");
+  await expect(live).toContainText("Building first draft");
 
   agp.result("work", run);
   agp.step("work", "", "Now the roof.", [{ tool_name: "look", args: {}, id: "look" }]);
-  await expect(live).toContainText("Checking every side");
+  await expect(live).toContainText("Building first draft");
 
   agp.now += 95_000;
   agp.step("work", "Built a tower.", "It stands.");

@@ -46,6 +46,7 @@ import { useKeeper } from "./useSession";
 import { useSheet } from "./useSheet";
 import { usePhone } from "./usePhone";
 import { type Framing, type Mode, RenderFailed, ViewControls, Viewer } from "./Viewer";
+import { extent } from "./voxels";
 
 const TITLE = document.title;
 const NEW_BUILD = "New build";
@@ -94,10 +95,19 @@ export default function App({ account }: { account: Account }) {
   /** What the user just asked for, shown as a starting build where they asked it, until its session answers. */
   const [draft, setDraft] = useState<{ at: BuildRef | null; build: Build; since: number } | null>(null);
   const drafted = draft && same(draft.at, ref) && read.build?.id !== draft.build.id ? draft.build : null;
-  const unnamed = drafted ?? read.build;
+  const unnamed = useMemo(() => {
+    if (drafted) return drafted;
+    if (draft && same(draft.at, ref) && read.build && !read.build.messages.some((m) => m.role === "user"))
+      return { ...read.build, messages: [...draft.build.messages, ...read.build.messages] };
+    return read.build;
+  }, [drafted, draft, ref, read.build]);
   const named = ref && names[ref.id];
   const live = useMemo(() => (unnamed && named ? { ...unnamed, name: named.name } : unnamed), [unnamed, named]);
-  const activity = drafted ? { label: PHASES.idea, since: draft!.since, work: null } : read.activity;
+  const observed = drafted ? { label: PHASES.idea, since: draft!.since, work: null } : read.activity;
+  const activity =
+    observed && !live?.boxes.length && (observed.label === PHASES.blocks || observed.label === PHASES.checking)
+      ? { ...observed, label: PHASES.draft }
+      : observed;
   const { error, syncError, models, seed, runId, attachSession } = read;
   const edits = useEdits(live);
   const [historyOpen, setHistoryOpen] = useState(() => urlVersion() !== null);
@@ -152,6 +162,10 @@ export default function App({ account }: { account: Account }) {
   const chat = useRef<ChatHandle>(null);
   const last = (build?.steps.length ?? 0) - 1;
   const built = !!build?.boxes.length;
+  const size = useMemo(
+    () => (build?.boxes.length ? extent(build, PALETTE) : null),
+    [build?.boxes, build?.width, build?.height, build?.depth],
+  );
 
   const latest = useRef(0);
   const refreshBuilds = useCallback(() => {
@@ -753,8 +767,17 @@ export default function App({ account }: { account: Account }) {
                 }}
                 mode={mode}
                 canEdit={!previewing && edits.editable && built}
-                editHint={previewing ? "Go back to Latest, or fork this version, to edit it" : undefined}
+                editHint={
+                  previewing
+                    ? "Go back to Latest, or fork this version, to edit it"
+                    : live?.status === "building"
+                      ? "Edit after Holo stops"
+                      : edits.stale > 0
+                        ? "Discard earlier edits to edit"
+                        : undefined
+                }
                 built={built}
+                size={size}
                 onFrame={(next) => {
                   if (mode === "walk") setMode("view");
                   setFollowCamera(false);

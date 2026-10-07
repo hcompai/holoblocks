@@ -75,12 +75,12 @@ export interface Edits {
 /** The hand edits of the open build, saved in this browser per build and revision. */
 export function useEdits(build: Build | null): Edits {
   const id = build?.id ?? null;
-  const [state, setState] = useState<{ id: string | null; saved: Saved | null; undone: Edit[] }>({
+  const [state, setState] = useState<{ id: string | null; saved: Saved | null; undone: Saved | null }>({
     id: null,
     saved: null,
-    undone: [],
+    undone: null,
   });
-  if (state.id !== id) setState({ id, saved: id ? load(id) : null, undone: [] });
+  if (state.id !== id) setState({ id, saved: id ? load(id) : null, undone: null });
   const saved = state.id === id ? state.saved : null;
 
   const building = build?.status === "building";
@@ -97,10 +97,10 @@ export function useEdits(build: Build | null): Edits {
   const update = (next: Edit[], undone: Edit[]) => {
     if (!build) return;
     const value = next.length ? { revision: build.revision, edits: next } : null;
-    setState({ id: build.id, saved: value, undone });
+    setState({ id: build.id, saved: value, undone: { revision: build.revision, edits: undone } });
     save(build.id, value);
   };
-  const undone = state.undone;
+  const undone = state.undone && state.undone.revision === build?.revision ? state.undone.edits : NONE;
   return {
     build: shown,
     edits,

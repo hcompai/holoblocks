@@ -216,7 +216,9 @@ test("picking a block replaces the selection with it, the build's own blocks lis
   await expect(page.getByRole("row", { name: /gold block/ })).toBeVisible();
 });
 
-test("edits wait while Holo builds, and edits on an earlier revision are offered to discard", async ({ page }) => {
+test("edits wait while Holo builds, and edits on an earlier revision are offered to discard", async ({
+  page,
+}, testInfo) => {
   const edit = { kind: "set", cells: [[0, 0, 0]], block: "air" };
   await page.addInitScript(
     ([edit, revision]) =>
@@ -234,15 +236,70 @@ test("edits wait while Holo builds, and edits on an earlier revision are offered
   await page.goto("/?showcase=hut");
   await expect(page.locator(".viewer")).toHaveAttribute("data-revision", hut.revision);
   const notice = page.locator(".edit-notice");
+  const editing = page.getByRole("button", { name: "Edit", exact: true });
+  const hint = page.locator(".edit-availability");
   await expect(notice).toContainText("1 edit was made on an earlier revision of this build.");
   await expect(count(page)).toHaveText(/^24 blocks ·/);
+  await expect(editing).toBeDisabled();
+  await expect(editing).toHaveAccessibleDescription("Discard earlier edits to edit");
+  await expect(hint).toBeVisible();
   await notice.getByRole("button", { name: "Discard" }).click();
   await expect(notice).toBeHidden();
+  await expect(editing).toBeEnabled();
+  await expect(hint).toHaveCount(0);
   expect(JSON.parse((await page.evaluate(() => localStorage.getItem("blockyard.edits")))!)).not.toHaveProperty("hut");
 
   await page.goto("/?build=live");
   await expect(page.locator(".viewer")).toHaveAttribute("data-revision", hut.revision);
   await expect(notice).toContainText("Your 1 edit is hidden while Holo builds.");
   await expect(count(page)).toHaveText(/^24 blocks ·/);
-  await expect(page.getByRole("button", { name: "Edit", exact: true })).toBeDisabled();
+  await expect(editing).toBeDisabled();
+  await expect(editing).toHaveAccessibleDescription("Edit after Holo stops");
+  await expect(hint).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath("edit-hint-desktop.png") });
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(hint).toBeInViewport();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+  await page.screenshot({ path: testInfo.outputPath("edit-hint-phone.png") });
+  await page.getByRole("button", { name: "View controls" }).click();
+  await expect(editing).toBeDisabled();
+  await expect(editing).toHaveAccessibleDescription("Edit after Holo stops");
+
+  agp.answer("live", "The hut is ready.");
+  await expect(editing).toBeEnabled();
+  await expect(hint).toHaveCount(0);
+});
+
+test("redo stays with the revision its edits were undone on", async ({ page }) => {
+  const edit = { kind: "set", cells: [[0, 0, 0]], block: "air" };
+  await page.addInitScript(
+    ([edit, revision]) =>
+      localStorage.setItem("blockyard.edits", JSON.stringify({ redo: { revision, edits: [edit] } })),
+    [edit, hut.revision] as const,
+  );
+  await site(page);
+  const agp = await platform(page);
+  agp.session("redo", "idle");
+  agp.say("redo", "A little hut");
+  agp.share("redo", hut);
+  agp.answer("redo", "The hut is ready.");
+  await page.goto("/?build=redo");
+  await expect(count(page)).toHaveText(/^23 blocks ·/);
+  const editing = page.getByRole("button", { name: "Edit", exact: true });
+  const redo = page.getByRole("button", { name: "Redo" });
+  await editing.click();
+  await page.getByRole("button", { name: "Undo" }).click();
+  await expect(count(page)).toHaveText(/^24 blocks ·/);
+  await expect(redo).toBeEnabled();
+
+  const taller = { ...model("0a1b2c3d4e5f"), boxes: [...hut.boxes, 0, 3, 0, 0, 3, 0, 1, 1] };
+  agp.state("redo", "running");
+  agp.share("redo", taller);
+  await expect(page.locator(".viewer")).toHaveAttribute("data-revision", taller.revision);
+  await expect(editing).toBeDisabled();
+  agp.answer("redo", "Taller now.");
+  await editing.click();
+  await expect(redo).toBeDisabled();
+  await expect(count(page)).toHaveText(/^25 blocks ·/);
 });

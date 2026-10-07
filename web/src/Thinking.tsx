@@ -9,14 +9,19 @@ import {
   TagIcon,
 } from "@phosphor-icons/react";
 import { useState } from "react";
-import { PHASES, THINKING_PHASES } from "./activity";
+import { PHASES } from "./activity";
+import { BlockLoader } from "./BlockLoader";
 import type { Activity, Reference } from "./session";
-import { MaterialStudy, NameStudy, ReferenceBoard } from "./ThinkingStudy";
+import { NameStudy, ReferenceBoard } from "./ThinkingStudy";
 import { buildSubject, type BuildSubject } from "./buildSubject";
 
 const STAGES = {
   [PHASES.idea]: {
     art: "idea",
+    icon: LightbulbIcon,
+  },
+  [PHASES.message]: {
+    art: "message",
     icon: LightbulbIcon,
   },
   [PHASES.setup]: {
@@ -35,13 +40,17 @@ const STAGES = {
     art: "blocks",
     icon: StackIcon,
   },
+  [PHASES.draft]: {
+    art: "blocks",
+    icon: StackIcon,
+  },
   [PHASES.checking]: {
     art: "checking",
     icon: ScanIcon,
   },
 } as const;
 
-const stage = (label: string) => STAGES[label as keyof typeof STAGES] ?? STAGES[PHASES.idea];
+const stage = (label: string) => STAGES[label as keyof typeof STAGES] ?? { art: "working", icon: StackIcon };
 
 /** A small companion to the chat's real activity label, including once a model is visible. */
 export function ThinkingIcon({ label }: { label: string }) {
@@ -115,10 +124,15 @@ export function Thinking({
     })),
     ...(activity.references ?? []),
   ];
-  if (!THINKING_PHASES.includes(activity.label)) return null;
+  if (!["idea", "photos", "naming"].includes(current.art))
+    return (
+      <div className={`thinking thinking-stage-${current.art}`}>
+        <BlockLoader label={activity.label} />
+      </div>
+    );
   return (
-    <div className={`thinking ${paused ? "thinking-paused" : ""}`}>
-      <div className={`thinking-card thinking-stage-${current.art}`} data-subject={subject.kind}>
+    <div className={`thinking thinking-stage-${current.art} ${paused ? "thinking-paused" : ""}`}>
+      <div className="thinking-card" data-subject={subject.kind}>
         <div className="thinking-heading">
           <span role="status" aria-live="polite" aria-atomic="true">
             <ThinkingIcon label={activity.label} /> {activity.label}
@@ -137,9 +151,6 @@ export function Thinking({
             <Sketch subject={subject} />
             {references.length > 0 && <ReferenceBoard references={references} compact />}
           </>
-        )}
-        {current.art === "setup" && (
-          <MaterialStudy subject={subject} request={request} materials={activity.materials} />
         )}
         {current.art === "photos" &&
           (references.length ? (

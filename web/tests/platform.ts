@@ -165,7 +165,7 @@ export async function platform(page: Page): Promise<Platform> {
       agp.sessions.get("new-build")!.group = body.group_id;
       agp.sessions.get("new-build")!.request = body;
       for (const message of body.messages ?? []) {
-        agp.say("new-build", message.message, message.images ?? []);
+        if (!agp.hold) agp.say("new-build", message.message, message.images ?? []);
         for (const file of message.files ?? [])
           if (file.type === "base64") agp.attach("new-build", file.name, Buffer.from(file.source, "base64"));
       }

@@ -1171,9 +1171,47 @@ main {
 
 .stage-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
+  gap: 6px 12px;
   margin: 12px 16px;
+}
+
+.view-notes {
+  display: flex;
+  flex-basis: 100%;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 16px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.edit-availability {
+  margin: 0;
+}
+
+.model-size {
+  display: flex;
+  gap: 12px;
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.model-size > div {
+  display: flex;
+  gap: 4px;
+}
+
+.model-size dt {
+  color: var(--text-tertiary);
+}
+
+.model-size dd {
+  margin: 0;
+  white-space: nowrap;
 }
 
 .view-toggle {
@@ -1583,61 +1621,6 @@ main {
   animation-delay: 0.3s;
 }
 
-.thinking-material-study {
-  margin: 22px 0;
-}
-
-.thinking-materials {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-  margin: 12px 0;
-}
-
-.thinking-material {
-  display: flex;
-  align-items: center;
-  flex-direction: column;
-  justify-content: center;
-  gap: 10px;
-  min-width: 0;
-  height: 108px;
-  padding: 12px 8px;
-  border: 1px solid var(--stroke-default);
-  border-radius: 10px;
-  background: var(--background-page);
-  color: var(--text-secondary);
-  font-size: 11px;
-  line-height: 15px;
-  text-transform: capitalize;
-  animation: thinking-arrive 0.4s ease-out both;
-  animation-delay: calc(var(--order) * 0.07s);
-}
-
-.thinking-material[aria-pressed="true"] .thinking-material-texture {
-  transform: scale(1.08);
-}
-
-.thinking-material[aria-pressed="true"] {
-  border-color: var(--text-accent);
-  background: var(--background-iris-alt);
-}
-
-.thinking-material-texture {
-  display: flex;
-  width: 44px;
-  height: 44px;
-  overflow: hidden;
-  border-radius: 3px;
-  box-shadow: 3px 3px 0 color-mix(in srgb, var(--text-default) 15%, transparent);
-}
-
-.thinking-material-texture .swatch {
-  flex: none;
-  margin: 0;
-  border-radius: 0;
-}
-
 .thinking-name-study {
   display: flex;
   justify-content: center;
@@ -1800,7 +1783,6 @@ main {
 
 .thinking-paused .thinking-reference,
 .thinking-paused .thinking-reference-thumb,
-.thinking-paused .thinking-material,
 .thinking-paused .thinking-name-title > span {
   animation: none !important;
 }
@@ -3017,6 +2999,43 @@ main {
 
   .app:not(.home) .stage-head > * {
     pointer-events: auto;
+  }
+
+  .app:not(.home) .view-notes {
+    flex-basis: auto;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 8px;
+  }
+
+  .app:not(.home) .model-size {
+    flex-direction: column;
+    gap: 2px;
+    padding: 5px 10px;
+    border: 0.5px solid var(--glass-stroke);
+    border-radius: 12px;
+    background: var(--glass);
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
+  }
+
+  .app:not(.home) .model-size > div {
+    justify-content: space-between;
+  }
+
+  .app:not(.home):not(:has(.view-tabs.open)) .model-size {
+    display: none;
+  }
+
+  .app:not(.home) .edit-availability {
+    max-width: 160px;
+    padding: 5px 10px;
+    border: 0.5px solid var(--glass-stroke);
+    border-radius: 12px;
+    background: var(--glass);
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
+    text-align: right;
   }
 
   .app:not(.home) .stage-head > .tabs[role="tablist"],
