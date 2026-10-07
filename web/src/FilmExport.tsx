@@ -4,6 +4,7 @@ import { BlockLoader } from "./BlockLoader";
 import type { Build } from "./model";
 import { FilmRenderer } from "./film";
 import { encodeGif } from "./filmGif";
+import { PHONE } from "./usePhone";
 import {
   FILM_ASPECTS,
   FILM_SECONDS,
@@ -40,7 +41,7 @@ export function FilmExport({ build, onClose }: Props) {
   const renderer = useRef<FilmRenderer | null>(null);
   /** The GIF being made; the next waits for it to stop, since both draw with the one renderer. */
   const queue = useRef(Promise.resolve());
-  const [aspect, setAspect] = useState<FilmAspect>("16:9");
+  const [aspect, setAspect] = useState<FilmAspect>(() => (PHONE.matches ? "1:1" : "16:9"));
   const [seconds, setSeconds] = useState(8);
   const [branded, setBranded] = useState(true);
   const [camera, setCamera] = useState<FilmCamera>("follow");
@@ -54,7 +55,7 @@ export function FilmExport({ build, onClose }: Props) {
   const [retry, setRetry] = useState(0);
   const caption = filmCaption(build, blocks, branded);
   const size = browserOptions(aspect, seconds, branded, camera);
-  const canShare = !!file && !!navigator.canShare?.({ files: [file] });
+  const canShare = !!file && !!navigator.share && !!navigator.canShare?.({ files: [file] });
 
   useEffect(() => {
     dialog.current?.showModal();
@@ -148,6 +149,7 @@ export function FilmExport({ build, onClose }: Props) {
 
   const share = async () => {
     if (!file || !canShare) return;
+    setNotice("");
     try {
       await navigator.share({ files: [file], title: build.name, text: caption });
     } catch (e) {
@@ -192,14 +194,14 @@ export function FilmExport({ build, onClose }: Props) {
             {file && url ? (
               <>
                 <div className="film-actions">
-                  <a className="film-primary" href={url} download={file.name}>
-                    <DownloadSimpleIcon size={16} /> Download GIF
-                  </a>
                   {canShare && (
-                    <button onClick={share}>
+                    <button className="film-primary" onClick={share}>
                       <ShareNetworkIcon size={16} /> Share…
                     </button>
                   )}
+                  <a className={canShare ? "film-secondary" : "film-primary"} href={url} download={file.name}>
+                    <DownloadSimpleIcon size={16} /> Download GIF
+                  </a>
                 </div>
                 <p className="small muted">
                   {size.width} × {size.height} · {seconds}s · {megabytes(file.size)}
@@ -246,7 +248,7 @@ export function FilmExport({ build, onClose }: Props) {
               </select>
             </label>
             <label className="film-branding">
-              <input type="checkbox" checked={branded} onChange={(e) => setBranded(e.target.checked)} />H Company logo
+              <input type="checkbox" checked={branded} onChange={(e) => setBranded(e.target.checked)} />H Company credit
             </label>
           </details>
           <label className="film-caption">

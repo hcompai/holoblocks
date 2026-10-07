@@ -4,6 +4,7 @@ import { typing } from "./scene";
 
 const MAC = /Mac|iPhone|iPad/.test(navigator.platform);
 const MOD = MAC ? "⌘" : "Ctrl+";
+const ALT = MAC ? "Option" : "Alt";
 
 /** Every mouse and keyboard control, by mode: [keys, what they do]. */
 const SECTIONS: { title: string; rows: [string, string][] }[] = [
@@ -22,9 +23,11 @@ const SECTIONS: { title: string; rows: [string, string][] }[] = [
       ["Click", "Select a block"],
       [`Shift-click, ${MOD}click`, "Add or remove a block"],
       ["Shift-drag", "Add the blocks seen in a box"],
+      [`Shift-${ALT}-drag`, "Add every block in a box, hidden ones too"],
       ["Right-click", "Place the block in hand on a face"],
-      ["← → ↑ ↓", "Move a block, as seen on screen"],
-      ["E, Page Up / Q, Page Down", "Move up / down a block"],
+      ["← →, A / D", "Move a block left / right, as seen on screen"],
+      ["↑ ↓, E / Q", "Move up / down a block"],
+      ["W / S", "Move a block away / closer, along the view"],
       [`${MOD}D`, "Duplicate beside it"],
       ["Delete, Backspace", "Delete"],
       [`${MOD}Z / Shift-${MOD}Z`, "Undo / redo"],

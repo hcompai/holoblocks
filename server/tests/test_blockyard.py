@@ -113,9 +113,13 @@ def test_each_run_reports_the_session_clock_and_says_to_finish_late(tmp_path, mo
     assert client.tick(tmp_path) == ""
     (tmp_path / client.CLOCK).write_text(json.dumps({"started": 1000, "minutes": 180}))
     monkeypatch.setattr(client.time, "time", lambda: 1000 + 60 * 41)
-    assert client.tick(tmp_path) == "Run 1 · 41 of 180 min used\n"
+    assert client.tick(tmp_path) == (
+        "Run 1 · 41 of 180 min used: keep improving the weakest part; the finish check opens at 90\n"
+    )
+    monkeypatch.setattr(client.time, "time", lambda: 1000 + 60 * 100)
+    assert client.tick(tmp_path) == "Run 2 · 100 of 180 min used\n"
     monkeypatch.setattr(client.time, "time", lambda: 1000 + 60 * 150)
-    assert client.tick(tmp_path).startswith("Run 2 · 150 of 180 min used: start nothing new")
+    assert client.tick(tmp_path).startswith("Run 3 · 150 of 180 min used: start nothing new")
 
 
 LAND = """

@@ -4,6 +4,10 @@ import type { Model } from "../src/model";
 import { ACCOUNT, model, shareMenu, site } from "./fixtures";
 
 const BLOB = "https://blob.test";
+const PNG = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a6RkAAAAASUVORK5CYII=",
+  "base64",
+);
 
 /** The library API holding one imported build of the signed-in user's, with PATCH, ?mine=1, DELETE and /api/deleted. */
 async function library(page: Page, build: Model & { id: string }) {
@@ -16,7 +20,7 @@ async function library(page: Page, build: Model & { id: string }) {
       author: ACCOUNT.user.name,
       owner: ACCOUNT.user.id,
       published: 1,
-      thumbnail: null,
+      thumbnail: null as string | null,
       build: `${BLOB}/builds/${build.id}/build.json.gz`,
       private: false,
     },
@@ -43,7 +47,10 @@ async function library(page: Page, build: Model & { id: string }) {
     });
     if (method === "PATCH") {
       const { id, private: hidden } = request.postDataJSON();
-      entries.find((e) => e.id === id)!.private = hidden;
+      const entry = entries.find((e) => e.id === id)!;
+      entry.private = hidden;
+      entry.thumbnail = hidden ? `/api/builds?id=${id}&file=thumbnail` : null;
+      entry.build = hidden ? `/api/builds?id=${id}&file=build.json.gz` : `${BLOB}/builds/${id}/build.json.gz`;
       return route.fulfill({ status: 204 });
     }
     if (method === "DELETE") {
@@ -51,6 +58,12 @@ async function library(page: Page, build: Model & { id: string }) {
       return route.fulfill({ status: 204 });
     }
     const id = url.searchParams.get("id");
+    if (url.searchParams.has("file")) {
+      if (!request.headers().authorization || !request.headers()["x-agents-key"]) return route.fulfill({ status: 401 });
+      return url.searchParams.get("file") === "thumbnail"
+        ? route.fulfill({ contentType: "image/png", body: PNG })
+        : route.fulfill({ body: gzipSync(JSON.stringify({ ...build, status: "done", messages: [] })) });
+    }
     if (url.searchParams.has("mine")) return route.fulfill({ json: entries.filter((e) => e.private) });
     if (id) {
       const entry = entries.find((e) => e.id === id && (!e.private || request.headers().authorization));
@@ -101,8 +114,10 @@ test("an imported build goes private and stays under the user's builds, goes pub
   await page.getByRole("button", { name: "HoloBlocks", exact: true }).click();
   await expect(mine).toContainText("private");
   await expect(page.getByRole("region", { name: "Public builds" }).locator(".gallery-card")).toHaveCount(0);
+  await expect(mine.locator("img")).toHaveAttribute("src", /^data:image\/png/);
   await mine.click();
   await expect(page.locator(".viewer")).toHaveAttribute("data-revision", build.revision);
+  expect(calls.find((c) => c.search.includes("file=build.json.gz"))?.auth).toBe(`Bearer ${ACCOUNT.pass}`);
 
   await (await shareMenu(page)).getByRole("menuitem", { name: "Publish to the library…" }).click();
   await page.getByRole("dialog", { name: "Publish" }).getByRole("button", { name: "Publish" }).click();
