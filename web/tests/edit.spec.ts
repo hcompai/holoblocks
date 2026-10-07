@@ -153,6 +153,45 @@ test("Shift-drag selects the blocks seen in a box, ⌘D duplicates them beside i
   await expect(toolbar(page)).toContainText("1 change");
 });
 
+test("Shift-Option-drag selects every block in the box, the hidden ones too", async ({ page }) => {
+  const { x, y, width, height } = await open(page);
+  await page.keyboard.down("Shift");
+  await page.keyboard.down("Alt");
+  await page.mouse.move(x + 10, y + 10);
+  await page.mouse.down();
+  await page.mouse.move(x + width - 10, y + height - 10, { steps: 4 });
+  await page.mouse.up();
+  await page.keyboard.up("Alt");
+  await page.keyboard.up("Shift");
+  await expect(page.getByRole("dialog", { name: "Selection" }).locator("b")).toHaveText("24 blocks");
+});
+
+test("↑ ↓ lift and lower a block, W and S slide it along the view, as do the panel's buttons", async ({ page }) => {
+  const { cx, cy } = await open(page);
+  await page.mouse.click(cx, cy);
+  const panel = page.getByRole("dialog", { name: "Selection" });
+  await expect(panel).toContainText("oak planks");
+
+  for (const key of ["ArrowUp", "ArrowDown", "w", "s", "ArrowLeft", "d"]) await page.keyboard.press(key);
+  for (const name of ["Move up", "Move away", "Move closer"]) {
+    await panel.getByRole("button", { name: new RegExp(`^${name}`) }).click();
+  }
+  await expect(toolbar(page)).toContainText("9 changes");
+  const moves = await page.evaluate(() =>
+    Object.values(JSON.parse(localStorage.getItem("blockyard.edits")!) as Record<string, { edits: { by: number[] }[] }>)
+      .flatMap((saved) => saved.edits)
+      .map((edit) => edit.by),
+  );
+  const lift = moves.map(([x, y, z]) => (!x && !z ? Math.sign(y) : 0));
+  expect(lift).toEqual([1, -1, 0, 0, 0, 0, 1, 0, 0]);
+  for (const [x, y, z] of moves.filter((_, i) => !lift[i]))
+    expect([y, Math.abs(x) + Math.abs(z) > 0]).toEqual([0, true]);
+  const opposite = (v: number[]) => v.map((c) => -c + 0);
+  expect(moves[3]).toEqual(opposite(moves[2]));
+  expect(moves[7]).toEqual(moves[2]);
+  expect(moves[8]).toEqual(moves[3]);
+});
+
 test("picking a block replaces the selection with it, the build's own blocks listed first", async ({ page }) => {
   const { cx, cy } = await open(page);
   await page.mouse.click(cx, cy);

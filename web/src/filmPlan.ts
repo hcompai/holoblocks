@@ -1,7 +1,6 @@
 import type { Box, Build } from "./model";
 import { CAMERA_MOVE_SECONDS } from "./buildTiming";
-
-export const HOLO_MODEL = "HOLO4";
+import { HOLO } from "./holo";
 
 export const FILM_ASPECTS = {
   "16:9": { label: "Landscape · 16:9", width: 1920, height: 1080 },
@@ -19,7 +18,7 @@ export interface FilmOptions {
   height: number;
   seconds: number;
   fps: number;
-  /** The H Company logo in the corner. */
+  /** The H Company logo and Holo credit in the corner. */
   branded: boolean;
   camera?: FilmCamera;
 }
@@ -125,8 +124,8 @@ export function filmFilename(name: string, extension: string): string {
 
 export function filmCaption(build: Pick<Build, "name" | "status">, blocks: number | null, branded: boolean): string {
   const count = blocks === null ? "" : `: ${blocks.toLocaleString("en-US")} Minecraft blocks`;
-  const author = branded ? `${HOLO_MODEL} by H Company` : "HoloBlocks";
+  const author = branded ? `${HOLO.name} by H Company` : "HoloBlocks";
   const state = build.status === "building" ? " · work in progress" : "";
-  const tags = branded ? `#${HOLO_MODEL} #HoloBlocks #Minecraft` : "#HoloBlocks #Minecraft";
+  const tags = branded ? "#Holo4 #HCompany #HoloBlocks #Minecraft" : "#HoloBlocks #Minecraft";
   return `${build.name}${count}, built with ${author}${state}. ${tags}`;
 }

@@ -1,10 +1,10 @@
 import {
   ArrowDownIcon,
+  ArrowDownLeftIcon,
   ArrowLeftIcon,
-  ArrowLineDownIcon,
-  ArrowLineUpIcon,
   ArrowRightIcon,
   ArrowUpIcon,
+  ArrowUpRightIcon,
   ArrowUUpLeftIcon,
   ArrowUUpRightIcon,
   CaretDownIcon,
@@ -20,27 +20,31 @@ import { PALETTE, textureSheet, type TextureSheet } from "./model";
 /** What the selected blocks can do; moves follow the screen, snapped to the build's axes. */
 export type Action = "left" | "right" | "forward" | "back" | "up" | "down" | "duplicate" | "delete";
 
-/** Keys for each action in edit mode, as `KeyboardEvent.key`. */
+/** Keys for each action in edit mode, as `KeyboardEvent.key`: arrows move across the screen, W/S into it. */
 export const ACTION_KEYS: Record<string, Action> = {
   ArrowLeft: "left",
+  a: "left",
   ArrowRight: "right",
-  ArrowUp: "forward",
-  ArrowDown: "back",
-  PageUp: "up",
+  d: "right",
+  ArrowUp: "up",
   e: "up",
-  PageDown: "down",
+  PageUp: "up",
+  ArrowDown: "down",
   q: "down",
+  PageDown: "down",
+  w: "forward",
+  s: "back",
   Delete: "delete",
   Backspace: "delete",
 };
 
 const MOVES: { action: Action; label: string; icon: ReactNode }[] = [
-  { action: "forward", label: "Move forward (↑)", icon: <ArrowUpIcon size={16} weight="bold" /> },
-  { action: "left", label: "Move left (←)", icon: <ArrowLeftIcon size={16} weight="bold" /> },
-  { action: "right", label: "Move right (→)", icon: <ArrowRightIcon size={16} weight="bold" /> },
-  { action: "back", label: "Move back (↓)", icon: <ArrowDownIcon size={16} weight="bold" /> },
-  { action: "up", label: "Move up (E, Page Up)", icon: <ArrowLineUpIcon size={16} weight="bold" /> },
-  { action: "down", label: "Move down (Q, Page Down)", icon: <ArrowLineDownIcon size={16} weight="bold" /> },
+  { action: "up", label: "Move up (↑, E)", icon: <ArrowUpIcon size={16} weight="bold" /> },
+  { action: "forward", label: "Move away (W)", icon: <ArrowUpRightIcon size={16} weight="bold" /> },
+  { action: "left", label: "Move left (←, A)", icon: <ArrowLeftIcon size={16} weight="bold" /> },
+  { action: "down", label: "Move down (↓, Q)", icon: <ArrowDownIcon size={16} weight="bold" /> },
+  { action: "right", label: "Move right (→, D)", icon: <ArrowRightIcon size={16} weight="bold" /> },
+  { action: "back", label: "Move closer (S)", icon: <ArrowDownLeftIcon size={16} weight="bold" /> },
 ];
 
 const ALL_BLOCKS = Object.keys(PALETTE).sort();
@@ -163,45 +167,122 @@ export function EditBar({ edits, ...picker }: { edits: Edits } & PickerProps) {
   );
 }
 
-/** The selection's controls: move it a block, duplicate or delete it. */
+/** The selection's controls: move it a block, duplicate or delete it, or ask Holo to change the area. */
 export function EditPanel({
   label,
   onAction,
   onClose,
+  onAsk,
+  count,
 }: {
   label: string;
   onAction: (a: Action) => void;
   onClose: () => void;
+  onAsk?: (text: string) => Promise<boolean>;
+  count: number;
 }) {
+  const [asking, setAsking] = useState(false);
+  const [text, setText] = useState("");
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState("");
+  const send = async () => {
+    if (!onAsk || !text.trim() || sending) return;
+    setSending(true);
+    setError("");
+    try {
+      if (!(await onAsk(text.trim()))) {
+        setError("Couldn't send. Try again.");
+        return;
+      }
+      setText("");
+      setAsking(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Couldn't send. Try again.");
+    } finally {
+      setSending(false);
+    }
+  };
   return (
-    <div className="edit-panel" role="dialog" aria-label="Selection">
+    <div
+      className={asking ? "edit-panel asking" : "edit-panel"}
+      role="dialog"
+      aria-label={asking ? "Selected area" : "Selection"}
+    >
       <div className="edit-panel-head">
-        <b title={label}>{label}</b>
-        <button className="icon-button" onClick={onClose} title="Deselect (Esc)" aria-label="Deselect">
+        <b title={label}>
+          {asking ? `Selected area · ${count.toLocaleString()} block${count === 1 ? "" : "s"}` : label}
+        </b>
+        <button
+          className="icon-button"
+          disabled={sending}
+          onClick={asking ? () => setAsking(false) : onClose}
+          title={asking ? "Close prompt" : "Deselect (Esc)"}
+          aria-label={asking ? "Close prompt" : "Deselect"}
+        >
           <XIcon size={14} weight="bold" />
         </button>
       </div>
-      <div className="edit-moves">
-        {MOVES.map((m) => (
-          <button
-            key={m.action}
-            style={{ gridArea: m.action }}
-            onClick={() => onAction(m.action)}
-            title={m.label}
-            aria-label={m.label}
-          >
-            {m.icon}
+      {asking ? (
+        <form
+          className="selection-prompt"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void send();
+          }}
+        >
+          <textarea
+            autoFocus
+            aria-label="Prompt for selected area"
+            placeholder="Make this taller…"
+            value={text}
+            disabled={sending}
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") {
+                e.stopPropagation();
+                setAsking(false);
+              }
+              if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+                e.preventDefault();
+                void send();
+              }
+            }}
+          />
+          {error && (
+            <p className="chat-error" role="alert">
+              {error}
+            </p>
+          )}
+          <button className="primary" type="submit" disabled={sending || !text.trim() || !onAsk}>
+            {sending ? "Sending…" : "Send to Holo"}
           </button>
-        ))}
-      </div>
-      <div className="edit-actions">
-        <button onClick={() => onAction("duplicate")} title="Duplicate beside it (⌘D)" aria-label="Duplicate">
-          <CopyIcon size={16} weight="bold" />
-        </button>
-        <button className="danger" onClick={() => onAction("delete")} title="Delete (Del)" aria-label="Delete">
-          <TrashIcon size={16} weight="bold" />
-        </button>
-      </div>
+        </form>
+      ) : (
+        <>
+          {onAsk && <button onClick={() => setAsking(true)}>Ask Holo</button>}
+          <div className="edit-moves">
+            {MOVES.map((m) => (
+              <button
+                key={m.action}
+                style={{ gridArea: m.action }}
+                onClick={() => onAction(m.action)}
+                title={m.label}
+                aria-label={m.label}
+              >
+                {m.icon}
+              </button>
+            ))}
+          </div>
+          <div className="edit-actions">
+            <button onClick={() => onAction("duplicate")} title="Duplicate beside it (⌘D)" aria-label="Duplicate">
+              <CopyIcon size={16} weight="bold" />
+            </button>
+            <button className="danger" onClick={() => onAction("delete")} title="Delete (Del)" aria-label="Delete">
+              <TrashIcon size={16} weight="bold" />
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }

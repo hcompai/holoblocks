@@ -164,6 +164,8 @@ interface Props {
   onFailed: (failed: boolean) => void;
   mode: Mode;
   edits: Edits;
+  /** Send `text` to Holo about the selected blocks of `model`; whether it took it. */
+  onAsk?: (text: string, model: Build, cells: { at: Vec3; block: string }[]) => Promise<boolean>;
   onMode: (mode: Mode) => void;
 }
 
@@ -427,8 +429,9 @@ export function Viewer(props: Props) {
       s?.setOrbit(true);
       setBox(null);
       if (Math.hypot(event.clientX - box.x0, event.clientY - box.y0) <= CLICK_SLOP) return;
-      const seen = s?.cellsSeenIn(box.x0, box.y0, event.clientX, event.clientY) ?? [];
-      const all = new Map([...selected, ...seen].map((cell) => [cell.join(), cell]));
+      const within = event.altKey ? s?.cellsIn : s?.cellsSeenIn;
+      const inside = within?.call(s, box.x0, box.y0, event.clientX, event.clientY) ?? [];
+      const all = new Map([...selected, ...inside].map((cell) => [cell.join(), cell]));
       setSelected([...all.values()]);
       return;
     }
@@ -499,7 +502,21 @@ export function Viewer(props: Props) {
       {box && <div className="select-box" style={boxStyle(box, container.current)} />}
       {editing && shown && <EditBar edits={edits} hand={held} used={used} selected={selected.length} onPick={pick} />}
       {editing && shown && selected.length > 0 && (
-        <EditPanel label={label} onAction={act} onClose={() => setSelected(NONE)} />
+        <EditPanel
+          label={label}
+          onAction={act}
+          onClose={() => setSelected(NONE)}
+          onAsk={
+            props.onAsk &&
+            ((text) =>
+              props.onAsk!(
+                text,
+                build!,
+                selected.map((at) => ({ at, block: scene.current?.blockAt(at) ?? "air" })),
+              ))
+          }
+          count={selected.length}
+        />
       )}
       {mode === "walk" && shown && (
         <WalkHud

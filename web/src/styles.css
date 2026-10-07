@@ -970,6 +970,17 @@ aside > .aside-head + * {
   gap: 6px;
 }
 
+.composer-model {
+  position: absolute;
+  bottom: 16px;
+  left: 48px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 16px;
+  pointer-events: none;
+}
+
 .round-button {
   width: 32px;
   height: 32px;
@@ -2378,7 +2389,8 @@ main {
   align-items: center;
 }
 
-.film-primary {
+.film-primary,
+.film-secondary {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2386,11 +2398,17 @@ main {
   padding: 9px 12px;
   font: inherit;
   font-weight: 600;
-  border: 0;
+  border: 1px solid transparent;
   border-radius: var(--radius-button);
   text-decoration: none;
   background: var(--background-primary);
   color: var(--text-on-primary);
+}
+
+.film-secondary {
+  border-color: var(--stroke-default);
+  background: var(--background-card);
+  color: var(--text-default);
 }
 
 .film-actions {
@@ -2423,6 +2441,19 @@ main {
 
 .film-copy {
   align-self: flex-start;
+}
+
+.image-share {
+  width: min(520px, calc(100vw - 32px));
+}
+
+.image-share > img {
+  display: block;
+  width: 100%;
+  max-height: 55dvh;
+  object-fit: contain;
+  margin: 16px 0;
+  border-radius: var(--radius-large);
 }
 
 .sr-only {
@@ -2582,6 +2613,30 @@ main {
   gap: 10px;
 }
 
+.edit-panel.asking {
+  width: 300px;
+  max-width: calc(100% - 24px);
+}
+
+.selection-prompt {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.selection-prompt textarea {
+  width: 100%;
+  min-height: 90px;
+  max-height: 180px;
+  resize: vertical;
+  border: 1px solid var(--stroke-strong);
+  border-radius: var(--radius-medium);
+  padding: 10px;
+  color: var(--text-default);
+  background: var(--background-page);
+  font: inherit;
+}
+
 .edit-panel-head {
   display: flex;
   align-items: center;
@@ -2605,13 +2660,14 @@ main {
 .edit-moves {
   display: grid;
   grid-template-areas:
-    ". forward up"
-    "left back right"
-    ". . down";
-  grid-template-columns: repeat(3, 1fr);
+    ". up . forward"
+    "left down right back";
+  grid-template-columns: repeat(4, 1fr);
   gap: 6px;
 }
 
+.edit-panel > button,
+.selection-prompt button,
 .edit-moves button,
 .edit-actions button {
   justify-content: center;
@@ -3101,11 +3157,13 @@ main {
     width: calc(100% - 84px);
   }
 
-  .edit-panel {
+  .edit-panel,
+  .edit-panel.asking {
     left: 12px;
     right: 12px;
     bottom: 82px;
     width: auto;
+    max-width: none;
   }
 
   .app:not(.home) > aside.sheet {
@@ -3254,6 +3312,16 @@ main {
   .sheet .composer-tools {
     left: 6px;
     bottom: 6px;
+  }
+
+  .sheet .composer-model {
+    right: 48px;
+    bottom: 14px;
+    left: auto;
+  }
+
+  .sheet .composer:has(textarea:not(:placeholder-shown)) .composer-model {
+    display: none;
   }
 
   .sheet .send {
