@@ -12,6 +12,8 @@ interface Saved extends ForkSummary {
 /** Records are `<shelf><id>/<milliseconds>.json`; starting models get unguessable URLs, as they are private. */
 const shelf = (owner: string) => `forks/${encodeURIComponent(owner)}/`;
 const seeds = (owner: string) => `seeds/${encodeURIComponent(owner)}/`;
+/** Library ids are global, so each fork id is claimed for good by the first owner to save it. */
+const ownerClaim = (id: string) => `fork-owners/${id}.json`;
 /** Written once, so two sessions racing to continue a fork cannot both win. */
 const sessionClaim = (owner: string, id: string) => `fork-sessions/${encodeURIComponent(owner)}/${id}.json`;
 
@@ -41,6 +43,7 @@ export const forkList = async (owner: string) =>
 export async function saveFork(owner: string, id: string, seed: ForkSeed): Promise<ForkSummary> {
   const existing = await findFork(owner, id);
   if (existing) return existing;
+  if ((await claim(ownerClaim(id), { owner })).owner !== owner) throw new Refusal(409, "This fork id is taken.");
   const { url } = await put(`${seeds(owner)}${id}.json.gz`, gzipSync(JSON.stringify(seed)), {
     ...PUBLIC,
     addRandomSuffix: true,
@@ -68,7 +71,7 @@ export async function linkFork(owner: string, id: string, sessionId: string) {
   await record(shelf(owner), { ...saved, sessionId });
 }
 
-/** Delete a fork's starting model, record and session link; returns what it was, if it existed. */
+/** Delete a fork's starting model, record and session link; its id stays claimed. Returns what it was, if it existed. */
 export async function deleteFork(owner: string, id: string): Promise<ForkSummary | null> {
   const saved = await findSaved(owner, id);
   if (!saved) return null;

@@ -130,6 +130,14 @@ test("two sessions racing to continue a fork: one wins, the other is refused", a
   });
 });
 
+test("a fork's id is its owner's alone: nobody else saves a fork under it, so its owner can always publish it", async () => {
+  await fork();
+  expect((await fork(OTHER)).status).toBe(409);
+  expect(await json(await forks(call(OTHER, "GET", "/api/forks")))).toEqual([]);
+  expect((await publishBuild(call(OWNER, "POST", "/api/builds", { id: FORK, thumbnail: null }))).status).toBe(201);
+  expect(await find(FORK)).toMatchObject({ owner: OWNER.id, name: "Hut · Fork" });
+});
+
 test.describe("someone else's builds", () => {
   let imported = "";
   test.beforeEach(async () => {
@@ -204,9 +212,9 @@ test("deleting a fork deletes its starting model, record and name, and hides the
   await fork();
   await linkFork(OWNER.id, FORK, RUN);
   expect((await renameBuild(call(OWNER, "PATCH", "/api/names", { id: FORK, name: "Red hut" }))).status).toBe(200);
-  expect([...blob.objects.keys()].filter((p) => p.includes(FORK))).toHaveLength(4);
+  expect([...blob.objects.keys()].filter((p) => p.includes(FORK))).toHaveLength(5);
 
   expect((await deleteBuild(call(OWNER, "POST", "/api/deleted", { id: FORK }))).status).toBe(204);
-  expect([...blob.objects.keys()].filter((p) => p.includes(FORK))).toEqual([]);
+  expect([...blob.objects.keys()].filter((p) => p.includes(FORK))).toEqual([`fork-owners/${FORK}.json`]);
   expect(await forgotten(OWNER.id)).toEqual([RUN]);
 });
