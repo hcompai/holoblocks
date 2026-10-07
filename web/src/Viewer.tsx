@@ -1,6 +1,7 @@
 import {
   ArrowsClockwiseIcon,
   VideoCameraIcon,
+  LockSimpleIcon,
   PauseIcon,
   PencilSimpleIcon,
   PersonSimpleWalkIcon,
@@ -8,7 +9,7 @@ import {
   SlidersHorizontalIcon,
   XIcon,
 } from "@phosphor-icons/react";
-import { type RefObject, useEffect, useRef, useState } from "react";
+import { type RefObject, useEffect, useId, useRef, useState } from "react";
 import { BlockLoader } from "./BlockLoader";
 import { ACTION_KEYS, type Action, blockLabel, EditBar, EditPanel } from "./EditPanel";
 import type { Edits } from "./edits";
@@ -50,12 +51,18 @@ interface ControlsProps {
   onFollowCamera: (follow: boolean) => void;
   mode: Mode;
   canEdit: boolean;
+  /** Why Edit is unavailable and what unlocks it. */
+  editHint?: string;
   /** The build has blocks, so it can be edited or walked through. */
   built: boolean;
+  /** Blocks spanned along x, y and z. */
+  size: Vec3 | null;
   onFrame: (framing: Framing) => void;
   onSpin: (spin: boolean) => void;
   onMode: (mode: Mode) => void;
 }
+
+const blocks = (n: number) => `${n.toLocaleString()} block${n === 1 ? "" : "s"}`;
 
 export function ViewControls({
   framing,
@@ -64,11 +71,16 @@ export function ViewControls({
   onFollowCamera,
   mode,
   canEdit,
+  editHint,
   built,
+  size,
   onFrame,
   onSpin,
   onMode,
 }: ControlsProps) {
+  const hintId = useId();
+  const blocked = built && !canEdit && mode !== "edit";
+  const hint = blocked && editHint;
   const toggle = (next: Mode) => onMode(mode === next ? "view" : next);
   const [open, setOpen] = useState(false);
   return (
@@ -108,13 +120,16 @@ export function ViewControls({
             <button
               className={mode === "edit" ? "active" : ""}
               aria-pressed={mode === "edit"}
-              disabled={!canEdit && mode !== "edit"}
+              disabled={blocked}
+              aria-describedby={hint ? hintId : undefined}
               title={
-                canEdit ? "Select blocks to replace, move or delete them" : "Blocks can be edited once Holo is done"
+                canEdit
+                  ? "Select blocks to replace, move or delete them"
+                  : (editHint ?? "Blocks can be edited once Holo is done")
               }
               onClick={() => toggle("edit")}
             >
-              <PencilSimpleIcon size={14} weight="bold" />
+              {blocked ? <LockSimpleIcon size={14} weight="bold" /> : <PencilSimpleIcon size={14} weight="bold" />}
               <span className="button-label">Edit</span>
             </button>
             <button
@@ -131,6 +146,31 @@ export function ViewControls({
         <Shortcuts />
         {built && <PlacementSoundToggle />}
       </div>
+      {(hint || size) && (
+        <div className="view-notes">
+          {hint && (
+            <p id={hintId} className="edit-availability" role="status">
+              {hint}
+            </p>
+          )}
+          {size && (
+            <dl className="model-size" aria-label="Model size" title="1 block = 1 m">
+              {[
+                { label: "Height", value: size[1] },
+                { label: "Width", value: size[0] },
+                { label: "Depth", value: size[2] },
+              ].map(({ label, value }) => (
+                <div key={label}>
+                  <dt>{label}</dt>
+                  <dd>
+                    {blocks(value)} · {value.toLocaleString()} m
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          )}
+        </div>
+      )}
     </>
   );
 }

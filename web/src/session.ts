@@ -1,6 +1,6 @@
 import { isSettledSessionStatus, type HaiAgents } from "hai-agents";
 import { doing, PHASES } from "./activity";
-import { PALETTE, type Message, type Status, type Work } from "./model";
+import type { Message, Status, Work } from "./model";
 
 export const AGENT = "blockyard";
 export const MODEL_FILE = "model.json.gz";
@@ -28,7 +28,6 @@ export interface Transcript {
   /** `look` calls awaiting a render, with how many models were shared when each was made. */
   looks: { call: HaiAgents.ToolRequest; shared: number }[];
   references: Reference[];
-  materials: string[];
   title: string | null;
   error: string | null;
   /** The session crashed: its workstation is gone, so every later message crashes too. */
@@ -45,7 +44,6 @@ export const EMPTY_TRANSCRIPT: Transcript = {
   model: null,
   looks: [],
   references: [],
-  materials: [],
   title: null,
   error: null,
   crashed: false,
@@ -190,12 +188,8 @@ function step(t: Transcript, event: HaiAgents.SessionEvent): Transcript {
         );
       }
       if (toolName === "shell") {
-        const output = resultText(data.result);
-        const title = output.match(/Build is now called '([^\n]+)'\./)?.[1] ?? t.title;
-        const materials = /\bblocks find\b/.test(String(args.command))
-          ? [...new Set(output.match(/\b[a-z][a-z0-9_]+\b/g)?.filter((name) => name in PALETTE) ?? [])].slice(0, 8)
-          : t.materials;
-        return { ...t, title, materials };
+        const title = resultText(data.result).match(/Build is now called '([^\n]+)'\./)?.[1] ?? t.title;
+        return { ...t, title };
       }
       return t;
     }
@@ -231,7 +225,6 @@ export interface Activity {
   /** Its work since its last message. */
   work: Work | null;
   references?: Reference[];
-  materials?: string[];
   title?: string | null;
 }
 
@@ -240,7 +233,6 @@ export const activity = (t: Transcript): Activity => ({
   since: t.since,
   work: t.work?.steps.length ? t.work : null,
   references: t.references,
-  materials: t.materials,
   title: t.title,
 });
 

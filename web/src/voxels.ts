@@ -1,4 +1,4 @@
-import { type BlockInfo, type Box, type Palette, type Tex, texKey } from "./model";
+import { type BlockInfo, type Box, type Build, type Palette, type Tex, texKey } from "./model";
 import type { UV } from "./atlas";
 import type { Solid } from "./walker";
 import { type PlacementPlan, SETTLE_SECONDS } from "./placement";
@@ -122,6 +122,14 @@ export function packBoxes(boxes: Box[], maxStep = Infinity): PackedBoxes {
     n += 7;
   }
   return { blocks: [...index.keys()], boxes: flat.subarray(0, n) };
+}
+
+/** How many blocks the whole build spans along x, y and z, or null when it has none. */
+export function extent(site: Pick<Build, "width" | "height" | "depth" | "boxes">, palette: Palette): Vec3 | null {
+  const world = new VoxelWorld(site.width, site.height, site.depth, palette);
+  world.apply(packBoxes(site.boxes));
+  const bounds = world.bounds();
+  return bounds && [bounds[3] - bounds[0], bounds[4] - bounds[1], bounds[5] - bounds[2]];
 }
 
 type Dir = 0 | 1 | 2 | 3 | 4 | 5; // +x -x +y -y +z -z

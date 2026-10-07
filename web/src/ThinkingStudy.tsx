@@ -1,8 +1,5 @@
 import { type CSSProperties, type ReactNode, useEffect, useState } from "react";
-import { BlockSwatch } from "./BlocksPanel";
-import { PALETTE, textureSheet, type TextureSheet } from "./model";
 import type { Reference } from "./session";
-import type { BuildSubject } from "./buildSubject";
 
 /** A contact sheet of photos actually supplied by the user or opened by Holo. */
 export function ReferenceBoard({
@@ -62,67 +59,6 @@ export function ReferenceBoard({
               onError={() => setFailed((old) => [...old, reference.src])}
             />
             <span>{String(index + 1).padStart(2, "0")}</span>
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function suggestions(subject: BuildSubject, request: string): string[] {
-  const text = request.toLowerCase();
-  if (subject.kind === "tree" || /forest|garden|grove/.test(text))
-    return ["stone_bricks", "mossy_cobblestone", "oak_log", "oak_leaves", "grass_block", "lantern"];
-  if (/wood|timber|cabin/.test(text) || subject.kind === "ship")
-    return ["oak_planks", "dark_oak_log", "spruce_planks", "white_wool", "glass", "lantern"];
-  if (subject.kind === "animal")
-    return ["white_wool", "brown_wool", "black_wool", "orange_terracotta", "green_concrete", "stone"];
-  return ["stone_bricks", "cobblestone", "mossy_stone_bricks", "oak_planks", "glass", "lantern"];
-}
-
-/** Explore real palette textures; Holo’s search results replace the initial examples. */
-export function MaterialStudy({
-  subject,
-  request,
-  materials = [],
-}: {
-  subject: BuildSubject;
-  request: string;
-  materials?: string[];
-}) {
-  const [sheet, setSheet] = useState<TextureSheet | null>(null);
-  const [selected, setSelected] = useState<string | null>(null);
-  useEffect(() => {
-    let active = true;
-    textureSheet().then(
-      (value) => {
-        if (active) setSheet(value);
-      },
-      () => {},
-    );
-    return () => {
-      active = false;
-    };
-  }, []);
-  const found = materials.filter((name) => name in PALETTE).slice(0, 6);
-  const names = found.length ? found : suggestions(subject, request);
-  const current = selected && names.includes(selected) ? selected : names[0];
-  return (
-    <div className="thinking-material-study">
-      <div className="thinking-materials">
-        {names.map((name, index) => (
-          <button
-            key={name}
-            className="thinking-material"
-            style={{ "--order": index } as CSSProperties}
-            aria-pressed={name === current}
-            onClick={() => setSelected(name)}
-            title={PALETTE[name]?.shape ?? "cube"}
-          >
-            <span className="thinking-material-texture" aria-hidden="true">
-              {sheet && <BlockSwatch sheet={sheet} info={PALETTE[name]} size={44} />}
-            </span>
-            <span>{name.replaceAll("_", " ")}</span>
           </button>
         ))}
       </div>
