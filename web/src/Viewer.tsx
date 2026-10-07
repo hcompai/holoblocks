@@ -234,7 +234,7 @@ export function Viewer(props: Props) {
       if (!current || !build.boxes.length) return;
       if (framedBuild.current !== build.id || (build.status === "building" && s.followingBuild)) {
         framedBuild.current = build.id;
-        if (!(animate && s.followingBuild)) s.frameView(framing.view, width, depth);
+        if (!(build.status === "building" && s.hasBuildCamera)) s.frameView(framing.view, width, depth);
       }
     });
     return () => {

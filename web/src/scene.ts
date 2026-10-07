@@ -519,6 +519,11 @@ export class BlockScene {
     return this.followBuild && !this.walking && !this.controls.autoRotate && !this.userMoved;
   }
 
+  /** Follow can be on without a camera to move when Reduce Motion skips placement. */
+  get hasBuildCamera() {
+    return this.followingBuild && this.cameraMotion !== null;
+  }
+
   setFollowBuild(follow: boolean) {
     this.followBuild = follow;
     if (!follow) this.cameraMotion = null;
