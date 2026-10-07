@@ -29,13 +29,23 @@ test("a film raises each step in order, bottom layer first, before the turntable
   expect(() => planFilm(HUT, 5)).toThrow();
 });
 
-test("Share a GIF makes a looping GIF of the build and leaves the viewer on its step", async ({ page }) => {
+test("Share a GIF makes a credited looping GIF of the build and leaves the viewer on its step", async ({
+  page,
+}, testInfo) => {
   test.setTimeout(300000);
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
-  await page.addInitScript(() =>
-    Object.defineProperty(navigator, "canShare", { configurable: true, value: () => false }),
-  );
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "canShare", { configurable: true, value: () => false });
+    const credits: { text: string; fits: boolean }[] = [];
+    Object.assign(window, { filmCredits: credits });
+    const fill = CanvasRenderingContext2D.prototype.fillText;
+    CanvasRenderingContext2D.prototype.fillText = function (text, x, y, ...rest) {
+      if (text.startsWith("Powered by ") || text === "from H Company")
+        credits.push({ text, fits: x + this.measureText(text).width <= this.canvas.width });
+      return fill.call(this, text, x, y, ...rest);
+    };
+  });
   const hut = model();
   await site(page, [{ ...hut, id: "hut" }]);
   await page.goto("/?showcase=hut");
@@ -54,11 +64,11 @@ test("Share a GIF makes a looping GIF of the build and leaves the viewer on its 
     "Fixed",
   ]);
   await expect(caption).toHaveValue(
-    "Little Hut: 24 Minecraft blocks, built with HOLO4 by H Company. #HOLO4 #HoloBlocks #Minecraft",
+    "Little Hut: 24 Minecraft blocks, built with Holo4 27B by H Company. #Holo4 #HCompany #HoloBlocks #Minecraft",
   );
-  await dialog.getByRole("checkbox", { name: "H Company logo" }).uncheck();
+  await dialog.getByRole("checkbox", { name: "H Company credit" }).uncheck();
   await expect(caption).toHaveValue("Little Hut: 24 Minecraft blocks, built with HoloBlocks. #HoloBlocks #Minecraft");
-  await dialog.getByRole("checkbox", { name: "H Company logo" }).check();
+  await dialog.getByRole("checkbox", { name: "H Company credit" }).check();
   const link = dialog.getByRole("link", { name: "Download GIF" });
   await expect(link).toBeVisible({ timeout: 240000 });
 
@@ -75,6 +85,13 @@ test("Share a GIF makes a looping GIF of the build and leaves the viewer on its 
   const frames = decompressFrames(gif, false);
   expect(frames).toHaveLength(8 * 20);
   expect(frames.every((f) => f.delay === 50)).toBe(true);
+  const credits = await page.evaluate(
+    () => (window as unknown as { filmCredits: { text: string; fits: boolean }[] }).filmCredits,
+  );
+  expect(credits.filter((c) => c.text === "Powered by Holo4 27B").length).toBeGreaterThanOrEqual(160);
+  expect(credits.filter((c) => c.text === "from H Company").length).toBeGreaterThanOrEqual(160);
+  expect(credits.every((c) => c.fits)).toBe(true);
+  await dialog.locator(".film-preview img").screenshot({ path: testInfo.outputPath("credited-gif.png") });
   // Held shots deliberately produce identical frames between layer placements.
   const sceneChanges = (i: number) =>
     frames[i].pixels.some((p, j) => p !== frames[i].transparentIndex && j < gif.lsd.width * gif.lsd.height * 0.8);
@@ -102,7 +119,7 @@ test("Share a GIF makes a looping GIF of the build and leaves the viewer on its 
   expect(await page.evaluate(() => (window as unknown as { shared: object }).shared)).toEqual({
     name: "Little Hut-build.gif",
     type: "image/gif",
-    text: expect.stringContaining("HOLO4"),
+    text: expect.stringContaining("Holo4 27B by H Company"),
   });
 
   await page.keyboard.press("Escape");

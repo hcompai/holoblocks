@@ -76,6 +76,7 @@ test("a new build sends the toolkit and the photos; Stop makes Holo answer and t
   const agp = await platform(page);
   agp.refuse = [503];
   await page.goto("/");
+  await expect(page.getByLabel("Model: Holo4 27B", { exact: true })).toBeVisible();
   const composer = page.getByPlaceholder("A castle on a cliff… or drop a photo");
   const prompt = "Le Mont-Saint-Michel à marée haute";
   await composer.fill(prompt);

@@ -125,6 +125,19 @@ test("home shows one row of my builds and ten rows of public ones, with more bel
   await expect(more).toHaveCount(0);
 });
 
+test("a colleague's public build can be edited but not asked about", async ({ page }) => {
+  const hut = { ...model(), id: "hut", name: "Ada's hut" };
+  await site(page);
+  await library(page, [entry(hut, "Ada Lovelace", "u-ada")], [hut]);
+  await page.goto("/?public=hut");
+  await shown(page, hut.revision);
+  await page.getByRole("button", { name: "Edit", exact: true }).click();
+  const box = (await page.locator(".viewer-canvas").boundingBox())!;
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+  await expect(page.getByRole("dialog", { name: "Selection" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Ask Holo" })).toHaveCount(0);
+});
+
 test("forking a public build saves a private copy at once; its first message starts Holo from a script of its boxes", async ({
   page,
 }) => {

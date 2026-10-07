@@ -29,6 +29,7 @@ export const PATCH = route(async (request) => {
     await ownedSession(id, key).catch((e) => {
       throw e instanceof Refusal && e.status === 403 ? new Refusal(403, "Only its owner can rename it.") : e;
     });
+  const named = await saveProjectName(user.id, id, name);
   await rename(user.id, id, name);
-  return Response.json(await saveProjectName(user.id, id, name), { headers: OWN });
+  return Response.json(named, { headers: OWN });
 });

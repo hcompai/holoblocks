@@ -11,6 +11,7 @@ import {
   type FilmStep,
   type FilmStepBoxes,
 } from "./filmPlan";
+import { HOLO } from "./holo";
 import { BlockScene, type Staged } from "./scene";
 import { parseState } from "./voxels";
 
@@ -421,7 +422,7 @@ export class FilmRenderer {
     });
   }
 
-  /** A vignette, the logo when branded, the build's name over the current step, and how many blocks are in. */
+  /** A vignette, the logo and Holo credit when branded, the build's name over the current step, and how many blocks are in. */
   private overlay(film: Film, time: number, shot: HTMLCanvasElement, done: number) {
     const { width, height, branded } = film.options;
     const { plan, captions } = film;
@@ -448,7 +449,19 @@ export class FilmRenderer {
     vignette.addColorStop(1, "rgba(20, 20, 40, 0.1)");
     ctx.fillStyle = vignette;
     ctx.fillRect(0, 0, width, height);
-    if (branded) ctx.drawImage(this.logo, margin * 0.75, margin * 0.75, LOGO_PX * unit, LOGO_PX * unit);
+    if (branded) {
+      const corner = margin * 0.75;
+      const logo = LOGO_PX * unit;
+      const font = Math.max(12, 26 * unit);
+      const textX = corner + logo + Math.max(8, 16 * unit);
+      const middle = corner + logo / 2;
+      ctx.drawImage(this.logo, corner, corner, logo, logo);
+      ctx.fillStyle = INK;
+      ctx.font = `600 ${font}px ${FONT}`;
+      this.text(`Powered by ${HOLO.name}`, textX, middle - font * 0.15, width - margin - textX);
+      ctx.font = `500 ${font * 0.9}px ${FONT}`;
+      this.text("from H Company", textX, middle + font * 0.95, width - margin - textX);
+    }
 
     const total = this.blocks;
     const base = height - margin;

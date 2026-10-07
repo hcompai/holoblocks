@@ -71,6 +71,7 @@ test.beforeAll(async () => {
 });
 test.beforeEach(() => {
   blob.objects.clear();
+  blob.privateObjects.clear();
   agentCalls = [];
   group = FORK;
 });
@@ -79,9 +80,10 @@ test.afterAll(async () => {
   await blob.stop();
 });
 
-test("a fork is saved at once for its owner alone, once per id, without starting Holo", async () => {
+test("a fork is saved at once in the private store for its owner alone, once per id, without starting Holo", async () => {
   const saved = await fork();
   expect(saved.status).toBe(201);
+  expect([...blob.objects.keys()]).toEqual([]);
   const renamed = { id: FORK, seed: { ...seed(), model: { ...seed().model, name: "Not the saved copy" } } };
   expect(await json(await saveFork(call(OWNER, "POST", "/api/forks", gzipped(renamed))))).toMatchObject({
     name: "Hut · Fork",
@@ -163,7 +165,7 @@ test.describe("someone else's builds", () => {
 
   for (const intruder of [OTHER, ADMIN])
     test(`${intruder.name} cannot rename, publish or delete them`, async () => {
-      const untouched = new Map(blob.objects);
+      const untouched = [new Map(blob.objects), new Map(blob.privateObjects)];
       for (const id of [imported, FORK, RUN])
         expect(
           (await renameBuild(call(intruder, "PATCH", "/api/names", { id, name: "Taken" }))).status,
@@ -176,19 +178,20 @@ test.describe("someone else's builds", () => {
       );
       for (const id of [imported, FORK])
         expect((await deleteBuild(call(intruder, "POST", "/api/deleted", { id }))).status).toBe(404);
-      expect(blob.objects).toEqual(untouched);
+      expect([blob.objects, blob.privateObjects]).toEqual(untouched);
     });
 
-  test("an admin only hides one from the public library: it stays its owner's, with its files", async () => {
-    const files = () => [...blob.objects.keys()].filter((p) => p.startsWith(`builds/${imported}/`));
-    const before = files();
+  test("an admin only hides one from the public library: it moves, with its files, to its owner's private store", async () => {
     const unpublish = (user: User) => unpublishBuild(call(user, "DELETE", `/api/builds?id=${imported}`));
 
     expect((await unpublish(OTHER)).status).toBe(403);
     expect((await unpublish(ADMIN)).status).toBe(204);
     expect(await find(imported)).toBeNull();
-    expect(await findOwn(OWNER.id, imported)).toMatchObject({ owner: OWNER.id });
-    expect(files()).toEqual(before);
+    expect([...blob.objects.keys()].filter((p) => p.includes(imported))).toEqual([]);
+    const own = (await findOwn(OWNER.id, imported))!;
+    expect(own).toMatchObject({ owner: OWNER.id });
+    expect((await builds(call(OWNER, "GET", own.build))).status).toBe(200);
+    expect((await builds(call(OTHER, "GET", own.build))).status).toBe(404);
     expect(
       (await json(await builds(call(OWNER, "GET", "/api/builds?mine=1")))).map((p: { id: string }) => p.id),
     ).toEqual([imported]);
@@ -212,9 +215,10 @@ test("deleting a fork deletes its starting model, record and name, and hides the
   await fork();
   await linkFork(OWNER.id, FORK, RUN);
   expect((await renameBuild(call(OWNER, "PATCH", "/api/names", { id: FORK, name: "Red hut" }))).status).toBe(200);
-  expect([...blob.objects.keys()].filter((p) => p.includes(FORK))).toHaveLength(5);
+  expect([...blob.privateObjects.keys()].filter((p) => p.includes(FORK))).toHaveLength(5);
+  expect([...blob.objects.keys()]).toEqual([]);
 
   expect((await deleteBuild(call(OWNER, "POST", "/api/deleted", { id: FORK }))).status).toBe(204);
-  expect([...blob.objects.keys()].filter((p) => p.includes(FORK))).toEqual([`fork-owners/${FORK}.json`]);
+  expect([...blob.privateObjects.keys()].filter((p) => p.includes(FORK))).toEqual([`fork-owners/${FORK}.json`]);
   expect(await forgotten(OWNER.id)).toEqual([RUN]);
 });

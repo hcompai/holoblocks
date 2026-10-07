@@ -1,13 +1,13 @@
 import { replayDelay } from "./buildTiming";
 import { CaretLeftIcon, ClockCounterClockwiseIcon, GitForkIcon, PlusIcon } from "@phosphor-icons/react";
-import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Account } from "./account";
 import { AccountMenu } from "./AccountMenu";
 import { PHASES } from "./activity";
 import { cancel, create, remix, say, stop } from "./agent";
 import { BlockLoader } from "./BlockLoader";
 import { BlocksPanel } from "./BlocksPanel";
-import { ChatPanel } from "./ChatPanel";
+import { type ChatHandle, ChatPanel } from "./ChatPanel";
 import { CodePanel } from "./CodePanel";
 import { useEdits } from "./edits";
 import { FilmExport } from "./FilmExport";
@@ -35,6 +35,7 @@ import type { ProjectActions } from "./ProjectMenu";
 import { ProjectTitle } from "./ProjectTitle";
 import { RecoveryPanel } from "./RecoveryPanel";
 import type { BlockScene } from "./scene";
+import { selectedArea } from "./selectedArea";
 import { SESSION_DELETE_NOTE, ShareMenu } from "./ShareMenu";
 import { label } from "./suggestions";
 import { ThemeToggle } from "./ThemeToggle";
@@ -43,16 +44,11 @@ import { type BuildRef, useBuild } from "./useBuild";
 import { useProjectNames } from "./useProjectNames";
 import { useKeeper } from "./useSession";
 import { useSheet } from "./useSheet";
+import { usePhone } from "./usePhone";
 import { type Framing, type Mode, RenderFailed, ViewControls, Viewer } from "./Viewer";
 
 const TITLE = document.title;
 const NEW_BUILD = "New build";
-/** The phone breakpoint of styles.css. */
-const PHONE = window.matchMedia("(max-width: 760px)");
-const onPhoneChange = (change: () => void) => {
-  PHONE.addEventListener("change", change);
-  return () => PHONE.removeEventListener("change", change);
-};
 const CENTER_TABS = [
   { id: "model", label: "Model" },
   { id: "code", label: "Code" },
@@ -148,11 +144,12 @@ export default function App({ account }: { account: Account }) {
   const [spin, setSpin] = useState(false);
   const [followCamera, setFollowCamera] = useState(true);
   const [filmBuild, setFilmBuild] = useState<Build | null>(null);
-  const phone = useSyncExternalStore(onPhoneChange, () => PHONE.matches);
+  const phone = usePhone();
   const [dock, setDock] = useState<HTMLElement | null>(null);
   const sheet = useSheet(dock);
   const palette = useMemo(() => Promise.resolve(PALETTE), []);
   const scene = useRef<BlockScene | null>(null);
+  const chat = useRef<ChatHandle>(null);
   const last = (build?.steps.length ?? 0) - 1;
   const built = !!build?.boxes.length;
 
@@ -295,7 +292,7 @@ export default function App({ account }: { account: Account }) {
   };
 
   /** Start a build and show it at once: a new one, or a copy of `from` that Holo changes as asked, under the same name if it is the user's. */
-  const start = async (prompt: string, images: string[], from?: Build) => {
+  const start = async (prompt: string, images: string[], from?: Build, attached: Record<string, Blob> = {}) => {
     const name = from ? (owned ? from.name : `${from.name} remix`) : (label(prompt) ?? NEW_BUILD);
     const at = opened.current;
     const since = Date.now();
@@ -310,7 +307,7 @@ export default function App({ account }: { account: Account }) {
     };
     setDraft({ at, build, since });
     try {
-      const id = await (from ? remix(from, prompt, images) : create(prompt, images));
+      const id = await (from ? remix(from, prompt, images, attached) : create(prompt, images));
       started.current.add(id);
       remember(id, { name: name.slice(0, 60), prompt });
       refreshBuilds();
@@ -652,6 +649,7 @@ export default function App({ account }: { account: Account }) {
             </p>
           )}
           <ChatPanel
+            ref={chat}
             key={ref ? `${ref.source}:${ref.id}` : "new"}
             buildId={buildId}
             build={live}
@@ -660,11 +658,11 @@ export default function App({ account }: { account: Account }) {
             closed={closed}
             preview={preview}
             onCreate={(prompt, images) => start(prompt, images)}
-            onSay={async (text, images) => {
+            onSay={async (text, images, attached) => {
               if (!live?.id || previewing) return;
-              if (runId) await say(runId, text, images);
+              if (runId) await say(runId, text, images, attached);
               else if (ref?.source === "fork" && seed) {
-                const id = await startFork(ref.id, seed, text, images);
+                const id = await startFork(ref.id, seed, text, images, attached);
                 started.current.add(id);
                 attachSession(id);
                 refreshBuilds();
@@ -673,8 +671,8 @@ export default function App({ account }: { account: Account }) {
             onStop={async () => {
               if (runId) await stop(runId);
             }}
-            onRemix={async (text, images) => {
-              if (build && !previewing) await start(text, images, build);
+            onRemix={async (text, images, attached) => {
+              if (build && !previewing) await start(text, images, build, attached);
             }}
             onFork={beginFork}
             dockRef={setDock}
@@ -804,6 +802,12 @@ export default function App({ account }: { account: Account }) {
                 onFailed={setRenderFailed}
                 mode={mode}
                 edits={previewing ? { ...edits, editable: false, stale: 0, hidden: 0 } : edits}
+                onAsk={
+                  !previewing && (ref?.source === "showcase" || (owned && !closed))
+                    ? (text, model, cells) =>
+                        chat.current?.ask(text, selectedArea(model, cells)) ?? Promise.resolve(false)
+                    : undefined
+                }
                 onMode={(next) => {
                   if (next !== "edit" || !previewing) setMode(next);
                 }}

@@ -1,11 +1,12 @@
 import { ArrowUpIcon, GitForkIcon, PlusIcon, StopIcon, XIcon } from "@phosphor-icons/react";
-import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { type ReactNode, type Ref, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { Build, Work } from "./model";
 import type { Activity } from "./session";
 import { label, SUGGESTIONS } from "./suggestions";
 import { ThinkingIcon } from "./Thinking";
+import { HOLO } from "./holo";
 
 const WHO = "Holo";
 const PINNED_PX = 80;
@@ -122,7 +123,12 @@ function Live({ activity, early }: { activity: Activity; early: boolean }) {
   );
 }
 
+export interface ChatHandle {
+  ask: (prompt: string, attached: Record<string, Blob>) => Promise<boolean>;
+}
+
 interface Props {
+  ref?: Ref<ChatHandle>;
   /** The open build's id, set before the build itself has loaded. */
   buildId: string | null;
   build: Build | null;
@@ -132,10 +138,10 @@ interface Props {
   /** Why no message can be sent here, or how to carry on, or null when a message can be sent. */
   closed: ReactNode;
   onCreate: (prompt: string, images: string[]) => Promise<void>;
-  onSay: (text: string, images: string[]) => Promise<void>;
+  onSay: (text: string, images: string[], attached?: Record<string, Blob>) => Promise<void>;
   onStop: () => Promise<void>;
   /** Start a new build from a copy of this one, changed as asked: one whose session ended. */
-  onRemix: (text: string, images: string[]) => Promise<void>;
+  onRemix: (text: string, images: string[], attached?: Record<string, Blob>) => Promise<void>;
   /** Save a private copy of the shown model to change. */
   onFork: () => void;
   /** Shown in place of the composer while an earlier version is previewed. */
@@ -145,8 +151,21 @@ interface Props {
 }
 
 export function ChatPanel(props: Props) {
-  const { buildId, build, loadFailed, activity, closed, onCreate, onSay, onStop, onRemix, onFork, preview, dockRef } =
-    props;
+  const {
+    ref,
+    buildId,
+    build,
+    loadFailed,
+    activity,
+    closed,
+    onCreate,
+    onSay,
+    onStop,
+    onRemix,
+    onFork,
+    preview,
+    dockRef,
+  } = props;
   const [text, setText] = useState("");
   const [images, setImages] = useState<string[]>([]);
   const [dropping, setDropping] = useState(false);
@@ -224,14 +243,16 @@ export function ChatPanel(props: Props) {
   };
 
   /** Hand `prompt` to the builder, even mid-build; whether it took it. */
-  const deliver = async (prompt: string, attached: string[]) => {
+  const deliver = async (prompt: string, attached: string[], files: Record<string, Blob> = {}) => {
     const saying = changing && !ended;
     const entry = { text: prompt, images: attached, heard };
     if (saying) setQueued((list) => [...list, entry]);
     setSending(true);
     setFailed(null);
     try {
-      await (ended ? onRemix : saying ? onSay : onCreate)(prompt, attached);
+      if (ended) await onRemix(prompt, attached, files);
+      else if (saying) await onSay(prompt, attached, files);
+      else await onCreate(prompt, attached);
       return true;
     } catch (e) {
       setQueued((list) => list.filter((q) => q !== entry));
@@ -241,6 +262,10 @@ export function ChatPanel(props: Props) {
       setSending(false);
     }
   };
+
+  useImperativeHandle(ref, () => ({
+    ask: (prompt, files) => (sending || !build?.id ? Promise.resolve(false) : deliver(prompt, [], files)),
+  }));
 
   /** The composer empties at once, and gets its text and images back if the builder does not take them. */
   const send = async () => {
@@ -369,6 +394,9 @@ export function ChatPanel(props: Props) {
           }}
         />
       </div>
+      <span className="composer-model" aria-label={`Model: ${HOLO.name}`}>
+        {HOLO.name}
+      </span>
       {busy && build && !typed ? (
         <button
           className="round-button send stop"

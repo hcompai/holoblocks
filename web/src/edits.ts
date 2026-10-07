@@ -43,7 +43,7 @@ function digest(text: string): string {
   return (h >>> 0).toString(16).padStart(8, "0");
 }
 
-/** The build's boxes and steps with `edits` applied, under a revision of their own. */
+/** The build's boxes and steps with `edits` applied, under a revision of their own, with no script rebuilding them. */
 function edited(build: Build, edits: Edit[]): Pick<Build, "boxes" | "steps" | "revision" | "script"> {
   const { width, depth, height, steps } = build;
   const model = applyEdits({ width, depth, height, steps, ...pack(build.boxes) }, edits);
@@ -51,7 +51,7 @@ function edited(build: Build, edits: Edit[]): Pick<Build, "boxes" | "steps" | "r
     boxes: unpackBoxes(model),
     steps: model.steps ?? steps,
     revision: `${build.revision}-${digest(JSON.stringify(edits))}`,
-    script: "",
+    script: undefined,
   };
 }
 

@@ -39,7 +39,7 @@ function forkStart(group: string) {
     remember(id, { name: seed.model.name, prompt, steps: seed.model.steps.length });
     return id;
   };
-  const run = async (seed: ForkSeed, text: string, photos: string[]) => {
+  const run = async (seed: ForkSeed, text: string, photos: string[], attached: Record<string, Blob>) => {
     const found = () => forkSession(group).catch(() => null);
     if (sent || card(group)?.forkStarting) {
       const id = await found();
@@ -51,6 +51,7 @@ function forkStart(group: string) {
     const json = new Blob([JSON.stringify(seed)], { type: "application/json" });
     const packed = await new Response(json.stream().pipeThrough(new CompressionStream("gzip"))).blob();
     const first = await firstMessage(text, photos, {
+      ...attached,
       [FORK_FILE]: packed,
       "remix.py": new Blob([script(unpack(seed.model))], { type: "text/x-python" }),
     });
@@ -71,9 +72,9 @@ function forkStart(group: string) {
       throw new Error(UNCONFIRMED);
     }
   };
-  return (seed: ForkSeed, text: string, photos: string[]): Promise<string> => {
+  return (seed: ForkSeed, text: string, photos: string[], attached: Record<string, Blob>): Promise<string> => {
     if (accepted) return Promise.resolve(accepted);
-    pending ??= run(seed, text, photos).finally(() => {
+    pending ??= run(seed, text, photos, attached).finally(() => {
       pending = null;
     });
     return pending;
@@ -83,12 +84,18 @@ function forkStart(group: string) {
 const starts = new Map<string, ReturnType<typeof forkStart>>();
 
 /** Start Holo on fork `id` with its first message, and bind the fork to that session. */
-export async function startFork(id: string, seed: ForkSeed, text: string, photos: string[]): Promise<string> {
+export async function startFork(
+  id: string,
+  seed: ForkSeed,
+  text: string,
+  photos: string[],
+  attached: Record<string, Blob> = {},
+): Promise<string> {
   if (!FORK_ID.test(id)) throw new Error("No such fork.");
   let start = starts.get(id);
   if (!start) starts.set(id, (start = forkStart(id)));
   const begin = async () => {
-    const session = await start(seed, text, photos);
+    const session = await start(seed, text, photos, attached);
     await linkFork(id, session);
     return session;
   };
