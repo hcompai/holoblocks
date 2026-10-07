@@ -1,5 +1,6 @@
 import {
   ArrowsClockwiseIcon,
+  CrosshairSimpleIcon,
   VideoCameraIcon,
   PauseIcon,
   PencilSimpleIcon,
@@ -80,6 +81,9 @@ export function ViewControls({
           {v.label}
         </button>
       ))}
+      <button aria-label="Reset view" title="Reset view" onClick={() => onFrame({ view: "iso" })}>
+        <CrosshairSimpleIcon size={14} weight="bold" />
+      </button>
       <span className="tabs-sep" />
       <button
         className={followCamera ? "active" : ""}
@@ -286,13 +290,6 @@ export function Viewer(props: Props) {
   useEffect(() => scene.current?.setTheme(theme), [theme]);
 
   useEffect(() => {
-    const s = scene.current;
-    if (!s) return;
-    s.userMoved = false;
-    s.frameView(framing.view, width, depth);
-  }, [framing]);
-
-  useEffect(() => {
     scene.current?.setWalk(mode === "walk");
     if (mode !== "view") scene.current?.skipPlacement();
     if (mode !== "walk") {
@@ -305,6 +302,13 @@ export function Viewer(props: Props) {
       setBox(null);
     }
   }, [mode]);
+
+  useEffect(() => {
+    const s = scene.current;
+    if (!s) return;
+    s.userMoved = false;
+    s.frameView(framing.view, width, depth);
+  }, [framing]);
 
   useEffect(() => setSelected(NONE), [build?.id]);
 

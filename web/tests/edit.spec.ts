@@ -117,7 +117,7 @@ test("edit mode selects the block under the pointer, and its edits persist in th
   await page.reload();
   await expect(count(page)).toHaveText(/^23 blocks ·/);
   await page.getByRole("button", { name: "Edit", exact: true }).click();
-  await page.getByRole("button", { name: "Reset" }).click();
+  await page.getByRole("button", { name: "Reset", exact: true }).click();
   await expect(count(page)).toHaveText(/^24 blocks ·/);
   await expect(page.locator(".viewer")).toHaveAttribute("data-revision", hut.revision);
   expect(await page.evaluate(() => localStorage.getItem("blockyard.edits"))).toBe("{}");
