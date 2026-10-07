@@ -1,4 +1,4 @@
-import { ArrowUpIcon, PlusIcon, ShuffleIcon, StopIcon, XIcon } from "@phosphor-icons/react";
+import { ArrowUpIcon, GitForkIcon, PlusIcon, StopIcon, XIcon } from "@phosphor-icons/react";
 import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -134,16 +134,20 @@ interface Props {
   onCreate: (prompt: string, images: string[]) => Promise<void>;
   onSay: (text: string, images: string[]) => Promise<void>;
   onStop: () => Promise<void>;
-  /** Start a new build from a copy of this one, changed as asked: a closed build, or one whose session ended. */
+  /** Start a new build from a copy of this one, changed as asked: one whose session ended. */
   onRemix: (text: string, images: string[]) => Promise<void>;
+  /** Save a private copy of the shown model to change. */
+  onFork: () => void;
+  /** Shown in place of the composer while an earlier version is previewed. */
+  preview?: ReactNode;
   /** Receives the notes and composer under the chat log, which a phone's sheet keeps in view. */
   dockRef?: (dock: HTMLDivElement | null) => void;
 }
 
 export function ChatPanel(props: Props) {
-  const { buildId, build, loadFailed, activity, closed, onCreate, onSay, onStop, onRemix, dockRef } = props;
+  const { buildId, build, loadFailed, activity, closed, onCreate, onSay, onStop, onRemix, onFork, preview, dockRef } =
+    props;
   const [text, setText] = useState("");
-  const [remixing, setRemixing] = useState(false);
   const [images, setImages] = useState<string[]>([]);
   const [dropping, setDropping] = useState(false);
   const [sending, setSending] = useState(false);
@@ -165,7 +169,7 @@ export function ChatPanel(props: Props) {
   /** The builder no longer takes messages here: a change starts a copy of the build. */
   const ended = !!build && !build.open && !busy;
   const typed = !!(text.trim() || images.length);
-  const ready = typed && !sending && (remixing || !changing || !!build?.id);
+  const ready = typed && !sending && !closed && !preview && (!changing || !!build?.id);
   const heard = build?.messages.filter((m) => m.role === "user").length ?? 0;
   const waiting = queued.length ? queued.slice(Math.max(0, heard - queued[0].heard)) : queued;
   const scrolledFor = useRef<string | null>(null);
@@ -221,13 +225,13 @@ export function ChatPanel(props: Props) {
 
   /** Hand `prompt` to the builder, even mid-build; whether it took it. */
   const deliver = async (prompt: string, attached: string[]) => {
-    const saying = changing && !remixing && !ended;
+    const saying = changing && !ended;
     const entry = { text: prompt, images: attached, heard };
     if (saying) setQueued((list) => [...list, entry]);
     setSending(true);
     setFailed(null);
     try {
-      await (remixing || ended ? onRemix : saying ? onSay : onCreate)(prompt, attached);
+      await (ended ? onRemix : saying ? onSay : onCreate)(prompt, attached);
       return true;
     } catch (e) {
       setQueued((list) => list.filter((q) => q !== entry));
@@ -326,15 +330,8 @@ export function ChatPanel(props: Props) {
         ref={composer}
         rows={changing ? 1 : 2}
         value={text}
-        autoFocus={remixing}
-        aria-label={remixing || ended ? "Remix this build" : changing ? "Change this build" : "Describe a new build"}
-        placeholder={
-          remixing
-            ? `What should ${WHO} change?`
-            : changing
-              ? "Ask for a change"
-              : "A castle on a cliff… or drop a photo"
-        }
+        aria-label={ended ? "Remix this build" : changing ? "Change this build" : "Describe a new build"}
+        placeholder={changing ? "Ask for a change" : "A castle on a cliff… or drop a photo"}
         onChange={(e) => setText(e.target.value)}
         onPaste={(e) => {
           const files = [...e.clipboardData.files].filter((f) => IMAGE_TYPES.includes(f.type));
@@ -469,12 +466,14 @@ export function ChatPanel(props: Props) {
       {lightboxDialog}
       <div className="chat-dock" ref={dockRef}>
         {problem}
-        {closed && !remixing ? (
+        {preview ? (
+          <div className="gallery-note preview-note">{preview}</div>
+        ) : closed ? (
           <div className="gallery-note">
             {typeof closed === "string" ? <p>{closed}</p> : closed}
             {!!build?.boxes.length && (
-              <button onClick={() => setRemixing(true)} title="Start your own build from a copy of this one">
-                <ShuffleIcon size={14} weight="bold" /> {typeof closed === "string" ? "Remix" : "Remix a copy"}
+              <button onClick={onFork} title="Save a private copy of this build to change">
+                <GitForkIcon size={14} weight="bold" /> {typeof closed === "string" ? "Fork" : "Fork a copy"}
               </button>
             )}
           </div>

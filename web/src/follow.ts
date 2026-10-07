@@ -1,5 +1,7 @@
 import { isTerminalSessionStatus, type HaiAgents } from "hai-agents";
 import { answer, client, download, fail } from "./agent";
+import { cachedSeed, requestedSeed } from "./fork";
+import { type ForkSeed, readSeed } from "./forkModel";
 import { card, remember } from "./library";
 import { caption, dataUrl, type View, view } from "./look";
 import { type Build, EMPTY_MODEL, type Message, type Model, PALETTE, unpack } from "./model";
@@ -9,6 +11,7 @@ import {
   activity,
   EMPTY_TRANSCRIPT,
   ending,
+  type ModelAttachment,
   read,
   readJson,
   status as buildStatus,
@@ -29,7 +32,13 @@ export interface Followed {
   error: string | null;
   /** A shown model can remain available, but must not be presented as confirmed live. */
   syncError: string | null;
+  /** Every model the builder shared, in order. */
+  models: ModelAttachment[];
+  /** The model a fork's session started from. */
+  seed: ForkSeed | null;
 }
+
+export const NOTHING: Followed = { build: null, activity: null, error: null, syncError: null, models: [], seed: null };
 
 type Listener = (state: Followed) => void;
 
@@ -66,7 +75,7 @@ function render(site: Site, look: View & { request: string; revision: string }) 
 
 /** Poll session `id` until it ends or `signal` aborts, answering every `look` it waits on. */
 function follow(id: string, signal: AbortSignal, notify: Listener, displayed: () => boolean) {
-  let state: Followed = { build: null, activity: null, error: null, syncError: null };
+  let state: Followed = NOTHING;
   const set = (next: Partial<Followed>) => {
     if (signal.aborted) return;
     state = { ...state, ...next };
@@ -75,7 +84,9 @@ function follow(id: string, signal: AbortSignal, notify: Listener, displayed: ()
   let transcript: Transcript = EMPTY_TRANSCRIPT;
   let session: HaiAgents.TrajectoryStatus = "pending";
   let failure: string | null = null;
-  let model: Shown = unpack(EMPTY_MODEL);
+  let seed = cachedSeed(id);
+  let seedChecked = !!seed;
+  let model: Shown = unpack(seed?.model ?? EMPTY_MODEL);
   let loaded = 0;
   const seen = new Set<string>();
   const pictures = new Map<string, string | null>();
@@ -137,10 +148,12 @@ function follow(id: string, signal: AbortSignal, notify: Listener, displayed: ()
     const request = transcript.messages.find((m) => m.role === "user")?.text;
     const state = transcript.crashed ? "error" : buildStatus(session);
     set({
+      models: transcript.models,
+      seed,
       build: {
         ...model,
         name:
-          [model.name, card(id)?.name, request && (label(request) ?? request.slice(0, 60))].find(
+          [seed?.model.name, model.name, card(id)?.name, request && (label(request) ?? request.slice(0, 60))].find(
             (n) => n && named({ name: n }),
           ) ?? model.name,
         id,
@@ -171,12 +184,27 @@ function follow(id: string, signal: AbortSignal, notify: Listener, displayed: ()
   };
 
   const loadModel = async () => {
+    if (!seed && transcript.fork) {
+      seed = await readSeed(await download(transcript.fork, signal));
+      seedChecked = true;
+      if (!loaded) model = unpack(seed.model);
+    }
+    // A session that is queued, or whose setup failed, has no attachments yet: its request still holds the fork's model.
+    if (!seedChecked && !transcript.model) {
+      seedChecked = true;
+      seed = await requestedSeed(id, signal).catch((e) => {
+        if (signal.aborted) throw e;
+        console.error("Could not read the session's request", e);
+        return null;
+      });
+      if (seed) model = unpack(seed.model);
+    }
     const latest = transcript.model;
     if (!latest || latest.shared === loaded) return;
     const next = unpack(await readJson<Model>(await download(latest.url, signal)));
     model = next.revision === model.revision ? { ...next, boxes: model.boxes } : next;
     loaded = latest.shared;
-    remember(id, { steps: model.steps.length, ...(named(model) && { name: model.name }) });
+    remember(id, { steps: model.steps.length, ...(named(model) && { name: seed?.model.name ?? model.name }) });
   };
 
   const poll = async () => {
@@ -211,6 +239,7 @@ function follow(id: string, signal: AbortSignal, notify: Listener, displayed: ()
       }
     }
   };
+  if (seed) publish();
   void poll();
   return {
     refresh: () => {

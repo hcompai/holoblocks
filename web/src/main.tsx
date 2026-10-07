@@ -14,7 +14,7 @@ function Root() {
   if (!account) return <SignInPage />;
   return (
     <Suspense fallback={<BlockLoader label="Loading HoloBlocks…" />}>
-      <App account={account} />
+      <App key={account.user.id} account={account} />
     </Suspense>
   );
 }

@@ -48,6 +48,8 @@ interface ControlsProps {
   onFollowCamera: (follow: boolean) => void;
   mode: Mode;
   canEdit: boolean;
+  /** Why the blocks cannot be edited, when it is not that Holo is building. */
+  editHint?: string;
   /** The build has blocks, so it can be edited or walked through. */
   built: boolean;
   onFrame: (framing: Framing) => void;
@@ -62,6 +64,7 @@ export function ViewControls({
   onFollowCamera,
   mode,
   canEdit,
+  editHint,
   built,
   onFrame,
   onSpin,
@@ -102,7 +105,11 @@ export function ViewControls({
             className={mode === "edit" ? "active" : ""}
             aria-pressed={mode === "edit"}
             disabled={!canEdit && mode !== "edit"}
-            title={canEdit ? "Select blocks to replace, move or delete them" : "Blocks can be edited once Holo is done"}
+            title={
+              canEdit
+                ? "Select blocks to replace, move or delete them"
+                : (editHint ?? "Blocks can be edited once Holo is done")
+            }
             onClick={() => toggle("edit")}
           >
             <PencilSimpleIcon size={14} weight="bold" />

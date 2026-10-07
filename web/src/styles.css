@@ -3274,3 +3274,219 @@ main {
   margin: 0;
   color: var(--text-secondary);
 }
+
+.stage-head > .history-tools {
+  margin: 0 8px 0 auto;
+}
+
+.history-panel {
+  flex: none;
+  margin: 0 16px 12px;
+  padding: 8px 12px 12px;
+  border: 1px solid var(--stroke-default);
+  border-radius: var(--radius-large);
+  background: var(--background-card);
+}
+
+.history-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.history-heading .icon-button {
+  width: 28px;
+  height: 28px;
+}
+
+.history-versions {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-top: 8px;
+}
+
+.history-versions button {
+  flex: 0 0 120px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 10px;
+  border-radius: var(--radius-large);
+  text-align: left;
+  font-size: 12px;
+}
+
+.history-versions button.active {
+  border-color: var(--background-primary);
+}
+
+.history-versions strong {
+  display: flex;
+  gap: 8px;
+}
+
+.history-error {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0;
+}
+
+.gallery-note.preview-note {
+  flex-wrap: wrap;
+}
+
+.gallery-note.preview-note button + button {
+  border-color: var(--stroke-default);
+  background: var(--background-card);
+  color: var(--text-default);
+}
+
+.project-title {
+  position: relative;
+  flex: 1;
+  overflow: visible;
+}
+
+.project-title > button {
+  min-width: 0;
+  max-width: 100%;
+  gap: 6px;
+  padding: 3px 0;
+  font: inherit;
+}
+
+.project-title > button > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-title svg {
+  flex: none;
+  color: var(--text-tertiary);
+}
+
+.project-title.editing {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin: 0;
+}
+
+.project-title input {
+  width: 0;
+  min-width: 0;
+  flex: 1;
+  padding: 5px;
+  font: inherit;
+}
+
+.project-title.editing > button {
+  flex: none;
+  padding: 5px;
+}
+
+.rename-error {
+  position: absolute;
+  z-index: 10;
+  top: 100%;
+  left: 0;
+  min-width: 200px;
+  max-width: 100%;
+  padding: 8px;
+  font-size: 12px;
+  font-weight: 400;
+  white-space: normal;
+  color: var(--text-error);
+  background: var(--background-card);
+  border: 1px solid var(--stroke-default);
+  border-radius: var(--radius-medium);
+}
+
+/* The owner's menu on their cards: rename, publish or make private, delete. */
+.tile-owned {
+  position: relative;
+  display: grid;
+}
+
+.project-menu {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+}
+
+.project-menu > .icon-button {
+  width: 30px;
+  height: 30px;
+  background: var(--background-card);
+  box-shadow: var(--elevation-1);
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+
+.tile-owned:hover .project-menu > .icon-button,
+.tile-owned:focus-within .project-menu > .icon-button,
+.project-menu > .icon-button[aria-expanded="true"] {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .project-menu > .icon-button {
+    opacity: 1;
+  }
+}
+
+.menu.project-rename {
+  width: 260px;
+  gap: 8px;
+  padding: 12px;
+}
+
+.menu.project-rename > * {
+  padding: 0;
+  background: none;
+  white-space: normal;
+}
+
+.menu.project-rename input {
+  font: inherit;
+  padding: 6px 8px;
+  border: 1px solid var(--stroke-strong);
+  border-radius: var(--radius-medium);
+  background: var(--background-card);
+  color: var(--text-default);
+}
+
+.menu.project-rename > .publish-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+@media (max-width: 760px) {
+  .app:not(.home) .stage-head {
+    gap: 6px;
+    align-items: flex-start;
+  }
+
+  .app:not(.home) .stage-head > .history-tools {
+    margin: 0;
+  }
+
+  .app:not(.home) .history-panel {
+    position: absolute;
+    z-index: 11;
+    top: calc(var(--bar) + 4px);
+    left: max(12px, env(safe-area-inset-left));
+    right: 128px;
+    margin: 0;
+  }
+
+  .history-versions button {
+    flex-basis: 104px;
+    padding: 6px 8px;
+  }
+}

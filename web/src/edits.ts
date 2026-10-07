@@ -44,13 +44,14 @@ function digest(text: string): string {
 }
 
 /** The build's boxes and steps with `edits` applied, under a revision of their own. */
-function edited(build: Build, edits: Edit[]): Pick<Build, "boxes" | "steps" | "revision"> {
+function edited(build: Build, edits: Edit[]): Pick<Build, "boxes" | "steps" | "revision" | "script"> {
   const { width, depth, height, steps } = build;
   const model = applyEdits({ width, depth, height, steps, ...pack(build.boxes) }, edits);
   return {
     boxes: unpackBoxes(model),
     steps: model.steps ?? steps,
     revision: `${build.revision}-${digest(JSON.stringify(edits))}`,
+    script: "",
   };
 }
 

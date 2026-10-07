@@ -1,7 +1,7 @@
 import type { Build } from "./model";
 
 /** A build script rebuilding `build` exactly: its own script when it has one, else one call per box, one `step` per step. */
-export function script(build: Build): string {
+export function script(build: Pick<Build, "script" | "steps" | "boxes">): string {
   if (build.script) return build.script;
   const lines: string[] = [];
   for (const step of build.steps) {

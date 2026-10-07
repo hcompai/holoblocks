@@ -17,7 +17,7 @@ export interface Published {
 
 export const ID = /^[\w-]{1,100}$/;
 /** No path is ever written twice: the Blob CDN can serve a deleted path's 404, or an overwritten path's old content, for minutes. */
-const PUBLIC = { access: "public", cacheControlMaxAge: 60 } as const;
+export const PUBLIC = { access: "public", cacheControlMaxAge: 60 } as const;
 const PARALLEL = 16;
 /** A build's entries are `<shelf><id>/<milliseconds>.json`: the latest one counts. */
 const LIBRARY = "library/";
@@ -38,7 +38,7 @@ async function listed(prefix: string) {
   return blobs;
 }
 
-async function drop(prefix: string, keep?: string) {
+export async function drop(prefix: string, keep?: string) {
   const urls = (await listed(prefix)).filter((b) => b.pathname !== keep).map((b) => b.url);
   if (urls.length) await del(urls);
 }
@@ -50,37 +50,44 @@ export async function save(id: string, name: string, data: Blob | Buffer, conten
 
 export const files = async (id: string) => (await listed(folder(id))).map((b) => b.url);
 
-async function write(prefix: string, published: Published) {
-  const path = `${prefix}${published.id}/${Date.now()}.json`;
-  await put(path, JSON.stringify(published), { ...PUBLIC, addRandomSuffix: false, contentType: "application/json" });
-  await drop(`${prefix}${published.id}/`, path);
+/** Write the next version of the record `<prefix><id>/<milliseconds>.json`, then drop the earlier ones. */
+export async function record<T extends { id: string }>(prefix: string, value: T) {
+  const path = `${prefix}${value.id}/${Date.now()}.json`;
+  await put(path, JSON.stringify(value), { ...PUBLIC, addRandomSuffix: false, contentType: "application/json" });
+  await drop(`${prefix}${value.id}/`, path);
 }
 
-/** The latest entry of each build on a shelf, or of build `id` alone, newest first. */
-async function entries(prefix: string, id?: string): Promise<Published[]> {
+/** The latest version of each record under `prefix`, or of record `id` alone. */
+export async function records<T>(prefix: string, id?: string): Promise<T[]> {
   const latest = new Map<string, ListBlobResultBlob>();
   for (const blob of await listed(id ? `${prefix}${id}/` : prefix)) {
-    const [build] = blob.pathname.slice(prefix.length).split("/");
-    const seen = latest.get(build);
-    if (!seen || blob.pathname > seen.pathname) latest.set(build, blob);
+    const [key] = blob.pathname.slice(prefix.length).split("/");
+    const seen = latest.get(key);
+    if (!seen || blob.pathname > seen.pathname) latest.set(key, blob);
   }
   const blobs = [...latest.values()];
-  const found: (Published | null)[] = [];
+  const found: (T | null)[] = [];
   for (let i = 0; i < blobs.length; i += PARALLEL)
     found.push(
       ...(await Promise.all(
         blobs.slice(i, i + PARALLEL).map(async (b) => {
           const response = await fetch(b.url);
-          return response.ok ? ((await response.json()) as Published) : null;
+          return response.ok ? ((await response.json()) as T) : null;
         }),
       )),
     );
-  return found.filter((p): p is Published => p !== null).sort((a, b) => b.published - a.published);
+  return found.filter((r): r is T => r !== null);
 }
+
+/** The latest entry of each build on a shelf, or of build `id` alone, newest first. */
+const entries = async (prefix: string, id?: string) =>
+  (await records<Published>(prefix, id)).sort((a, b) => b.published - a.published);
 
 /** Put the build in the library, then delete the files its previous publication used and this one does not. */
 export async function enter(published: Published, before: string[], written: string[]) {
-  await write(LIBRARY, published);
+  await record(LIBRARY, published);
+  // Publishing again takes the place of a private entry left by a moderator, so it is never both.
+  await drop(`${shelf(published.owner)}${published.id}/`);
   const gone = before.filter((url) => !written.includes(url));
   if (gone.length) await del(gone);
 }
@@ -97,8 +104,16 @@ export const privateOf = (owner: string) => entries(shelf(owner));
 /** Move a build between the public library and its owner's private shelf; its files stay, and a retry finishes a half-done move. */
 export async function setPrivate(published: Published, value: boolean) {
   const [to, from] = value ? [shelf(published.owner), LIBRARY] : [LIBRARY, shelf(published.owner)];
-  await write(to, published);
+  await record(to, published);
   await drop(`${from}${published.id}/`);
+}
+
+/** Rename one of `owner`'s builds in the library, public or private; its files and link stay. */
+export async function rename(owner: string, id: string, name: string) {
+  for (const prefix of [shelf(owner), LIBRARY]) {
+    const [published] = await entries(prefix, id);
+    if (published?.owner === owner) await record(prefix, { ...published, name });
+  }
 }
 
 /** Every public build, newest first. */

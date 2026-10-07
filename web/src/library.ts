@@ -1,5 +1,6 @@
 import { current, key } from "./account";
 import { sessions } from "./agent";
+import type { ForkSeed, ForkSummary, SavedFork } from "./forkModel";
 import { type Build, type BuildSummary, PALETTE, type Shared, type Status, unpack } from "./model";
 import { BlockScene } from "./scene";
 import { readJson, status } from "./session";
@@ -9,6 +10,8 @@ const GALLERY = "/gallery";
 const API = "/api/builds";
 const IMPORTS = "/api/imports";
 const DELETED = "/api/deleted";
+const FORKS = "/api/forks";
+const NAMES = "/api/names";
 const STORE = "blockyard.library";
 
 /** What the browser remembers of a session's model, since the platform keeps only its chat. */
@@ -21,6 +24,8 @@ interface Card {
   recoveredFrom?: string;
   /** The session started to recover this build. */
   recoveryAttempt?: string;
+  /** A fork's first message may have started a session that is not confirmed yet. */
+  forkStarting?: boolean;
 }
 
 const cards = (): Record<string, Card> => {
@@ -98,10 +103,13 @@ export async function showcase(id: string): Promise<Build> {
   return opened(await response.json(), id);
 }
 
+/** A refusal from the library API, whose message is meant for the user. */
+export class LibraryError extends Error {}
+
 async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   const response = await fetch(path, init);
   const body = response.status === 204 ? null : await response.json().catch(() => null);
-  if (!response.ok) throw new Error(body?.error ?? `The library is unavailable (HTTP ${response.status}).`);
+  if (!response.ok) throw new LibraryError(body?.error ?? `The library is unavailable (HTTP ${response.status}).`);
   return body as T;
 }
 
@@ -145,7 +153,7 @@ export async function publicBuild(id: string): Promise<Build> {
   const published = await api<Published>(read({ id }), current() ? { headers: signed() } : {});
   const response = await fetch(published.build);
   if (!response.ok) throw new Error(`No public build ${id}`);
-  return opened(await readJson<Shared>(await response.blob()), id);
+  return { ...opened(await readJson<Shared>(await response.blob()), id), name: published.name };
 }
 
 /** Publish a build of the signed-in user as it is now, with this browser's hand edits and a thumbnail. */
@@ -219,18 +227,63 @@ export async function remove(id: string) {
   });
 }
 
+/** One of the signed-in user's forks, with its starting model. */
+export const savedFork = (id: string) => api<SavedFork>(`${FORKS}?id=${encodeURIComponent(id)}`, { headers: signed() });
+
+/** Save `seed` as the signed-in user's fork `id`; saving it again is harmless. Holo starts on its first message. */
+export async function saveFork(id: string, seed: ForkSeed): Promise<ForkSummary> {
+  const json = new Blob([JSON.stringify({ id, seed })]);
+  const body = await new Response(json.stream().pipeThrough(new CompressionStream("gzip"))).blob();
+  const fork = await api<ForkSummary>(FORKS, {
+    method: "POST",
+    headers: { ...signed(), "Content-Type": "application/gzip" },
+    body,
+  });
+  remember(id, { name: fork.name, steps: fork.steps });
+  return fork;
+}
+
+/** Bind fork `id` to the session its first message started. */
+export async function linkFork(id: string, sessionId: string) {
+  await api(FORKS, {
+    method: "PATCH",
+    headers: { ...signed(), "Content-Type": "application/json" },
+    body: JSON.stringify({ id, sessionId }),
+  });
+}
+
+/** The name an owner gave one of their builds. */
+export interface ProjectName {
+  id: string;
+  name: string;
+  /** In ms since the epoch. */
+  updated: number;
+}
+
+export const projectNames = () => api<ProjectName[]>(NAMES, { headers: signed() });
+
+/** Rename one of the signed-in user's builds, and its library entry. */
+export const renameProject = (id: string, name: string) =>
+  api<ProjectName>(NAMES, {
+    method: "PATCH",
+    headers: { ...signed(), "Content-Type": "application/json" },
+    body: JSON.stringify({ id, name }),
+  });
+
 /** A part of the library that loads on its own. */
 export type Shelf = "mine" | "public";
 
 /** The signed-in user's builds, newest first, then everyone's public builds, then the showcases; with the shelves that failed to load. */
 export async function library(): Promise<{ builds: BuildSummary[]; failed: Shelf[] }> {
-  const [sessionsLoaded, deletedLoaded, sharedLoaded, hiddenLoaded, shownLoaded] = await Promise.allSettled([
-    current() ? sessions() : Promise.resolve([]),
-    current() ? api<string[]>(DELETED, { headers: signed() }) : Promise.resolve([]),
-    community(),
-    current() ? hidden() : Promise.resolve([]),
-    showcases(),
-  ]);
+  const [sessionsLoaded, deletedLoaded, forksLoaded, sharedLoaded, hiddenLoaded, shownLoaded] =
+    await Promise.allSettled([
+      current() ? sessions() : Promise.resolve([]),
+      current() ? api<string[]>(DELETED, { headers: signed() }) : Promise.resolve([]),
+      current() ? api<ForkSummary[]>(FORKS, { headers: signed() }) : Promise.resolve([]),
+      community(),
+      current() ? hidden() : Promise.resolve([]),
+      showcases(),
+    ]);
   const failed: Shelf[] = [];
   const value = <T>(result: PromiseSettledResult<T[]>, shelf: Shelf): T[] => {
     if (result.status === "fulfilled") return result.value;
@@ -239,7 +292,12 @@ export async function library(): Promise<{ builds: BuildSummary[]; failed: Shelf
     return [];
   };
   const deleted = new Set(value(deletedLoaded, "mine"));
-  const mine = failed.includes("mine") ? [] : value(sessionsLoaded, "mine").filter((s) => !deleted.has(s.id));
+  const allForks = value(forksLoaded, "mine");
+  const allSessions = value(sessionsLoaded, "mine");
+  // Shown apart, a fork's session would list twice: the user's builds load whole or not at all.
+  const lost = failed.includes("mine");
+  const forks = lost ? [] : allForks;
+  const mine = lost ? [] : allSessions.filter((s) => !deleted.has(s.id));
   const shared = value(sharedLoaded, "public");
   const own = value(hiddenLoaded, "mine");
   const shown = value(shownLoaded, "public");
@@ -264,7 +322,22 @@ export async function library(): Promise<{ builds: BuildSummary[]; failed: Shelf
   });
   // A build is public or private, never both: the public listing wins if a stale private entry lingers.
   const privately = own.filter((p) => !listed.has(p.id));
-  return { builds: [...builds.sort((a, b) => b.created - a.created), ...shared, ...privately, ...shown], failed };
+  const continued = new Set(forks.flatMap((f) => (f.sessionId ? [f.sessionId] : [])));
+  const copies = forks.map((f): BuildSummary => {
+    const run = builds.find((b) => b.id === f.sessionId);
+    return {
+      ...f,
+      prompt: run?.prompt ?? "",
+      status: run?.status ?? "done",
+      steps: run?.steps ?? f.steps,
+      thumbnail: known[f.id]?.thumbnail ?? run?.thumbnail ?? null,
+      source: "fork",
+      author: null,
+      owner: null,
+    };
+  });
+  const yours = [...builds.filter((b) => !continued.has(b.id)), ...copies].sort((a, b) => b.created - a.created);
+  return { builds: [...yours, ...shared, ...privately, ...shown], failed };
 }
 
 const THUMBNAIL_SIDE = 320;
