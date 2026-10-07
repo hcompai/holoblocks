@@ -59,7 +59,7 @@ test("a failed Workstation says so plainly, offers to continue, and keeps the ra
     "The building service stopped unexpectedly. You can continue below.",
   );
   await expect(page.getByRole("button", { name: "Continue from saved version" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Remix a copy" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Fork a copy" })).toBeVisible();
   await expect(page.getByText(/CodeSandboxGoneError/)).toBeHidden();
   await page.getByText("Technical details", { exact: true }).click();
   await expect(page.getByText(/CodeSandboxGoneError/)).toBeVisible();
