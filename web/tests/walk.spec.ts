@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, type Page, test } from "@playwright/test";
 import { type Solid, Solids, WALK, Walker } from "../src/walker";
 import { model, site } from "./fixtures";
 
@@ -152,4 +152,61 @@ test("walk mode shows its controls, takes Space to fly, and Escape leaves it; ? 
   await page.keyboard.press("Escape");
   await expect(walk).toHaveAttribute("aria-pressed", "false");
   await expect(hud).toBeHidden();
+});
+
+/** Opens a showcase hut and returns a way to take the canvas's own pixels, without what is drawn over it. */
+async function openHut(page: Page) {
+  const build = { ...model(), id: "hut" };
+  await site(page, [build]);
+  await page.goto(`/?showcase=${build.id}`);
+  await expect(page.locator(".viewer")).toHaveAttribute("data-revision", build.revision);
+  await page.mouse.move(0, 0);
+  return async () => {
+    await page.waitForTimeout(600);
+    return page
+      .locator(".viewer-canvas canvas")
+      .screenshot({ style: ".viewer > :not(.viewer-canvas) { display: none }" });
+  };
+}
+
+async function walkBack(page: Page) {
+  await page.getByRole("button", { name: "Walk", exact: true }).click();
+  await page.keyboard.down("KeyS");
+  await page.waitForTimeout(500);
+  await page.keyboard.up("KeyS");
+  await page.keyboard.press("Escape");
+}
+
+test("leaving walk mode keeps the view, so editing starts from there; choosing a view frames the model again", async ({
+  page,
+}) => {
+  const picture = await openHut(page);
+  const framed = await picture();
+  await walkBack(page);
+  await expect(page.getByRole("button", { name: "Walk", exact: true })).toHaveAttribute("aria-pressed", "false");
+  const walked = await picture();
+  expect(walked).not.toEqual(framed);
+
+  await page.getByRole("button", { name: "Edit", exact: true }).click();
+  expect(await picture()).toEqual(walked);
+
+  await page.getByRole("button", { name: "3/4", exact: true }).click();
+  expect(await picture()).toEqual(framed);
+});
+
+test("Reset view frames the model again, from a walk or after one", async ({ page }) => {
+  const picture = await openHut(page);
+  const framed = await picture();
+  const walk = page.getByRole("button", { name: "Walk", exact: true });
+  const reset = page.getByRole("button", { name: "Reset view", exact: true });
+
+  await walk.click();
+  await reset.click();
+  await expect(walk).toHaveAttribute("aria-pressed", "false");
+  expect(await picture()).toEqual(framed);
+
+  await walkBack(page);
+  expect(await picture()).not.toEqual(framed);
+  await reset.click();
+  expect(await picture()).toEqual(framed);
 });
