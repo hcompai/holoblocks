@@ -7,7 +7,7 @@ import { PHASES } from "./activity";
 import { cancel, create, remix, say, stop } from "./agent";
 import { BlockLoader } from "./BlockLoader";
 import { BlocksPanel } from "./BlocksPanel";
-import { ChatPanel } from "./ChatPanel";
+import { type ChatHandle, ChatPanel } from "./ChatPanel";
 import { CodePanel } from "./CodePanel";
 import { useEdits } from "./edits";
 import { FilmExport } from "./FilmExport";
@@ -17,6 +17,7 @@ import { card, library, publish, remember, remove, setPrivate, type Shelf, thumb
 import { type Build, type BuildSummary, EMPTY_MODEL, PALETTE, type Source } from "./model";
 import { RecoveryPanel } from "./RecoveryPanel";
 import type { BlockScene } from "./scene";
+import { selectedArea } from "./selectedArea";
 import { ShareMenu } from "./ShareMenu";
 import { label } from "./suggestions";
 import { ThemeToggle } from "./ThemeToggle";
@@ -91,6 +92,7 @@ export default function App({ account }: { account: Account }) {
   const sheet = useSheet(dock);
   const palette = useMemo(() => Promise.resolve(PALETTE), []);
   const scene = useRef<BlockScene | null>(null);
+  const chat = useRef<ChatHandle>(null);
   const last = (build?.steps.length ?? 0) - 1;
   const built = !!build?.boxes.length;
 
@@ -209,7 +211,7 @@ export default function App({ account }: { account: Account }) {
   };
 
   /** Start a build and show it at once: a new one, or a copy of `from` that Holo changes as asked, under the same name if it is the user's. */
-  const start = async (prompt: string, images: string[], from?: Build) => {
+  const start = async (prompt: string, images: string[], from?: Build, attached: Record<string, Blob> = {}) => {
     const name = from ? (owned ? from.name : `${from.name} remix`) : (label(prompt) ?? NEW_BUILD);
     const at = opened.current;
     const since = Date.now();
@@ -224,7 +226,7 @@ export default function App({ account }: { account: Account }) {
     };
     setDraft({ at, build, since });
     try {
-      const id = await (from ? remix(from, prompt, images) : create(prompt, images));
+      const id = await (from ? remix(from, prompt, images, attached) : create(prompt, images));
       remember(id, { name: name.slice(0, 60), prompt });
       refreshBuilds();
       if (!same(opened.current, at)) return;
@@ -453,6 +455,7 @@ export default function App({ account }: { account: Account }) {
             </p>
           )}
           <ChatPanel
+            ref={chat}
             key={ref ? `${ref.source}:${ref.id}` : "new"}
             buildId={buildId}
             build={live}
@@ -460,14 +463,14 @@ export default function App({ account }: { account: Account }) {
             activity={activity}
             closed={closed}
             onCreate={(prompt, images) => start(prompt, images)}
-            onSay={async (text, images) => {
-              if (live?.id) await say(live.id, text, images);
+            onSay={async (text, images, attached) => {
+              if (live?.id) await say(live.id, text, images, attached);
             }}
             onStop={async () => {
               if (live?.id) await stop(live.id);
             }}
-            onRemix={async (text, images) => {
-              if (build) await start(text, images, build);
+            onRemix={async (text, images, attached) => {
+              if (build) await start(text, images, build, attached);
             }}
             dockRef={setDock}
           />
@@ -556,6 +559,12 @@ export default function App({ account }: { account: Account }) {
                 onFailed={setRenderFailed}
                 mode={mode}
                 edits={edits}
+                onAsk={
+                  ref?.source === "showcase" || (owned && !closed)
+                    ? (text, model, cells) =>
+                        chat.current?.ask(text, selectedArea(model, cells)) ?? Promise.resolve(false)
+                    : undefined
+                }
                 onMode={setMode}
               />
               {build && !built && build.status !== "building" && (
