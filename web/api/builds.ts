@@ -9,6 +9,7 @@ import {
   findOwn,
   ID,
   library,
+  privateFile,
   privateOf,
   type Published,
   save,
@@ -35,14 +36,16 @@ function thumbnail(value: unknown): { data: Buffer; type: string } | null {
 const OWN = { "Cache-Control": "private, no-store" };
 
 /**
- * The public library, or one public build with `?id=`. Signed in, `?mine=1` lists the caller's private builds, and
- * `?id=` also finds one of them.
+ * The public library, or one public build with `?id=`. Signed in, `?mine=1` lists the caller's private builds,
+ * `?id=` also finds one of them, and `?id=&file=` reads one of its files.
  */
 export const GET = route(async (request) => {
   const params = new URL(request.url).searchParams;
   if (params.has("mine")) return Response.json(await privateOf(holder(request).user.id), { headers: OWN });
   const id = params.get("id");
   if (!id) return Response.json(await library(), { headers: SHARED });
+  const file = params.get("file");
+  if (file) return privateFile(holder(request).user.id, buildId(id), file);
   const shared = await find(buildId(id));
   if (shared) return Response.json(shared, { headers: SHARED });
   const own = request.headers.has("authorization") ? await findOwn(holder(request).user.id, buildId(id)) : null;
@@ -50,7 +53,7 @@ export const GET = route(async (request) => {
   return Response.json(own, { headers: OWN });
 });
 
-/** Make one of the caller's imported builds private or public again: `{ id, private }`. Its files and link stay the same. */
+/** Make one of the caller's imported builds private or public again: `{ id, private }`. Its link stays the same; its files move between the public and private stores. */
 export const PATCH = route(async (request) => {
   const { user } = holder(request);
   const given = await body<{ id?: unknown; private?: unknown }>(request);

@@ -1,5 +1,6 @@
 import { current, key } from "./account";
 import { sessions } from "./agent";
+import { dataUrl } from "./look";
 import { type Build, type BuildSummary, PALETTE, type Shared, type Status, unpack } from "./model";
 import { BlockScene } from "./scene";
 import { readJson, status } from "./session";
@@ -134,18 +135,35 @@ async function community(): Promise<BuildSummary[]> {
 
 /** The signed-in user's private library builds, newest first. */
 async function hidden(): Promise<BuildSummary[]> {
-  return (await api<Published[]>(read({ mine: "1" }), { headers: signed() })).map((p) => ({
-    ...summary(p),
-    private: true,
-  }));
+  return Promise.all(
+    (await api<Published[]>(read({ mine: "1" }), { headers: signed() })).map(async (p) => ({
+      ...summary(p),
+      thumbnail: p.thumbnail && (await privateImage(p.thumbnail, p.id)),
+      private: true,
+    })),
+  );
 }
 
 export async function publicBuild(id: string): Promise<Build> {
   // Signed in, the owner can open their private builds too.
   const published = await api<Published>(read({ id }), current() ? { headers: signed() } : {});
-  const response = await fetch(published.build);
+  const response = await fetch(published.build, privateAsset(published.build, id) ? { headers: signed() } : {});
   if (!response.ok) throw new Error(`No public build ${id}`);
   return opened(await readJson<Shared>(await response.blob()), id);
+}
+
+/** A private cover as a data URL, so no credential sits in an img URL; null if it does not load. */
+async function privateImage(url: string, id: string): Promise<string | null> {
+  if (!privateAsset(url, id)) return url;
+  const response = await fetch(url, { headers: signed() });
+  return response.ok ? dataUrl(await response.blob()) : null;
+}
+
+/** Send credentials only to this app's owner-authenticated file route. */
+function privateAsset(url: string, id: string): boolean {
+  if (!url.startsWith(`${API}?`)) return false;
+  const parsed = new URL(url, location.origin);
+  return parsed.pathname === API && parsed.searchParams.get("id") === id && parsed.searchParams.has("file");
 }
 
 /** Publish a build of the signed-in user as it is now, with this browser's hand edits and a thumbnail. */

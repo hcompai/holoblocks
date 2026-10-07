@@ -59,15 +59,29 @@ portal ──redirect──▶ GET /api/session: who is it? mint a 30-day "HoloB
 browser ──key──▶ Agents API (Holo builds, sessions listed per user)
 browser ──POST /api/builds (pass + key)──▶ snapshot of the session ──▶ Vercel Blob (public)
 signed in ──GET /api/builds──▶ the public library
+owner ──GET /api/builds?id=&file= (pass + key)──▶ Vercel Blob (private)
 ```
 
 - `web/api/` holds the Vercel functions; `web/scripts/build-api.mjs` bundles them, and `npm run dev` serves them too. Deployed, `/?public=<id>` and `/?showcase=<id>` go to `/api/preview`: the app's page, with that build's name, step count, author and cover in its link preview. The sign-in page reads those tags back to show a signed-out visitor what was shared with them.
 - The portal's cookie never reaches a local dev server, so there the portal sends a one-time code instead (PKCE, RFC 8252); it only redirects to `127.0.0.1`, where `localhost` forwards.
 - Signing in again revokes the previous key. The key lives in the browser's local storage; the pass, signed with `BLOCKYARD_SECRET`, names its holder to the functions.
 - Publishing copies the session's model (with this browser's edits, which drop its script), transcript and images, so a public build stands on its own. Only its author can publish or unpublish a build; the emails in `BLOCKYARD_ADMINS` can unpublish any.
-- An imported build has no session, so it lives only in the library: **Make private** moves its entry to `private/<owner>/`, listed and opened only for its owner; its files keep their unguessable public URLs, so a shared link still opens it. **Delete** removes its entry and files.
+- An imported build has no session, so it lives only in the library: **Make private** copies its entry, model and cover into a separate private Blob store, then deletes the public copies. It stays listed for its owner (`GET /api/builds?mine=1`) and opens through an owner-authenticated file route (`GET /api/builds?id=&file=`) that is never cached; for anyone else its link stops working. **Delete** removes its entry and files.
 - The Agents API cannot delete a session, so **Delete** on a session's build stops Holo if it is building, unpublishes it, and marks it in `deleted/<owner>/` (`/api/deleted`): the home page leaves it out on every device, though its `?build=` link still opens.
-- Server environment: `BLOCKYARD_SECRET`, `BLOCKYARD_ADMINS`, and `BLOB_READ_WRITE_TOKEN` from the `blockyard-library` Blob store.
+- Server environment: `BLOCKYARD_SECRET`, `BLOCKYARD_ADMINS`, `BLOB_READ_WRITE_TOKEN` from the public `blockyard-library` Blob store, and `BLOCKYARD_PRIVATE_BLOB_READ_WRITE_TOKEN` from a **separate private** Blob store (the shorter `BLOCKYARD_PRIVATE_BLOB_TOKEN` is also accepted). Never reuse the public token. Without private storage, making private returns 503 and keeps the build public.
+
+### Migrating existing private builds
+
+Create a private Blob store in Vercel and connect it to the project with the environment-variable prefix `BLOCKYARD_PRIVATE_BLOB`, which creates `BLOCKYARD_PRIVATE_BLOB_READ_WRITE_TOKEN`. Keep the public store and its token. Deploy the updated API first: the previous one cannot read the private store. Then, from `web/`:
+
+```bash
+vercel env pull --environment=production .env.migrate.local
+node --env-file=.env.migrate.local scripts/migrate-private.mjs --dry-run   # counts them, changes nothing
+node --env-file=.env.migrate.local scripts/migrate-private.mjs
+rm .env.migrate.local
+```
+
+The migration copies each private entry left in the public store, with its model and cover, before deleting the public copies. It stops on failure; rerun it to finish, and a finished run moves nothing. It logs only the count, never models or tokens. Owner access also moves an entry left behind. The Blob CDN can keep serving a deleted public file for a few minutes, and copies already downloaded cannot be revoked.
 
 ## Where to change things
 
