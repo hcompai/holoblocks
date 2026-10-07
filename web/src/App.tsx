@@ -1,6 +1,15 @@
 import { replayDelay } from "./buildTiming";
 import { CaretLeftIcon, PlusIcon } from "@phosphor-icons/react";
-import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import {
+  type CSSProperties,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import type { Account } from "./account";
 import { AccountMenu } from "./AccountMenu";
 import { PHASES } from "./activity";
@@ -117,6 +126,10 @@ export default function App({ account }: { account: Account }) {
 
   const home = !ref && !drafted;
   useEffect(() => void refreshBuilds(), [refreshBuilds, account.user.id, home]);
+  useLayoutEffect(() => {
+    const field = document.activeElement;
+    if (home && viewport && field instanceof HTMLTextAreaElement) field.scrollIntoView({ block: "nearest" });
+  }, [home, viewport]);
   /** The user's sessions building now, which need this tab open. */
   const running = [
     ...new Set([
