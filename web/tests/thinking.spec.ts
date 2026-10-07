@@ -3,7 +3,9 @@ import { model, site } from "./fixtures";
 import { platform } from "./platform";
 import { readFileSync } from "node:fs";
 
-test("the thinking illustration follows real activity, then gives way to the shared model", async ({ page }) => {
+test("the thinking illustration follows real activity, then gives way to the shared model", async ({
+  page,
+}, testInfo) => {
   await site(page);
   const agp = await platform(page);
   agp.session("thinking");
@@ -25,23 +27,29 @@ test("the thinking illustration follows real activity, then gives way to the sha
   await expect(thinking.locator(".thinking-outline")).toHaveCSS("animation-play-state", "running");
 
   const stages = [
-    { tool_name: "shell", args: { command: ".blockyard/setup.sh" }, label: "Getting its blocks ready", art: "setup" },
+    { tool_name: "shell", args: { command: ".blockyard/setup.sh" }, label: "Preparing blocks", art: "setup" },
     { tool_name: "web_search", args: { query: "garden tower" }, label: "Finding photos", art: "photos" },
     { tool_name: "shell", args: { command: 'blocks name "Garden Tower"' }, label: "Naming it", art: "naming" },
   ];
   for (const { tool_name, args, label, art } of stages) {
     agp.step("thinking", "", "", [{ tool_name, args, id: art }]);
     await expect(status).toContainText(label);
-    await expect(thinking.locator(`.thinking-stage-${art}`)).toBeVisible();
+    await expect(thinking).toHaveClass(new RegExp(`\\bthinking-stage-${art}\\b`));
   }
 
   await expect(thinking.locator(".thinking-card")).toHaveAttribute("data-subject", "tower");
   agp.step("thinking", "", "", [{ tool_name: "write_file", args: { path: "/workspace/build.py" }, id: "script" }]);
-  await expect(thinking).toHaveCount(0);
-  await expect(page.locator(".msg.live")).toContainText("Placing blocks");
+  await expect(status).toContainText("Building first draft");
+  await expect(page.locator(".msg.live")).toContainText("Building first draft");
+  await page.screenshot({ path: testInfo.outputPath("building-first-draft.png") });
+  agp.say("thinking", "Keep the courtyard open");
+  await expect(status).toContainText("Reading your message");
   agp.step("thinking", "", "", [{ tool_name: "look", args: {}, id: "check" }]);
-  await expect(thinking).toHaveCount(0);
-  await expect(page.locator(".msg.live")).toContainText("Checking every side");
+  await expect(status).toContainText("Building first draft");
+  await expect(page.locator(".msg.live")).toContainText("Building first draft");
+  agp.share("thinking", { ...model("0f0f0f0f0f0f"), blocks: [], boxes: [] });
+  await expect(page.locator(".viewer")).toHaveAttribute("data-revision", "0f0f0f0f0f0f");
+  await expect(status).toContainText("Building first draft");
 
   agp.share("thinking", model());
   await expect(thinking).toHaveCount(0);
@@ -65,11 +73,10 @@ test("thinking respects reduced motion and fits a narrower viewer", async ({ pag
   await page.goto("/?build=quiet");
 
   const thinking = page.locator(".thinking");
-  await expect(thinking.getByRole("status")).toContainText("Getting its blocks ready");
-  await expect(thinking.locator(".thinking-material").first()).toHaveCSS("animation-name", "none");
-  await expect(thinking.locator(".thinking-material").first()).toHaveCSS("opacity", "1");
-  await expect(thinking.getByRole("button", { name: "Pause animation", includeHidden: true })).toBeHidden();
-  const card = await thinking.locator(".thinking-card").boundingBox();
+  await expect(thinking.getByRole("status")).toContainText("Preparing blocks");
+  await expect(thinking.locator(".cube-hop")).toHaveCSS("animation-name", "none");
+  await expect(thinking.getByRole("button")).toHaveCount(0);
+  const card = await thinking.getByRole("status").boundingBox();
   const pane = await thinking.boundingBox();
   expect(card).not.toBeNull();
   expect(pane).not.toBeNull();
@@ -129,7 +136,7 @@ test("real reference photos arrive from image tools and shared files, including 
   await expect(thinking).toHaveCount(0);
 });
 
-test("block searches and successful naming supply concrete material and title studies", async ({ page }) => {
+test("preparation offers no pretend block selection; naming still shows the actual title", async ({ page }) => {
   await site(page);
   const agp = await platform(page);
   agp.session("study");
@@ -137,24 +144,14 @@ test("block searches and successful naming supply concrete material and title st
   agp.step("study", "", "", [{ tool_name: "shell", args: { command: "setup.sh" }, id: "setup" }]);
   await page.goto("/?build=study");
   const thinking = page.locator(".thinking");
-  await expect(thinking).not.toContainText("Palette ideas for your brief");
-  await expect(thinking.locator(".thinking-material")).toHaveCount(6);
+  await expect(thinking.getByRole("status")).toContainText("Preparing blocks");
+  await expect(thinking.locator(".cube")).toBeVisible();
+  await expect(thinking.getByRole("button")).toHaveCount(0);
   const find = { tool_name: "shell", args: { command: 'blocks find "stone brick"' }, id: "find" };
   agp.step("study", "", "", [find]);
-  agp.result("study", find, {
-    stdout: "stone_bricks, mossy_stone_bricks, stone_brick_stairs [facing=east|north|south|west]",
-  });
-  await expect(thinking.locator(".thinking-material")).toHaveCount(3);
-  await thinking.getByRole("button", { name: "stone brick stairs", exact: true }).click();
-  await expect(thinking.getByRole("button", { name: "stone brick stairs", exact: true })).toHaveAttribute(
-    "aria-pressed",
-    "true",
-  );
-  await expect(thinking.getByRole("button", { name: "stone brick stairs", exact: true })).toHaveAttribute(
-    "title",
-    "stairs",
-  );
-  await expect(thinking.locator(".swatch").first()).toHaveCSS("background-image", /sheet.png/);
+  agp.result("study", find, { stdout: "stone_bricks, mossy_stone_bricks" });
+  await expect(thinking.getByRole("status")).toContainText("Preparing blocks");
+  await expect(thinking).not.toContainText("stone bricks");
   const name = { tool_name: "shell", args: { command: 'blocks name "The Last Light"' }, id: "name" };
   agp.step("study", "", "", [name]);
   await expect(thinking.locator(".thinking-name-title")).toHaveAttribute("aria-label", "A name is on its way");

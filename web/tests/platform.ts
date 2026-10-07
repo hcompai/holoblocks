@@ -162,7 +162,8 @@ export async function platform(page: Page): Promise<Platform> {
       if (refused) return reply(refused, { detail: "The platform is unavailable." });
       agp.session("new-build", "pending");
       agp.sessions.get("new-build")!.group = body.group_id;
-      for (const message of body.messages ?? []) agp.say("new-build", message.message, message.images ?? []);
+      for (const message of body.messages ?? [])
+        if (!agp.hold) agp.say("new-build", message.message, message.images ?? []);
       if (body.messages?.length) agp.state("new-build", "running");
       if (agp.loseCreationResponse) {
         agp.loseCreationResponse = false;
