@@ -1,6 +1,6 @@
 import { replayDelay } from "./buildTiming";
 import { CaretLeftIcon, ClockCounterClockwiseIcon, GitForkIcon, PlusIcon } from "@phosphor-icons/react";
-import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type CSSProperties, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { Account } from "./account";
 import { AccountMenu } from "./AccountMenu";
 import { PHASES } from "./activity";
@@ -45,6 +45,7 @@ import { useProjectNames } from "./useProjectNames";
 import { useKeeper } from "./useSession";
 import { useSheet } from "./useSheet";
 import { usePhone } from "./usePhone";
+import { useViewport } from "./useViewport";
 import { type Framing, type Mode, RenderFailed, ViewControls, Viewer } from "./Viewer";
 import { extent } from "./voxels";
 
@@ -156,7 +157,8 @@ export default function App({ account }: { account: Account }) {
   const [filmBuild, setFilmBuild] = useState<Build | null>(null);
   const phone = usePhone();
   const [dock, setDock] = useState<HTMLElement | null>(null);
-  const sheet = useSheet(dock);
+  const viewport = useViewport(phone);
+  const sheet = useSheet(dock, viewport?.height);
   const palette = useMemo(() => Promise.resolve(PALETTE), []);
   const scene = useRef<BlockScene | null>(null);
   const chat = useRef<ChatHandle>(null);
@@ -189,6 +191,10 @@ export default function App({ account }: { account: Account }) {
 
   const home = !ref && !drafted;
   useEffect(() => void refreshBuilds(), [refreshBuilds, account.user.id, home]);
+  useLayoutEffect(() => {
+    const field = document.activeElement;
+    if (home && viewport && field instanceof HTMLTextAreaElement) field.scrollIntoView({ block: "nearest" });
+  }, [home, viewport]);
   /** Sessions this tab started, before the library lists them. */
   const started = useRef(new Set<string>());
   /** One of the user's sessions: started here, or listed as theirs, alone or behind a fork. */
@@ -528,7 +534,12 @@ export default function App({ account }: { account: Account }) {
   return (
     <div
       className={home ? "app home" : "app"}
-      style={sheeted ? ({ "--peek": `${sheet.peek}px` } as CSSProperties) : undefined}
+      style={
+        {
+          ...(sheeted && { "--peek": `${sheet.peek}px` }),
+          ...(viewport && { "--phone-height": `${viewport.height}px`, "--phone-top": `${viewport.top}px` }),
+        } as CSSProperties
+      }
     >
       <header>
         {sheeted ? (
@@ -859,6 +870,7 @@ export default function App({ account }: { account: Account }) {
                 setPlaying(p);
               }}
               onSpeed={setSpeed}
+              onLive={build?.status === "building" && !following ? () => scrub(last) : undefined}
               blocks={counts ? blockCount : null}
               spaceKey={mode !== "walk"}
             />

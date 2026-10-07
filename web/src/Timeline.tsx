@@ -12,13 +12,15 @@ interface Props {
   onStep: (step: number) => void;
   onPlay: (playing: boolean) => void;
   onSpeed: (speed: number) => void;
+  /** Return to the newest step and follow incoming revisions after scrubbing. */
+  onLive?: () => void;
   /** How many blocks the shown step has, once counted. */
   blocks: number | null;
   /** Whether Space plays and pauses; walking takes Space to jump and fly. */
   spaceKey: boolean;
 }
 
-export function Timeline({ build, step, playing, speed, onStep, onPlay, onSpeed, blocks, spaceKey }: Props) {
+export function Timeline({ build, step, playing, speed, onStep, onPlay, onSpeed, onLive, blocks, spaceKey }: Props) {
   const steps = build?.steps ?? [];
   const last = steps.length - 1;
   const current = Math.min(step, last);
@@ -73,6 +75,11 @@ export function Timeline({ build, step, playing, speed, onStep, onPlay, onSpeed,
           </button>
         ))}
       </div>
+      {onLive && (
+        <button className="timeline-live" onClick={onLive}>
+          Live
+        </button>
+      )}
       <div className="scrub">
         <div className="scrub-label">
           <b>{label}</b>

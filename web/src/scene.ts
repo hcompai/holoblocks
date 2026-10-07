@@ -521,6 +521,11 @@ export class BlockScene {
     return this.followBuild && !this.walking && !this.controls.autoRotate && !this.userMoved;
   }
 
+  /** Follow can be on without a camera to move when Reduce Motion skips placement. */
+  get hasBuildCamera() {
+    return this.followingBuild && this.cameraMotion !== null;
+  }
+
   setFollowBuild(follow: boolean) {
     this.followBuild = follow;
     if (!follow) this.cameraMotion = null;
@@ -736,6 +741,7 @@ export class BlockScene {
         new THREE.Vector3(width * 0.25, 0, depth * 0.25),
         new THREE.Vector3(width * 0.75, 12, depth * 0.75),
       );
+    this.camera.fov = ORBIT_FOV;
     const center = box.getCenter(new THREE.Vector3());
     const direction = view instanceof THREE.Vector3 ? view : VIEW_DIRECTIONS[view];
     const basis = new THREE.Matrix4().lookAt(direction, new THREE.Vector3(), this.camera.up);
@@ -1044,10 +1050,10 @@ export class BlockScene {
   setWalk(walk: boolean) {
     if (walk === this.walking) return;
     this.walking = walk;
-    this.camera.fov = walk ? WALK_FOV : ORBIT_FOV;
-    this.camera.updateProjectionMatrix();
     this.controls.enabled = !walk;
     if (walk) {
+      this.camera.fov = WALK_FOV;
+      this.camera.updateProjectionMatrix();
       this.pointer ??= this.makePointer();
       this.userMoved = true;
       this.standAtFront();
@@ -1058,10 +1064,22 @@ export class BlockScene {
       this.stopListening();
       this.walker = null;
       this.pointer?.unlock();
-      this.userMoved = false;
-      this.frameView(this.framing.view, this.framing.width, this.framing.depth);
+      this.controls.target.copy(this.inView());
+      this.controls.update();
     }
     this.dirty = true;
+  }
+
+  /** The point the camera looks at: the block or ground under the crosshair, else as far as the build's middle. */
+  private inView(): THREE.Vector3 {
+    this.raycaster.setFromCamera(new THREE.Vector2(0, 0), this.camera);
+    const { ray } = this.raycaster;
+    const world = this.visible();
+    const hit = world && raycast(world, ray.origin.toArray(), ray.direction.toArray());
+    if (hit) return ray.closestPointToPoint(new THREE.Vector3(...hit.cell).addScalar(0.5), new THREE.Vector3());
+    const { width, depth } = this.framing;
+    const middle = this.model?.bounds?.getCenter(new THREE.Vector3()) ?? new THREE.Vector3(width / 2, 0, depth / 2);
+    return ray.at(Math.max(this.camera.position.distanceTo(middle), 2), new THREE.Vector3());
   }
 
   /** Take the mouse pointer to look around, while walking; the browser needs a click for it. */
