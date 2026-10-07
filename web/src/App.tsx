@@ -24,6 +24,7 @@ import { Timeline } from "./Timeline";
 import { type BuildRef, useBuild } from "./useBuild";
 import { useKeeper } from "./useSession";
 import { useSheet } from "./useSheet";
+import { useViewport } from "./useViewport";
 import { type Framing, type Mode, RenderFailed, ViewControls, Viewer } from "./Viewer";
 
 const TITLE = document.title;
@@ -88,7 +89,8 @@ export default function App({ account }: { account: Account }) {
   const [filmBuild, setFilmBuild] = useState<Build | null>(null);
   const phone = useSyncExternalStore(onPhoneChange, () => PHONE.matches);
   const [dock, setDock] = useState<HTMLElement | null>(null);
-  const sheet = useSheet(dock);
+  const viewport = useViewport(phone);
+  const sheet = useSheet(dock, viewport?.height);
   const palette = useMemo(() => Promise.resolve(PALETTE), []);
   const scene = useRef<BlockScene | null>(null);
   const last = (build?.steps.length ?? 0) - 1;
@@ -340,7 +342,12 @@ export default function App({ account }: { account: Account }) {
   return (
     <div
       className={home ? "app home" : "app"}
-      style={sheeted ? ({ "--peek": `${sheet.peek}px` } as CSSProperties) : undefined}
+      style={
+        {
+          ...(sheeted && { "--peek": `${sheet.peek}px` }),
+          ...(viewport && { "--phone-height": `${viewport.height}px`, "--phone-top": `${viewport.top}px` }),
+        } as CSSProperties
+      }
     >
       <header>
         {sheeted ? (
@@ -582,6 +589,7 @@ export default function App({ account }: { account: Account }) {
                 setPlaying(p);
               }}
               onSpeed={setSpeed}
+              onLive={build?.status === "building" && !following ? () => scrub(last) : undefined}
               blocks={counts ? blockCount : null}
               spaceKey={mode !== "walk"}
             />
