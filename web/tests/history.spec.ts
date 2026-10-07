@@ -53,9 +53,9 @@ test("a version's link opens it, and forking it copies that model with where it 
   await page.locator(".preview-note").getByRole("button", { name: "Fork" }).click();
   await expect(page).toHaveURL(/\?fork=fork-[a-f0-9-]{36}$/);
   await shown(page, "r1");
-  await expect(page.locator(".recovery-origin")).toHaveText("Fork of Little Hut · V1");
+  await expect(page.locator(".recovery-origin")).toHaveText("Fork of Floor · V1");
   const [fork] = forks.values();
-  expect(fork.seed.origin).toEqual({ id: "hut", source: "session", name: "Little Hut", version: 1, revision: "r1" });
+  expect(fork.seed.origin).toEqual({ id: "hut", source: "session", name: "Floor", version: 1, revision: "r1" });
   expect(fork.seed.model.boxes).toEqual(model().boxes);
   expect(agp.posted("/api/v2/sessions")).toHaveLength(0);
 });

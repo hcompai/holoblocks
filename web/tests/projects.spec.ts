@@ -30,6 +30,7 @@ test("the owner renames a build from its title or its card, and the name sticks"
   await page.getByRole("button", { name: "HoloBlocks", exact: true }).click();
   await expect(mine(page)).toContainText("Red hut");
   await page.getByRole("button", { name: "Rename, publish or delete Red hut" }).click();
+  await page.getByRole("menuitem", { name: "Rename…" }).click();
   await page.getByRole("textbox", { name: "New name" }).fill("Blue hut");
   await page.getByRole("form", { name: "Rename" }).getByRole("button", { name: "Rename" }).click();
   await expect(mine(page)).toContainText("Blue hut");
@@ -68,7 +69,8 @@ test("a card's menu publishes the owner's build, makes it private and deletes it
     return id ? route.fulfill({ status: 404, json: {} }) : route.fulfill({ json: published });
   });
   await page.goto("/");
-  const menu = page.getByRole("button", { name: "Rename, publish or delete A little hut" });
+  await expect(mine(page)).toHaveCount(1);
+  const menu = mine(page).getByRole("button", { name: /^Rename, publish or delete / });
 
   await menu.click();
   await page.getByRole("menuitem", { name: "Publish…" }).click();
