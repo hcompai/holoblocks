@@ -119,6 +119,17 @@ test("a fork continues in one session only: its owner's, started on it", async (
   await expect(linkFork(OWNER.id, FORK, "another-run")).rejects.toMatchObject({ status: 409 });
 });
 
+test("two sessions racing to continue a fork: one wins, the other is refused", async () => {
+  await fork();
+  const raced = await Promise.allSettled([linkFork(OWNER.id, FORK, "run-a"), linkFork(OWNER.id, FORK, "run-b")]);
+  const won = raced.findIndex((r) => r.status === "fulfilled");
+  expect(raced.map((r) => r.status).sort()).toEqual(["fulfilled", "rejected"]);
+  expect(raced[1 - won]).toMatchObject({ reason: { status: 409 } });
+  expect(await json(await forks(call(OWNER, "GET", `/api/forks?id=${FORK}`)))).toMatchObject({
+    sessionId: won ? "run-b" : "run-a",
+  });
+});
+
 test.describe("someone else's builds", () => {
   let imported = "";
   test.beforeEach(async () => {
@@ -193,7 +204,7 @@ test("deleting a fork deletes its starting model, record and name, and hides the
   await fork();
   await linkFork(OWNER.id, FORK, RUN);
   expect((await renameBuild(call(OWNER, "PATCH", "/api/names", { id: FORK, name: "Red hut" }))).status).toBe(200);
-  expect([...blob.objects.keys()].filter((p) => p.includes(FORK))).toHaveLength(3);
+  expect([...blob.objects.keys()].filter((p) => p.includes(FORK))).toHaveLength(4);
 
   expect((await deleteBuild(call(OWNER, "POST", "/api/deleted", { id: FORK }))).status).toBe(204);
   expect([...blob.objects.keys()].filter((p) => p.includes(FORK))).toEqual([]);

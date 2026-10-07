@@ -57,6 +57,24 @@ export async function record<T extends { id: string }>(prefix: string, value: T)
   await drop(`${prefix}${value.id}/`, path);
 }
 
+/** Write `value` at `path` unless a value is there already; returns what the first writer wrote. */
+export async function claim<T>(path: string, value: T): Promise<T> {
+  try {
+    await put(path, JSON.stringify(value), {
+      ...PUBLIC,
+      addRandomSuffix: false,
+      allowOverwrite: false,
+      contentType: "application/json",
+    });
+    return value;
+  } catch (e) {
+    const blob = (await listed(path)).find((b) => b.pathname === path);
+    const response = blob && (await fetch(blob.url));
+    if (!response?.ok) throw e;
+    return (await response.json()) as T;
+  }
+}
+
 /** The latest version of each record under `prefix`, or of record `id` alone. */
 export async function records<T>(prefix: string, id?: string): Promise<T[]> {
   const latest = new Map<string, ListBlobResultBlob>();
