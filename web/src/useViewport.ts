@@ -7,7 +7,6 @@ export function useViewport(active: boolean) {
     if (!active) return;
     const viewport = window.visualViewport;
     const fit = () => {
-      // Leave browser pinch zoom alone; only follow keyboard and browser chrome changes.
       if (viewport && viewport.scale !== 1) return;
       setSize({ height: viewport?.height ?? window.innerHeight, top: viewport?.offsetTop ?? 0 });
     };

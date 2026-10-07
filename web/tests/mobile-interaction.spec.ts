@@ -4,7 +4,6 @@ import { platform } from "./platform";
 
 test.use({ viewport: { width: 390, height: 844 }, reducedMotion: "reduce" });
 
-// Safari changes these values for its keyboard without resizing the layout viewport.
 async function viewport(page: Page, height: number, top = 0, scale = 1) {
   await page.evaluate(
     ({ height, top, scale }) => {
@@ -55,7 +54,6 @@ test("the phone sheet and composer follow the keyboard, then restore the model a
   await expect(sheet).toHaveAttribute("data-detent", "peek");
   await expect(composer).toHaveValue("Keep this draft");
 
-  // Browser pinch zoom must not reflow the app into a smaller workspace.
   await viewport(page, 200, 60, 2);
   await expect.poll(async () => (await app.boundingBox())!.height).toBe(400);
   await viewport(page, 844);
@@ -106,7 +104,6 @@ test("Live resumes incoming steps after scrubbing without remounting the rendere
   await expect(live).toBeInViewport();
   await page.getByPlaceholder("Ask for a change").fill("Keep this draft");
   await expect(page.locator("aside.sheet")).toHaveAttribute("data-detent", "half");
-  // Wait for the opening transition before measuring the drag target.
   await page.locator(".sheet-handle").hover();
   const handle = (await page.locator(".sheet-handle").boundingBox())!;
   await page.mouse.move(handle.x + 100, handle.y + 10);
@@ -114,7 +111,6 @@ test("Live resumes incoming steps after scrubbing without remounting the rendere
   await page.mouse.move(handle.x + 100, 830, { steps: 6 });
   await page.mouse.up();
   await expect(page.locator("aside.sheet")).toHaveAttribute("data-detent", "peek");
-  // Still service the agent's render request while the user inspects an earlier step.
   agp.look("live", "inspecting", { angle: 90 });
   await expect.poll(() => agp.posted("/tool_results").length).toBe(1);
   expect(agp.posted("/tool_results")[0].result[0]).toContain(hut.revision.slice(0, 8));
