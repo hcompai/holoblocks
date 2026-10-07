@@ -6,8 +6,8 @@ import { platformAsset, externalImage, assetBlob } from "./assetUrl";
 import type { Build } from "./model";
 import { script } from "./remix";
 import { AGENT } from "./session";
+import { HOLO } from "./holo";
 
-const MODEL = "holo4-27b";
 const MAX_STEPS = 300;
 const MAX_TIME_S = 3 * 3600;
 /** How long a finished build keeps its Workstation for a follow-up message. */
@@ -82,7 +82,7 @@ function agent(): HaiAgents.Agent {
   return {
     name: AGENT,
     description: "Designs Minecraft structures in code, step by step, in HoloBlocks.",
-    model: MODEL,
+    model: HOLO.id,
     reasoningEffort: "xhigh",
     instructions,
     environments: [{ kind: "workstation", id: AGENT }],

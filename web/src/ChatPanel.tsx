@@ -6,6 +6,7 @@ import type { Build, Work } from "./model";
 import type { Activity } from "./session";
 import { label, SUGGESTIONS } from "./suggestions";
 import { ThinkingIcon } from "./Thinking";
+import { HOLO } from "./holo";
 
 const WHO = "Holo";
 const PINNED_PX = 80;
@@ -372,6 +373,9 @@ export function ChatPanel(props: Props) {
           }}
         />
       </div>
+      <span className="composer-model" aria-label={`Model: ${HOLO.name}`}>
+        {HOLO.name}
+      </span>
       {busy && build && !typed ? (
         <button
           className="round-button send stop"
