@@ -25,6 +25,16 @@ test("on a phone the model fills the screen under a chat sheet that peeks, expan
   await expect(page.getByRole("button", { name: "Share", exact: true })).toBeInViewport();
   await expect(page.locator(".timeline")).toBeInViewport();
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+  const badge = (await page.getByLabel("Model: Holo4 27B", { exact: true }).boundingBox())!;
+  const send = (await page.getByRole("button", { name: "Send", exact: true }).boundingBox())!;
+  const placeholderEnd = await page.getByPlaceholder("Ask for a change").evaluate((area: HTMLTextAreaElement) => {
+    const style = getComputedStyle(area);
+    const ctx = document.createElement("canvas").getContext("2d")!;
+    ctx.font = style.font;
+    return area.getBoundingClientRect().left + parseFloat(style.paddingLeft) + ctx.measureText(area.placeholder).width;
+  });
+  expect(badge.x).toBeGreaterThan(placeholderEnd);
+  expect(badge.x + badge.width).toBeLessThanOrEqual(send.x);
   await page.screenshot({ path: testInfo.outputPath("phone-peek.png") });
 
   await page.locator(".sheet-handle").click();
@@ -45,4 +55,6 @@ test("on a phone the model fills the screen under a chat sheet that peeks, expan
   await page.mouse.up();
   await expect(sheet).toHaveAttribute("data-detent", "peek");
   await expect(page.getByPlaceholder("Ask for a change")).toBeInViewport();
+  await page.getByPlaceholder("Ask for a change").fill("Make it taller");
+  await expect(page.getByLabel("Model: Holo4 27B", { exact: true })).toBeHidden();
 });

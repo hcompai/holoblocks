@@ -970,6 +970,17 @@ aside > .aside-head + * {
   gap: 6px;
 }
 
+.composer-model {
+  position: absolute;
+  bottom: 16px;
+  left: 48px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 16px;
+  pointer-events: none;
+}
+
 .round-button {
   width: 32px;
   height: 32px;
@@ -3202,6 +3213,16 @@ main {
   .sheet .composer-tools {
     left: 6px;
     bottom: 6px;
+  }
+
+  .sheet .composer-model {
+    right: 48px;
+    bottom: 14px;
+    left: auto;
+  }
+
+  .sheet .composer:has(textarea:not(:placeholder-shown)) .composer-model {
+    display: none;
   }
 
   .sheet .send {
