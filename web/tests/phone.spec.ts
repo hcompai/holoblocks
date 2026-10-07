@@ -25,6 +25,10 @@ test("on a phone the model fills the screen under a chat sheet that peeks, expan
   await expect(page.getByRole("button", { name: "Share", exact: true })).toBeInViewport();
   await expect(page.locator(".timeline")).toBeInViewport();
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+  const spin = page.getByRole("button", { name: "Spin", exact: true });
+  await expect(spin).toBeHidden();
+  await page.getByRole("button", { name: "View controls" }).click();
+  await expect(spin).toBeInViewport();
   await page.screenshot({ path: testInfo.outputPath("phone-peek.png") });
 
   await page.locator(".sheet-handle").click();
@@ -45,4 +49,23 @@ test("on a phone the model fills the screen under a chat sheet that peeks, expan
   await page.mouse.up();
   await expect(sheet).toHaveAttribute("data-detent", "peek");
   await expect(page.getByPlaceholder("Ask for a change")).toBeInViewport();
+});
+
+test.describe("on a short touch screen", () => {
+  test.use({ viewport: { width: 375, height: 500 }, hasTouch: true });
+
+  test("every view control stays tappable", async ({ page }) => {
+    await site(page);
+    const agp = await platform(page);
+    agp.session("short", "idle");
+    agp.say("short", "A little hut");
+    agp.share("short", model());
+    agp.answer("short", "The hut is ready.");
+    await page.goto("/?build=short");
+    await page.getByRole("button", { name: "View controls" }).tap();
+    const sound = page.locator(".view-tabs .placement-sound");
+    const pressed = await sound.getAttribute("aria-pressed");
+    await sound.tap();
+    await expect(sound).not.toHaveAttribute("aria-pressed", pressed!);
+  });
 });
