@@ -74,7 +74,6 @@ function useFork(id: string | null) {
     savedFork(id)
       .then(async (saved) => {
         if (saved.sessionId) return saved;
-        // The link may lag the session's start, or the tab that started it closed before saving it.
         try {
           return { ...saved, sessionId: await forkSession(id) };
         } catch {

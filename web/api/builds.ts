@@ -107,10 +107,7 @@ export const POST = route(async (request) => {
   return Response.json(published, { status: 201 });
 });
 
-/**
- * Take a build out of the library and delete its files: its author only. An admin can take someone else's build out
- * of the public library to moderate it, but never delete it: it becomes private, kept for its owner.
- */
+/** Take a build out of the library and delete its files: its author only; an admin's unpublish makes it private for its owner. */
 export const DELETE = route(async (request) => {
   const { user } = holder(request);
   const id = buildId(new URL(request.url).searchParams.get("id"));

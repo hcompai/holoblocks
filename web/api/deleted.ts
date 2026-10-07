@@ -9,10 +9,7 @@ export const GET = route(async (request) =>
   Response.json(await forgotten(holder(request).user.id), { headers: { "Cache-Control": "private, no-store" } }),
 );
 
-/**
- * Delete one of the caller's builds for good: `{ id }`. It leaves the library, a session's build leaves their builds,
- * and a fork's files go with the session it continued in.
- */
+/** Delete one of the caller's builds for good: `{ id }`, with its library entry, name, and a fork's files and session. */
 export const POST = route(async (request) => {
   const { user } = holder(request);
   const { id } = await body<{ id?: unknown }>(request);

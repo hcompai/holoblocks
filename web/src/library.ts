@@ -294,7 +294,6 @@ export async function library(): Promise<{ builds: BuildSummary[]; failed: Shelf
   const deleted = new Set(value(deletedLoaded, "mine"));
   const allForks = value(forksLoaded, "mine");
   const allSessions = value(sessionsLoaded, "mine");
-  // Shown apart, a fork's session would list twice: the user's builds load whole or not at all.
   const lost = failed.includes("mine");
   const forks = lost ? [] : allForks;
   const mine = lost ? [] : allSessions.filter((s) => !deleted.has(s.id));
@@ -321,8 +320,7 @@ export async function library(): Promise<{ builds: BuildSummary[]; failed: Shelf
     };
   });
   const continued = new Set(forks.flatMap((f) => (f.sessionId ? [f.sessionId] : [])));
-  // A build is public or private, never both: the public listing wins if a stale private entry lingers. A session or
-  // fork a moderator hid already has its card.
+  // A build is public or private, never both: the public listing wins if a stale private entry lingers.
   const carded = new Set([...mine.map((s) => s.id), ...forks.map((f) => f.id)]);
   const privately = own.filter((p) => !listed.has(p.id) && !carded.has(p.id));
   const copies = forks.map((f): BuildSummary => {

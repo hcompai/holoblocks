@@ -189,7 +189,6 @@ function follow(id: string, signal: AbortSignal, notify: Listener, displayed: ()
       seedChecked = true;
       if (!loaded) model = unpack(seed.model);
     }
-    // A session that is queued, or whose setup failed, has no attachments yet: its request still holds the fork's model.
     if (!seedChecked && !transcript.model) {
       seedChecked = true;
       seed = await requestedSeed(id, signal).catch((e) => {

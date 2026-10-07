@@ -86,7 +86,6 @@ const entries = async (prefix: string, id?: string) =>
 /** Put the build in the library, then delete the files its previous publication used and this one does not. */
 export async function enter(published: Published, before: string[], written: string[]) {
   await record(LIBRARY, published);
-  // Publishing again takes the place of a private entry left by a moderator, so it is never both.
   await drop(`${shelf(published.owner)}${published.id}/`);
   const gone = before.filter((url) => !written.includes(url));
   if (gone.length) await del(gone);
