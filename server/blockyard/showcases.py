@@ -1,4 +1,4 @@
-"""Showcases: strong build scripts in agent/showcase, shipped to the agent and shown in the gallery."""
+"""Showcases: strong build scripts in agent/showcase, all shipped to the agent; the gallery shows the ones Holo built."""
 
 from __future__ import annotations
 
@@ -18,6 +18,7 @@ class Showcase:
     key: str
     name: str
     intro: str
+    builder: str
     site: tuple[int, int, int] = (64, 64, 64)
 
     @property
@@ -46,6 +47,7 @@ SHOWCASES = [
             "Scripted showcase: an overgrown steampunk manor with a steep copper roof, timber-framed plaster and "
             "smoking chimneys."
         ),
+        builder="claude",
     ),
     Showcase(
         key="gothic-cathedral",
@@ -54,6 +56,7 @@ SHOWCASES = [
             "Scripted showcase: a dark gothic cathedral with flying buttresses, rose windows, gargoyles and "
             "two openwork stone spires, built one step at a time."
         ),
+        builder="claude",
         site=(64, 96, 64),
     ),
     Showcase(
@@ -63,6 +66,7 @@ SHOWCASES = [
             "Scripted showcase: Bilbo's round green door dug into a grassy hill under a great oak, with Bagshot Row, "
             "fields, hedgerows and sheep around it."
         ),
+        builder="claude",
         site=(128, 100, 128),
     ),
     Showcase(
@@ -72,6 +76,7 @@ SHOWCASES = [
             "Scripted showcase: the elven city in the gold mallorn trees, flets and winding stairs on a hill ringed "
             "by a green wall and a moat, hanging bridges and Galadriel's pavilion near the top."
         ),
+        builder="claude",
         site=(112, 100, 112),
     ),
 ]

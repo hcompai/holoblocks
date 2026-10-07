@@ -168,12 +168,20 @@ def test_showcases_build_without_problems_each_step_told_by_its_comment(showcase
         assert not step.code.splitlines()[-1].startswith("#")
 
 
-def test_gallery_exports_each_showcase_with_its_story(tmp_path, monkeypatch):
+def test_gallery_exports_holo_showcases_with_their_story(tmp_path, monkeypatch):
     (tmp_path / "hut.py").write_text('# Stone walls.\nstep("Walls")\nfill(0, 0, 0, 3, 2, 3, "stone")\n')
     monkeypatch.setattr(showcases, "SCRIPTS", tmp_path)
-    monkeypatch.setattr(gallery, "SHOWCASES", [Showcase(key="hut", name="Hut", intro="A hut.", site=(8, 8, 8))])
+    monkeypatch.setattr(
+        gallery,
+        "SHOWCASES",
+        [
+            Showcase(key="hut", name="Hut", intro="A hut.", builder="holo", site=(8, 8, 8)),
+            Showcase(key="shed", name="Shed", intro="A shed.", builder="claude", site=(8, 8, 8)),
+        ],
+    )
     out = gallery.export(tmp_path / "site")
     [summary] = json.loads((out / "builds.json").read_text())
     model = json.loads((out / "builds" / "hut.json").read_text())
     assert summary["id"] == "hut" and summary["revision"] == model["revision"]
     assert [m["text"] for m in model["messages"]][:2] == ["A hut.", "Stone walls."] and model["status"] == "done"
+    assert not (out / "builds" / "shed.json").exists()
