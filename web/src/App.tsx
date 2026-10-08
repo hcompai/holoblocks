@@ -44,10 +44,11 @@ import { ProjectTitle } from "./ProjectTitle";
 import { RecoveryPanel } from "./RecoveryPanel";
 import type { BlockScene } from "./scene";
 import { selectedArea } from "./selectedArea";
-import { SESSION_DELETE_NOTE, ShareMenu } from "./ShareMenu";
+import { SESSION_DELETE_NOTE, ShareMenu, type Publishing } from "./ShareMenu";
 import { SignInDialog } from "./SignInDialog";
 import { label } from "./suggestions";
 import { ThemeToggle } from "./ThemeToggle";
+import { VisibilityToggle } from "./VisibilityToggle";
 import { Timeline } from "./Timeline";
 import { type BuildRef, useBuild } from "./useBuild";
 import { useProjectNames } from "./useProjectNames";
@@ -542,6 +543,18 @@ export default function App({ account }: { account: Account | null }) {
   const opening = `Opening ${heading?.name ?? "the build"}`;
   /** The open build, once it is more than a request on its way. */
   const actionable = drafted ? null : build;
+  const publishing: Publishing | null =
+    actionable && manageable && account
+      ? {
+          published: imported ? !summary?.private : ref?.source === "public" || !!listed,
+          imported,
+          blocked:
+            actionable.status === "building" ? "Publish once Holo answers" : !built ? "Nothing is built yet" : null,
+          author: account.user.name,
+          onPublish: imported ? republish : publishBuild,
+          onUnpublish: unpublishBuild,
+        }
+      : null;
   const loading = error ? null : !build ? buildId && opening : !built ? null : counts ? null : opening;
   /** On a phone, the chat is a bottom sheet over the model, and holds the code and blocks too. */
   const sheeted = phone && !home;
@@ -602,27 +615,12 @@ export default function App({ account }: { account: Account | null }) {
             <span className="button-label">Share a GIF</span>
           </button>
         )}
+        {publishing && !error && <VisibilityToggle key={`${ref?.source}:${ref?.id}`} publishing={publishing} />}
         {actionable && !error && (
           <ShareMenu
             build={actionable}
             link={!previewing && shared ? linkTo(shared) : null}
-            publishing={
-              manageable && account
-                ? {
-                    published: imported ? !summary?.private : ref?.source === "public" || !!listed,
-                    imported,
-                    blocked:
-                      actionable.status === "building"
-                        ? "Publish once Holo answers"
-                        : !built
-                          ? "Nothing is built yet"
-                          : null,
-                    author: account.user.name,
-                    onPublish: imported ? republish : publishBuild,
-                    onUnpublish: unpublishBuild,
-                  }
-                : null
-            }
+            publishing={publishing}
             onDelete={manageable ? deleteBuild : null}
             deleteNote={ref && isSession(ref.id) ? SESSION_DELETE_NOTE : undefined}
             image={() => scene.current?.image() ?? Promise.resolve(null)}
