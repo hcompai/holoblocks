@@ -29,6 +29,19 @@ test("a film raises each step in order, bottom layer first, before the turntable
   expect(() => planFilm(HUT, 5)).toThrow();
 });
 
+test("the GIF call to action appears only for a completed, nonempty build", async ({ page }) => {
+  const hut = model();
+  for (const status of ["building", "error", "done"] as const) {
+    await site(page, [{ ...hut, id: "hut", status }]);
+    await page.goto("/?showcase=hut");
+    await expect(page.locator(".viewer")).toHaveAttribute("data-revision", hut.revision);
+    await expect(page.getByRole("button", { name: "Share a GIF", exact: true })).toHaveCount(status === "done" ? 1 : 0);
+  }
+  await site(page, [{ ...hut, id: "hut", boxes: [], steps: [] }]);
+  await page.goto("/?showcase=hut");
+  await expect(page.getByRole("button", { name: "Share a GIF", exact: true })).toHaveCount(0);
+});
+
 test("Share a GIF makes a credited looping GIF of the build and leaves the viewer on its step", async ({
   page,
 }, testInfo) => {
@@ -71,6 +84,22 @@ test("Share a GIF makes a credited looping GIF of the build and leaves the viewe
   await dialog.getByRole("checkbox", { name: "H Company credit" }).check();
   const link = dialog.getByRole("link", { name: "Download GIF" });
   await expect(link).toBeVisible({ timeout: 240000 });
+
+  await page.evaluate(() => {
+    window.open = (url, target, features) => {
+      Object.assign(window, { xPost: { url: String(url), target, features } });
+      return null;
+    };
+  });
+  const xDownload = page.waitForEvent("download");
+  await dialog.getByRole("button", { name: "Post on X", exact: true }).click();
+  expect((await xDownload).suggestedFilename()).toMatch(/\.gif$/);
+  const post = await page.evaluate(() => (window as unknown as { xPost: { url: string; features: string } }).xPost);
+  const intent = new URL(post.url);
+  expect(intent.origin + intent.pathname).toBe("https://x.com/intent/tweet");
+  expect(intent.searchParams.get("text")).toBe(await caption.inputValue());
+  expect(intent.searchParams.has("url")).toBe(false);
+  expect(post.features).toBe("noopener,noreferrer");
 
   const pending = page.waitForEvent("download");
   await link.click();

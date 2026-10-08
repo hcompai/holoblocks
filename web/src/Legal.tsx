@@ -129,6 +129,9 @@ export function SiteFooter() {
           <li>
             Icons: <External href="https://phosphoricons.com/">Phosphor Icons</External>, under the MIT License.
           </li>
+          <li>
+            HoloBlocks is open source: <External href={REPO}>hcompai/holoblocks</External> on GitHub.
+          </li>
         </ul>
       </dialog>
     </footer>
