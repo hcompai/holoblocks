@@ -1,0 +1,16 @@
+data/
+node_modules/
+web/dist/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+*.tsbuildinfo
+.vercel/
+.env*
+
+web/public/blockyard.tgz
+web/public/gallery/
+web/test-results/
+web/playwright-report/
