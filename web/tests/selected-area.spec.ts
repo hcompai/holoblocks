@@ -103,6 +103,7 @@ test("asking about a showcase's area starts a remix carrying the area", async ({
     "blockyard.tgz",
     "selected-area.json",
     "selected-area-model.py",
+    "blockyard-fork.json.gz",
     "remix.py",
   ]);
 });

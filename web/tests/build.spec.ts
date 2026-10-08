@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { gunzipSync } from "node:zlib";
+import { EMPTY_MODEL } from "../src/model";
 import { model, shareMenu, site } from "./fixtures";
 import { platform } from "./platform";
 
@@ -354,5 +355,18 @@ test("a build whose session ended takes a change as a copy, under the same name"
   await expect(page.locator(".aside-title")).toHaveText("Little Hut");
   const [first] = agp.posted("/api/v2/sessions")[0].messages;
   expect(first.message).toBe("Add a chimney");
-  expect(first.files.map((f: { name: string }) => f.name)).toEqual(["blockyard.tgz", "remix.py"]);
+  expect(first.files.map((f: { name: string }) => f.name)).toEqual([
+    "blockyard.tgz",
+    "blockyard-fork.json.gz",
+    "remix.py",
+  ]);
+  const seed = JSON.parse(gunzipSync(Buffer.from(first.files[1].source, "base64")).toString());
+  expect(seed.model.name).toBe("Little Hut");
+  expect(seed.origin).toMatchObject({ id: "ended", source: "session", name: "Little Hut" });
+  agp.share("new-build", { ...model(), name: EMPTY_MODEL.name });
+  agp.answer("new-build", "Added.");
+  await page.evaluate(() => localStorage.removeItem("blockyard.library"));
+  await page.reload();
+  await shown(page, model().revision);
+  await expect(page.locator(".aside-title")).toHaveText("Little Hut");
 });
