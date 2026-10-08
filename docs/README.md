@@ -19,7 +19,7 @@ Setup, architecture, deploy and the toolkit. The [main README](../README.md) is 
 - **Replay** the steps, read each step's code and browse the blocks. **Share** holds the rest: publish, copy the link, a GIF of the build rising (made as the dialog opens, 8 to 30 seconds), a WorldEdit `.schem` or a PNG, and **Delete** for your own builds.
 - **Edit** by hand: choose **Edit**, click a block, Shift-drag a box around the blocks you see, then move, replace or delete them, or right-click a face to place the block in hand; undo, redo and reset. Edits are saved in this browser per build and revision, and publishing includes them. The **?** button or key lists every shortcut.
 - **Walk** through the build: choose **Walk**, click the model, then WASD and the mouse. Space jumps, Space twice flies, Esc leaves. Edit and Walk show once the build has blocks.
-- **Publish** a build to the home page's Public builds, **fork** any build or any of its versions (a private copy, saved at once; Holo starts on its first message from an exact copy: the build's own script, or a replay of its blocks), **import** a model file, **copy** a link that previews the build, even on the sign-in page.
+- **Publish** a build to the home page's Public builds, **fork** any build or any of its versions (a private copy, saved at once; Holo starts on its first message from an exact copy: the build's own script, or a replay of its blocks), **import** a model file, **copy** a link that previews the build and opens it for anyone, signed in or not.
 - **History** lists every model Holo shared in a build, numbered V1, V2…; picking one previews it read only (`?version=<n>` links to it), and **Fork** continues from it.
 - **Rename** a build of yours from its title, or from the **…** on its card, which also publishes it, makes it private or deletes it.
 - **Follow up** on a build for 10 minutes after it ends, or while Holo builds: a message reaches it at once and Holo folds it in at its next step, without stopping. Once its session ended, a change starts a copy under the same name. **Stop** (shown while the composer is empty) makes Holo wrap up with an answer, and the build stays open.
@@ -49,7 +49,7 @@ vercel link --yes --scope h-company --project blockyard && vercel env pull .env.
 npm run dev                                                                            # http://127.0.0.1:5173
 ```
 
-Needs Node 20+. HoloBlocks is open to H Company: everything sits behind a sign-in with an `@hcompany.ai` Google account on the H portal.
+Needs Node 20+. Signed out, anyone can open the public builds and showcases, read only, and export them. Building, forking, importing and managing builds need a sign-in with an `@hcompany.ai` account on the H portal, which mints the user's Agents API key; the sign-in dialog opens on any of those actions.
 
 With the dev server running, open `/dev/thinking.html` to try the thinking visuals without signing in. Change the request to try different subject sketches and material textures. **Replay photo arrivals** shows three credited sample references appearing one at a time; the naming stage reveals a sample title. Show the illustrative model and replay its placement at different speeds. Block sounds are on by default; the speaker button mutes them. This separate dev entry and its sample photos are not included in the production build.
 
@@ -60,11 +60,11 @@ browser ──same tab──▶ portal ──Google──▶ portal sets its acc
 portal ──redirect──▶ GET /api/session: who is it? mint a 30-day "HoloBlocks <email> <time>" key ──▶ back where the user was
 browser ──key──▶ Agents API (Holo builds, sessions listed per user)
 browser ──POST /api/builds (pass + key)──▶ snapshot of the session ──▶ Vercel Blob (public)
-signed in ──GET /api/builds──▶ the public library
+anyone ──GET /api/builds──▶ the public library
 owner ──GET /api/builds?id=&file= (pass + key)──▶ Vercel Blob (private)
 ```
 
-- `web/api/` holds the Vercel functions; `web/scripts/build-api.mjs` bundles them, and `npm run dev` serves them too. Deployed, `/?public=<id>` and `/?showcase=<id>` go to `/api/preview`: the app's page, with that build's name, step count, author and cover in its link preview. The sign-in page reads those tags back to show a signed-out visitor what was shared with them.
+- `web/api/` holds the Vercel functions; `web/scripts/build-api.mjs` bundles them, and `npm run dev` serves them too. Deployed, `/?public=<id>` and `/?showcase=<id>` go to `/api/preview`: the app's page, with that build's name, step count, author and cover in its link preview.
 - The portal's cookie never reaches a local dev server, so there the portal sends a one-time code instead (PKCE, RFC 8252); it only redirects to `127.0.0.1`, where `localhost` forwards.
 - Signing in again revokes the previous key. The key lives in the browser's local storage; the pass, signed with `BLOCKYARD_SECRET`, names its holder to the functions.
 - Publishing copies the session's model (with this browser's edits, which drop its script), transcript and platform-hosted or embedded images, so they survive its session. External HTTPS photos remain links and depend on their original host; the server does not download them. The API key goes only to the Agents origin. Only its author can publish, unpublish, rename or delete a build; the emails in `BLOCKYARD_ADMINS` can take anyone's out of the public library, which makes it private for its owner. Publishing again deletes the private copy.
@@ -130,5 +130,5 @@ cd web && npm ci && npx playwright install chromium && npm test && npm run build
 
 The server tests run the toolkit offline. The browser tests mock the Agents API and the library and render real
 geometry: a build that shares models and asks for renders, a new build with a photo, one-click ideas, a follow-up and
-Stop, a message mid-build, deleting a build, a change to an ended build, the home page's builds, publishing, forks, history, renaming, the card menu, imports, link previews, sign-in, edits, walking,
+Stop, a message mid-build, deleting a build, a change to an ended build, the home page's builds, publishing, forks, history, renaming, the card menu, imports, link previews, sign-in, the signed-out view, edits, walking,
 the GIF export, recovery and the tab guard.

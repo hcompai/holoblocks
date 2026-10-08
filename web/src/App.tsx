@@ -1,7 +1,7 @@
 import { replayDelay } from "./buildTiming";
-import { CaretLeftIcon, ClockCounterClockwiseIcon, GitForkIcon, PlusIcon } from "@phosphor-icons/react";
+import { CaretLeftIcon, ClockCounterClockwiseIcon, GitForkIcon, PlusIcon, SignInIcon } from "@phosphor-icons/react";
 import { type CSSProperties, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { Account } from "./account";
+import { type Account, signInError } from "./account";
 import { AccountMenu } from "./AccountMenu";
 import { PHASES } from "./activity";
 import { cancel, create, remix, say, stop } from "./agent";
@@ -37,6 +37,7 @@ import { RecoveryPanel } from "./RecoveryPanel";
 import type { BlockScene } from "./scene";
 import { selectedArea } from "./selectedArea";
 import { SESSION_DELETE_NOTE, ShareMenu } from "./ShareMenu";
+import { SignInDialog } from "./SignInDialog";
 import { label } from "./suggestions";
 import { ThemeToggle } from "./ThemeToggle";
 import { Timeline } from "./Timeline";
@@ -86,13 +87,17 @@ const same = (a: BuildRef | null, b: BuildRef | null) => a?.id === b?.id && a?.s
 /** A build of a session, rather than a fork or an import: the platform keeps every session, so deleting one hides it. */
 const isSession = (id: string) => !id.startsWith("fork-") && !id.startsWith("import-");
 
-export default function App({ account }: { account: Account }) {
+export default function App({ account }: { account: Account | null }) {
   const [ref, setRef] = useState<BuildRef | null>(urlBuild);
   const opened = useRef(ref);
   opened.current = ref;
   const buildId = ref?.id ?? null;
-  const read = useBuild(ref);
-  const { names, rename } = useProjectNames(account.user.id);
+  /** A session or a fork, signed out: opening it needs the user's Agents API key. */
+  const locked = !account && (ref?.source === "session" || ref?.source === "fork");
+  const read = useBuild(locked ? null : ref);
+  const { names, rename } = useProjectNames(account?.user.id ?? null);
+  const [signingIn, setSigningIn] = useState(() => !account && signInError !== null);
+  const askSignIn = () => setSigningIn(true);
   /** What the user just asked for, shown as a starting build where they asked it, until its session answers. */
   const [draft, setDraft] = useState<{ at: BuildRef | null; build: Build; since: number } | null>(null);
   const drafted = draft && same(draft.at, ref) && read.build?.id !== draft.build.id ? draft.build : null;
@@ -109,7 +114,8 @@ export default function App({ account }: { account: Account }) {
     observed && !live?.boxes.length && (observed.label === PHASES.blocks || observed.label === PHASES.checking)
       ? { ...observed, label: PHASES.draft }
       : observed;
-  const { error, syncError, models, seed, runId, attachSession } = read;
+  const { syncError, models, seed, runId, attachSession } = read;
+  const error = locked ? "Sign in to open this build." : read.error;
   const edits = useEdits(live);
   const [historyOpen, setHistoryOpen] = useState(() => urlVersion() !== null);
   /** The version the URL asks for, until the history has loaded it. */
@@ -190,7 +196,7 @@ export default function App({ account }: { account: Account }) {
   }, []);
 
   const home = !ref && !drafted;
-  useEffect(() => void refreshBuilds(), [refreshBuilds, account.user.id, home]);
+  useEffect(() => void refreshBuilds(), [refreshBuilds, home]);
   useLayoutEffect(() => {
     const field = document.activeElement;
     if (home && viewport && field instanceof HTMLTextAreaElement) field.scrollIntoView({ block: "nearest" });
@@ -367,7 +373,7 @@ export default function App({ account }: { account: Account }) {
       ? !!read.build
       : ref?.source === "session"
         ? mine(ref.id)
-        : ref?.source === "public" && summary?.owner === account.user.id;
+        : ref?.source === "public" && !!account && summary?.owner === account.user.id;
   /** An imported build of theirs: it lives only in the library, with no session to fall back to. */
   const imported = owned && ref?.source === "public" && ref.id.startsWith("import-");
   const manageable = owned && !previewing;
@@ -407,6 +413,7 @@ export default function App({ account }: { account: Account }) {
 
   /** A card's menu, for one of the user's own builds: a session, a fork or an imported build. */
   const manage = (b: BuildSummary, published: boolean): ProjectActions | null => {
+    if (!account) return null;
     if (b.source !== "session" && b.source !== "fork" && !(b.source === "public" && b.owner === account.user.id))
       return null;
     const isImport = b.id.startsWith("import-");
@@ -447,6 +454,7 @@ export default function App({ account }: { account: Account }) {
 
   /** Save a private copy of the shown model, and open it; Holo starts on its first message. */
   const beginFork = async () => {
+    if (!account) return askSignIn();
     if (!build?.boxes.length || !ref || wantedVersion !== null || forking) return;
     const key = `${ref.source}:${ref.id}:${design(build)}`;
     if (forkAttempt.current?.key !== key) {
@@ -474,11 +482,12 @@ export default function App({ account }: { account: Account }) {
     }
   };
 
+  const forkHint = account ? "Fork to edit" : "Sign in to fork";
   const closed =
     ref?.source === "showcase" ? (
-      "Showcase · Fork to edit"
+      `Showcase · ${forkHint}`
     ) : ref?.source === "public" ? (
-      `By ${summary?.author ?? "an H builder"} · Fork to edit`
+      `${summary?.author ? `By ${summary.author}` : "Public build"} · ${forkHint}`
     ) : live && !drafted && live.status === "error" ? (
       <RecoveryPanel
         key={live.id}
@@ -571,7 +580,7 @@ export default function App({ account }: { account: Account }) {
             build={actionable}
             link={!previewing && shared ? linkTo(shared) : null}
             publishing={
-              manageable
+              manageable && account
                 ? {
                     published: imported ? !summary?.private : ref?.source === "public" || !!listed,
                     imported,
@@ -594,7 +603,14 @@ export default function App({ account }: { account: Account }) {
           />
         )}
         {!sheeted && <ThemeToggle />}
-        {!sheeted && <AccountMenu account={account} building={running.length > 0} />}
+        {account ? (
+          !sheeted && <AccountMenu account={account} building={running.length > 0} />
+        ) : (
+          <button className="sign-in-button" onClick={askSignIn}>
+            <SignInIcon size={16} weight="bold" />
+            <span className="button-label">Sign in</span>
+          </button>
+        )}
       </header>
       <aside
         className={sheeted ? `sheet${center !== "model" ? " panel" : ""}` : undefined}
@@ -700,6 +716,7 @@ export default function App({ account }: { account: Account }) {
               if (build && !previewing) await start(text, images, build, attached);
             }}
             onFork={beginFork}
+            onSignIn={account ? undefined : askSignIn}
             dockRef={setDock}
           />
           {forkError && (
@@ -711,17 +728,19 @@ export default function App({ account }: { account: Account }) {
             <HomeShelves
               builds={builds}
               failed={buildsFailed}
-              me={account.user.id}
+              me={account?.user.id ?? null}
               onRetry={refreshBuilds}
               onOpen={openListed}
               manage={manage}
               mineActions={
-                <ImportBuild
-                  onImported={(id) => {
-                    refreshBuilds();
-                    open({ id, source: "public" });
-                  }}
-                />
+                account && (
+                  <ImportBuild
+                    onImported={(id) => {
+                      refreshBuilds();
+                      open({ id, source: "public" });
+                    }}
+                  />
+                )
               }
             />
           )}
@@ -838,8 +857,13 @@ export default function App({ account }: { account: Account }) {
                 edits={previewing ? { ...edits, editable: false, stale: 0, hidden: 0 } : edits}
                 onAsk={
                   !previewing && (ref?.source === "showcase" || (owned && !closed))
-                    ? (text, model, cells) =>
-                        chat.current?.ask(text, selectedArea(model, cells)) ?? Promise.resolve(false)
+                    ? account
+                      ? (text, model, cells) =>
+                          chat.current?.ask(text, selectedArea(model, cells)) ?? Promise.resolve(false)
+                      : async () => {
+                          askSignIn();
+                          throw new Error("Sign in to ask Holo.");
+                        }
                     : undefined
                 }
                 onMode={(next) => {
@@ -854,6 +878,7 @@ export default function App({ account }: { account: Account }) {
             {error && (
               <div className="pane notice" role="alert">
                 <b>{error}</b>
+                {locked && <button onClick={askSignIn}>Sign in</button>}
                 <button onClick={() => open(null)}>Back to the start</button>
               </div>
             )}
@@ -878,6 +903,7 @@ export default function App({ account }: { account: Account }) {
         </div>
       </main>
       {filmBuild && <FilmExport build={filmBuild} onClose={() => setFilmBuild(null)} />}
+      {signingIn && <SignInDialog onClose={() => setSigningIn(false)} />}
     </div>
   );
 }

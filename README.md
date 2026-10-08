@@ -25,7 +25,7 @@
 | **Replay** | Scrub back through the steps, read each step's code, or share the build as a GIF. |
 | **Tweak** | Move, replace and place blocks, or walk through the build. |
 | **Take it to Minecraft** | Download a WorldEdit `.schem` and paste it into your world. |
-| **Share** | Publish a build so your teammates can open it and remix it into their own. |
+| **Share** | Publish a build so anyone can open it, and fork it into their own once signed in. |
 
 ## How it works
 
@@ -39,4 +39,4 @@ Your browser renders every revision and shows it to Holo, so keep the tab open w
 
 ## Run it
 
-Live at [blocks.hcompany.ai](https://blocks.hcompany.ai): anyone at H Company can sign in with their `@hcompany.ai` account. Setup, deploy, tests and the toolkit are in [docs/README.md](docs/README.md).
+Live at [blocks.hcompany.ai](https://blocks.hcompany.ai): anyone can browse the public builds and showcases; building needs a sign-in with an `@hcompany.ai` account. Setup, deploy, tests and the toolkit are in [docs/README.md](docs/README.md).

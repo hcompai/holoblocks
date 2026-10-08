@@ -4,17 +4,15 @@ import "@fontsource-variable/fira-code";
 import "@fontsource-variable/plus-jakarta-sans";
 import { useAccount } from "./account";
 import { BlockLoader } from "./BlockLoader";
-import { SignInPage } from "./SignInPage";
 import "./styles.css";
 
 const App = lazy(() => import("./App"));
 
 function Root() {
   const account = useAccount();
-  if (!account) return <SignInPage />;
   return (
     <Suspense fallback={<BlockLoader label="Loading HoloBlocks…" />}>
-      <App key={account.user.id} account={account} />
+      <App key={account?.user.id ?? "signed-out"} account={account} />
     </Suspense>
   );
 }

@@ -3,10 +3,11 @@ import { type ProjectName, projectNames, renameProject } from "./library";
 
 type Names = Record<string, ProjectName>;
 
-/** The names the user gave their builds; a rename is kept here while the Blob CDN still serves the old one. */
-export function useProjectNames(owner: string) {
+/** The names the user gave their builds; a rename is kept here while the Blob CDN still serves the old one. None signed out. */
+export function useProjectNames(owner: string | null) {
   const storage = `blockyard.names.${owner}`;
   const [names, setNames] = useState<Names>(() => {
+    if (!owner) return {};
     try {
       const saved = JSON.parse(localStorage.getItem(storage) ?? "{}");
       return saved && typeof saved === "object" && !Array.isArray(saved) ? saved : {};
@@ -27,6 +28,7 @@ export function useProjectNames(owner: string) {
     }
   };
   useEffect(() => {
+    if (!owner) return;
     let active = true;
     projectNames().then(
       (entries) => active && merge(entries),

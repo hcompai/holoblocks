@@ -1,4 +1,4 @@
-import { ArrowUpIcon, GitForkIcon, PlusIcon, StopIcon, XIcon } from "@phosphor-icons/react";
+import { ArrowUpIcon, GitForkIcon, PlusIcon, SignInIcon, StopIcon, XIcon } from "@phosphor-icons/react";
 import { type ReactNode, type Ref, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -19,6 +19,8 @@ const ATTACHMENT_PX = 96;
 const MAX_EDGE = 1568;
 const MAX_IMAGES = 2;
 const IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp"];
+/** The new build's prompt a signed-out visitor typed, kept in this tab across the sign-in round trip. */
+const DRAFT = "blockyard.draft";
 
 /** The image as a data URL, scaled down to MAX_EDGE on its long side: PNG stays PNG, the rest becomes JPEG. */
 async function shrink(file: File): Promise<string> {
@@ -144,6 +146,8 @@ interface Props {
   onRemix: (text: string, images: string[], attached?: Record<string, Blob>) => Promise<void>;
   /** Save a private copy of the shown model to change. */
   onFork: () => void;
+  /** Set signed out: sending, or forking, asks to sign in, and the composer keeps the message. */
+  onSignIn?: () => void;
   /** Shown in place of the composer while an earlier version is previewed. */
   preview?: ReactNode;
   /** Receives the notes and composer under the chat log, which a phone's sheet keeps in view. */
@@ -163,10 +167,11 @@ export function ChatPanel(props: Props) {
     onStop,
     onRemix,
     onFork,
+    onSignIn,
     preview,
     dockRef,
   } = props;
-  const [text, setText] = useState("");
+  const [text, setText] = useState(() => (buildId || build ? "" : (sessionStorage.getItem(DRAFT) ?? "")));
   const [images, setImages] = useState<string[]>([]);
   const [dropping, setDropping] = useState(false);
   const [sending, setSending] = useState(false);
@@ -222,6 +227,10 @@ export function ChatPanel(props: Props) {
     if (!buildId) composer.current?.focus();
   }, [buildId]);
 
+  useEffect(() => {
+    if (!changing) sessionStorage.removeItem(DRAFT);
+  }, []);
+
   useLayoutEffect(() => {
     const area = composer.current;
     if (!area) return;
@@ -244,6 +253,14 @@ export function ChatPanel(props: Props) {
 
   /** Hand `prompt` to the builder, even mid-build; whether it took it. */
   const deliver = async (prompt: string, attached: string[], files: Record<string, Blob> = {}) => {
+    if (onSignIn) {
+      if (!changing) {
+        setText(prompt);
+        sessionStorage.setItem(DRAFT, prompt);
+      }
+      onSignIn();
+      return false;
+    }
     const saying = changing && !ended;
     const entry = { text: prompt, images: attached, heard };
     if (saying) setQueued((list) => [...list, entry]);
@@ -271,6 +288,10 @@ export function ChatPanel(props: Props) {
   const send = async () => {
     if (!ready) return;
     const prompt = text.trim();
+    if (onSignIn) {
+      if (!changing) sessionStorage.setItem(DRAFT, prompt);
+      return onSignIn();
+    }
     const attached = images;
     setText("");
     setImages([]);
@@ -499,11 +520,16 @@ export function ChatPanel(props: Props) {
         ) : closed ? (
           <div className="gallery-note">
             {typeof closed === "string" ? <p>{closed}</p> : closed}
-            {!!build?.boxes.length && (
-              <button onClick={onFork} title="Save a private copy of this build to change">
-                <GitForkIcon size={14} weight="bold" /> {typeof closed === "string" ? "Fork" : "Fork a copy"}
-              </button>
-            )}
+            {!!build?.boxes.length &&
+              (onSignIn ? (
+                <button onClick={onSignIn}>
+                  <SignInIcon size={14} weight="bold" /> Sign in
+                </button>
+              ) : (
+                <button onClick={onFork} title="Save a private copy of this build to change">
+                  <GitForkIcon size={14} weight="bold" /> {typeof closed === "string" ? "Fork" : "Fork a copy"}
+                </button>
+              ))}
           </div>
         ) : (
           !loadFailed && input
