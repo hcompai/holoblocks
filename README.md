@@ -3,7 +3,7 @@
   HoloBlocks
 </h1>
 
-<p align="center"><b>Tell Holo what you'd like to build, watch it rise block by block, then walk through it or export it.</b><br />The block twin of <a href="https://github.com/hcompai/brickyard">HoloBricks</a>.</p>
+<p align="center"><b>Tell Holo what you'd like to build, watch it rise block by block, then walk through it or export it.</b><br />The block twin of <a href="https://github.com/hcompai/holobricks">HoloBricks</a>.</p>
 
 ![HoloBlocks showing Hogsmeade under the snow, built by Holo](docs/holoblocks.jpg)
 
