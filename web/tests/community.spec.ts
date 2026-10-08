@@ -263,6 +263,7 @@ test("the author publishes and makes a build private with one-click toggles", as
   const visibility = page.getByRole("switch", { name: "Public", exact: true });
   await expect(visibility).not.toBeChecked();
   await visibility.click();
+  await page.getByRole("dialog", { name: "Make it public" }).getByRole("button", { name: "Make it public" }).click();
   await expect(visibility).toBeChecked();
   await expect(page).toHaveURL(/\?build=mine$/);
   await share.click();
@@ -315,6 +316,7 @@ test("a hand-edited build publishes with its edits, for the server to apply", as
   await expect(page.locator(".viewer")).toHaveAttribute("data-revision", new RegExp(`^${hut.revision}-`));
 
   await page.getByRole("switch", { name: "Public", exact: true }).click();
+  await page.getByRole("dialog", { name: "Make it public" }).getByRole("button", { name: "Make it public" }).click();
   await expect.poll(() => calls.some((c) => c.method === "POST")).toBe(true);
   expect(calls.find((c) => c.method === "POST")!.body.edits).toEqual({ revision: hut.revision, edits });
 });

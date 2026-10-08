@@ -178,12 +178,19 @@ function privateAsset(url: string, id: string): boolean {
 
 /** Publish a build of the signed-in user as it is now, with this browser's hand edits and a thumbnail. */
 export async function publish(id: string, thumbnail: string | null, edits: { revision: string; edits: Edit[] } | null) {
-  return api<Published>(API, {
+  const published = await api<Published>(API, {
     method: "POST",
     headers: { ...signed(), "Content-Type": "application/json" },
     body: JSON.stringify({ id, thumbnail, edits }),
   });
+  markPublished();
+  return published;
 }
+
+const PUBLISHED = "blockyard.published";
+/** Whether this browser knows the user has had a public build. */
+export const publishedBefore = () => localStorage.getItem(PUBLISHED) === "1";
+export const markPublished = () => localStorage.setItem(PUBLISHED, "1");
 
 /** A HoloBlocks model file as the browser reads it, before the library checks it. */
 export type ModelFile = Pick<Shared, "name" | "blocks" | "boxes" | "steps" | "width" | "depth" | "height"> &
@@ -231,6 +238,7 @@ export async function setPrivate(id: string, value: boolean) {
     headers: { ...signed(), "Content-Type": "application/json" },
     body: JSON.stringify({ id, private: value }),
   });
+  if (!value) markPublished();
 }
 
 /** Take a build out of the library and delete its files; for an imported build, that deletes it. */

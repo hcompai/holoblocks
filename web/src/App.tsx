@@ -29,7 +29,9 @@ import {
   card,
   library,
   LibraryError,
+  markPublished,
   publish,
+  publishedBefore,
   remember,
   remove,
   saveFork,
@@ -41,6 +43,7 @@ import {
 import { type Build, type BuildSummary, EMPTY_MODEL, pack, PALETTE, type Source, stepCount, unpack } from "./model";
 import type { ProjectActions } from "./ProjectMenu";
 import { ProjectTitle } from "./ProjectTitle";
+import { FinishedCard } from "./FinishedCard";
 import { RecoveryPanel } from "./RecoveryPanel";
 import type { BlockScene } from "./scene";
 import { selectedArea } from "./selectedArea";
@@ -206,6 +209,19 @@ export default function App({ account }: { account: Account | null }) {
 
   const home = !ref && !drafted;
   useEffect(() => void refreshBuilds(), [refreshBuilds, home]);
+  const hasPublic = !!builds?.some((b) => b.source === "public" && b.owner === account?.user.id && !b.private);
+  useEffect(() => {
+    if (hasPublic) markPublished();
+  }, [hasPublic]);
+  /** The build this tab watched Holo finish, celebrated over the model until dismissed. */
+  const [finished, setFinished] = useState<string | null>(null);
+  const watched = useRef<{ id: string; building: boolean } | null>(null);
+  useEffect(() => {
+    const previous = watched.current;
+    watched.current = live ? { id: live.id, building: live.status === "building" } : null;
+    if (previous?.building && live?.id === previous.id && live.status === "done" && live.boxes.length)
+      setFinished(live.id);
+  }, [live?.id, live?.status]);
   useLayoutEffect(() => {
     const field = document.activeElement;
     if (home && viewport && field instanceof HTMLTextAreaElement) field.scrollIntoView({ block: "nearest" });
@@ -551,6 +567,7 @@ export default function App({ account }: { account: Account | null }) {
           blocked:
             actionable.status === "building" ? "Publish once Holo answers" : !built ? "Nothing is built yet" : null,
           author: account.user.name,
+          first: !hasPublic && !publishedBefore(),
           onPublish: imported ? republish : publishBuild,
           onUnpublish: unpublishBuild,
         }
@@ -615,7 +632,9 @@ export default function App({ account }: { account: Account | null }) {
             <span className="button-label">Share a GIF</span>
           </button>
         )}
-        {publishing && !error && <VisibilityToggle key={`${ref?.source}:${ref?.id}`} publishing={publishing} />}
+        {publishing && !error && (
+          <VisibilityToggle key={`${ref?.source}:${ref?.id}`} publishing={publishing} name={actionable!.name} />
+        )}
         {actionable && !error && (
           <ShareMenu
             build={actionable}
@@ -901,6 +920,15 @@ export default function App({ account }: { account: Account | null }) {
               )}
             </div>
             {center !== "model" && !sheeted && <div className="pane">{panel}</div>}
+            {finished && finished === live?.id && publishing && !error && (
+              <FinishedCard
+                build={live}
+                blocks={counts ? blockCount : null}
+                publishing={publishing}
+                onGif={() => setFilmBuild(live)}
+                onClose={() => setFinished(null)}
+              />
+            )}
             {error && (
               <div className="pane notice" role="alert">
                 <b>{error}</b>
