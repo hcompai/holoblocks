@@ -35,7 +35,8 @@ function checked(given: unknown, email: string): string {
   const name = given.trim().replace(/\s+/g, " ");
   if (!name) return "";
   if (/@|:\/\/|www\./i.test(name)) throw new Refusal(400, "A display name can't hold an email address or a link.");
-  if (!ALLOWED.test(name)) throw new Refusal(400, "Use 2 to 32 letters, digits, spaces, or . _ - '");
+  if (!ALLOWED.test(name))
+    throw new Refusal(400, "Use 2 to 32 letters, digits, spaces, dots, dashes, underscores or apostrophes.");
   if (!colleague(email) && RESERVED.test(name)) throw new Refusal(400, "That name is reserved for H Company.");
   return name;
 }
