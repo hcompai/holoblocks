@@ -3,6 +3,7 @@ import {
   CaretLeftIcon,
   ClockCounterClockwiseIcon,
   FilmStripIcon,
+  GithubLogoIcon,
   GitForkIcon,
   PlusIcon,
   SignInIcon,
@@ -24,7 +25,7 @@ import { HistoryPanel } from "./HistoryPanel";
 import { design, useHistory, type Version } from "./history";
 import { HomeShelves } from "./HomeShelves";
 import { ImportBuild } from "./ImportBuild";
-import { SiteFooter } from "./Legal";
+import { REPO, SiteFooter } from "./Legal";
 import {
   card,
   library,
@@ -609,6 +610,11 @@ export default function App({ account }: { account: Account | null }) {
           </span>
         )}
         <span className="spacer" />
+        {home && (
+          <a className="button github-star" href={REPO} target="_blank" rel="noopener noreferrer">
+            <GithubLogoIcon size={16} /> Star
+          </a>
+        )}
         {actionable && !error && actionable.status === "done" && built && !loading && (
           <button className="primary" onClick={() => setFilmBuild(actionable)}>
             <FilmStripIcon size={16} />

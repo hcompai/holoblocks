@@ -49,11 +49,6 @@ function duration(ms: number): string {
   return m < 60 ? `${m}m ${s % 60}s` : `${Math.floor(m / 60)}h ${m % 60}m`;
 }
 
-const clock = (ms: number) => {
-  const s = Math.floor(ms / 1000);
-  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
-};
-
 /** `label`, held for at least `DWELL_MS` before it changes. */
 function useSteady(label: string): string {
   const [shown, setShown] = useState(label);
@@ -115,7 +110,9 @@ function Live({ activity, early }: { activity: Activity; early: boolean }) {
       <span key={shown} className="shimmer">
         {shown}
       </span>
-      {!early && activity.since > 0 && elapsed >= CLOCK_MS && <span className="live-clock">{clock(elapsed)}</span>}
+      {!early && activity.since > 0 && Number.isFinite(activity.since) && elapsed >= CLOCK_MS && (
+        <span className="live-clock">{duration(elapsed)}</span>
+      )}
     </span>
   );
   return (
