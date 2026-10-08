@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { gzipSync } from "node:zlib";
+import { gunzipSync, gzipSync } from "node:zlib";
 import { GET, PATCH } from "../api/builds";
 import { pass, type User } from "../api/lib/account";
 import { privateUrl } from "../api/lib/privateStore";
@@ -11,7 +11,13 @@ const owner: User = { id: "private-owner", email: "owner@hcompany.ai", name: "Ow
 const other: User = { id: "other", email: "other@hcompany.ai", name: "Other" };
 const blob = blobStore();
 const id = "import-private-test";
-const model = gzipSync(JSON.stringify({ name: "Granite house", blocks: ["stone"], boxes: [0, 0, 0, 0, 0, 0, 0, 0] }));
+const house = {
+  name: "Granite house",
+  blocks: ["stone"],
+  boxes: [0, 0, 0, 0, 0, 0, 0, 0],
+  messages: [{ role: "user", text: "A granite house" }],
+};
+const model = gzipSync(JSON.stringify(house));
 const png = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a6RkAAAAASUVORK5CYII=",
   "base64",
@@ -80,13 +86,16 @@ test("a private build leaves no public file and opens only for its owner", async
   ]);
 });
 
-test("making it public again restores its public files and leaves nothing private", async () => {
+test("making it public again restores its public files without the chat and leaves nothing private", async () => {
   await patch(true);
   expect((await patch(false)).status).toBe(204);
   expect(blob.privateObjects.size).toBe(0);
   const restored = (await find(id))!;
   expect(restored.build).toMatch(/\/builds\/import-private-test\/build\.json-\w+\.gz$/);
-  expect(await bytes(await fetch(restored.build))).toEqual(model);
+  expect(JSON.parse(gunzipSync(await bytes(await fetch(restored.build))).toString())).toEqual({
+    ...house,
+    messages: [],
+  });
   expect(await bytes(await fetch(restored.thumbnail!))).toEqual(png);
   expect(blob.objects.size).toBe(3);
 });
