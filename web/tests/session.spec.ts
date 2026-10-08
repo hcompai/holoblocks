@@ -45,10 +45,10 @@ async function comeBack(cookies: Record<string, string>, url = "https://blocks.t
   return { response, handoff: JSON.parse(cookie(handed.split(";")[0], HANDOFF)!) };
 }
 
-test("anyone signs in; a public name is a colleague's full name, an outsider's first name and initial, or none", () => {
-  expect(admit({ id: "u-1", email: "jane.doe@hcompany.ai" }).name).toBe("Jane Doe");
-  expect(admit({ id: "u-2", email: "jane.doe@gmail.com" }).name).toBe("Jane D.");
-  expect(admit({ id: "u-3", email: "jd1987@gmail.com" }).name).toBe("");
+test("anyone signs in; a default name is a colleague's full name, an outsider's first name and initial, or none", async () => {
+  expect((await admit({ id: "u-1", email: "jane.doe@hcompany.ai" })).name).toBe("Jane Doe");
+  expect((await admit({ id: "u-2", email: "jane.doe@gmail.com" })).name).toBe("Jane D.");
+  expect((await admit({ id: "u-3", email: "jd1987@gmail.com" })).name).toBe("");
 });
 
 test("the portal's Google sign-in comes back as a key and a pass for any H account, where the user left", async () => {

@@ -1,7 +1,6 @@
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { bearer, Refusal } from "./http";
-
-const DOMAIN = "@hcompany.ai";
+import { authorName } from "./profile";
 
 export interface User {
   id: string;
@@ -9,17 +8,11 @@ export interface User {
   name: string;
 }
 
-const capital = (word: string) => word[0].toUpperCase() + word.slice(1);
-
-/** The name shown publicly for an email: "Jane Doe" at H Company, "Jane D." elsewhere, "" when it names nobody. */
-export function nameOf(email: string): string {
-  const words = email.split("@")[0].split(/[._-]+/).filter(Boolean);
-  if (email.toLowerCase().endsWith(DOMAIN)) return words.map(capital).join(" ");
-  if (words.length < 2 || !words.every((w) => /^\p{L}+$/u.test(w))) return "";
-  return `${capital(words[0])} ${words.at(-1)![0].toUpperCase()}.`;
-}
-
-export const admit = (user: { id: string; email: string }): User => ({ ...user, name: nameOf(user.email) });
+/** Any portal user, under their public name. */
+export const admit = async (user: { id: string; email: string }): Promise<User> => ({
+  ...user,
+  name: await authorName(user),
+});
 
 export const isAdmin = (user: User) =>
   (process.env.BLOCKYARD_ADMINS ?? "")

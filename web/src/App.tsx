@@ -606,7 +606,7 @@ export default function App({ account }: { account: Account | null }) {
         )}
         {!sheeted && <ThemeToggle />}
         {account ? (
-          !sheeted && <AccountMenu account={account} building={running.length > 0} />
+          !sheeted && <AccountMenu account={account} building={running.length > 0} onRenamed={refreshBuilds} />
         ) : (
           <button className="sign-in-button" onClick={askSignIn}>
             <SignInIcon size={16} weight="bold" />

@@ -89,9 +89,38 @@ test("a colleague's public build opens from the home page's public builds, under
   await card.click();
   await expect(page).toHaveURL(/\?public=hut$/);
   await shown(page, hut.revision);
-  await expect(page.locator(".gallery-note")).toHaveText(/^By Ada Lovelace · Fork to edit/);
+  await expect(page.locator(".gallery-note")).toHaveText(/^By Ada Lovelace · 2 steps · Fork to edit/);
   const menu = await shareMenu(page);
   await expect(menu.getByRole("menuitem", { name: /Publish/ })).toHaveCount(0);
+});
+
+test("the user sets a display name from the account menu, and their public builds carry it at once", async ({
+  page,
+}) => {
+  const hut = { ...model(), id: "hut", name: "Jane's hut" };
+  await site(page);
+  const published = [entry(hut, ACCOUNT.user.name, ACCOUNT.user.id)];
+  await library(page, published, [hut]);
+  await page.route("**/api/profile", (route) => {
+    if (route.request().method() === "GET") return route.fulfill({ json: { name: published[0].author } });
+    const { name } = route.request().postDataJSON();
+    for (const p of published) p.author = name;
+    return route.fulfill({ json: { name } });
+  });
+  await page.goto("/");
+
+  const tile = page.getByRole("region", { name: "Public builds" }).locator(".gallery-card");
+  await expect(tile).toContainText("by Jane Doe");
+  const account = page.getByRole("button", { name: "Account" });
+  await account.click();
+  await page.getByRole("menuitem", { name: /Display name/ }).click();
+  const field = page.getByRole("textbox", { name: "Display name" });
+  await expect(field).toHaveValue("Jane Doe");
+  await field.fill("Jane the Builder");
+  await field.press("Enter");
+  await expect(tile).toContainText("by Jane the Builder");
+  await account.click();
+  await expect(page.getByRole("menu")).toContainText("Jane the Builder");
 });
 
 test("home shows one row of my builds and ten rows of public ones, with more below on demand", async ({ page }) => {
@@ -213,7 +242,7 @@ test("the author publishes a build after a confirmation, stays on it, then makes
 
   const publishing = page.getByRole("dialog", { name: "Publish" });
   await menu.getByRole("menuitem", { name: "Publish to the library…" }).click();
-  await expect(publishing).toContainText("the chat, and the photos you attached");
+  await expect(publishing).toContainText("Your chat and photos stay private");
   await publishing.getByRole("button", { name: "Publish" }).click();
   await expect(publishing).toBeHidden();
   await expect(page).toHaveURL(/\?build=mine$/);
@@ -354,7 +383,7 @@ test("signed out, a public build's link opens it in the viewer, exports and all,
   await page.goto("/?public=hut");
 
   await shown(page, hut.revision);
-  await expect(page.locator(".gallery-note")).toHaveText(/^By Ada Lovelace · Sign in to fork/);
+  await expect(page.locator(".gallery-note")).toHaveText(/^By Ada Lovelace · 2 steps · Sign in to fork/);
   const menu = await shareMenu(page);
   await expect(menu.getByRole("menuitem", { name: "Copy link" })).toBeEnabled();
   await expect(menu.getByRole("menuitem", { name: "Download .schem" })).toBeEnabled();

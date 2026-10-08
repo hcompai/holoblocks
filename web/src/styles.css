@@ -3598,6 +3598,18 @@ main {
   white-space: normal;
 }
 
+.menu.project-rename > p {
+  margin: 0;
+}
+
+.menu-value {
+  max-width: 140px;
+  margin-left: auto;
+  padding-left: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .menu.project-rename input {
   font: inherit;
   padding: 6px 8px;

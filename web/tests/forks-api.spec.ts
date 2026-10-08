@@ -9,6 +9,7 @@ import { linkFork } from "../api/lib/forks";
 import { projectName } from "../api/lib/names";
 import { enter, find, findOwn, forgotten } from "../api/lib/store";
 import { GET as names, PATCH as renameBuild } from "../api/names";
+import { GET as profile, PUT as setProfile } from "../api/profile";
 import { forkSeed } from "../src/forkModel";
 import { blobStore } from "./blobStore";
 import { model } from "./fixtures";
@@ -209,6 +210,36 @@ test.describe("someone else's builds", () => {
       { id: imported, name: "Red tower", updated: expect.any(Number) },
     ]);
   });
+});
+
+test("a display name replaces the default on its owner's library builds, old ones too, and holds no email or link", async () => {
+  const listed = (id: string, user: User) => ({
+    id,
+    name: id,
+    prompt: "",
+    steps: 2,
+    author: user.name,
+    owner: user.id,
+    published: 1,
+    thumbnail: null,
+    build: `${blob.base}/objects/builds/${id}/build.json.gz`,
+  });
+  await enter(listed("olive-tower", OWNER), [], []);
+  await enter(listed("otto-tower", OTHER), [], []);
+  const named = async (user: User) => (await json(await profile(call(user, "GET", "/api/profile")))).name;
+  const rename = (name: string) => setProfile(call(OWNER, "PUT", "/api/profile", { name }));
+
+  expect(await named(OWNER)).toBe("Olive Owner");
+  expect(await json(await rename("  Olive   the Builder "))).toEqual({ name: "Olive the Builder" });
+  expect(await named(OWNER)).toBe("Olive the Builder");
+  expect(await find("olive-tower")).toMatchObject({ author: "Olive the Builder" });
+  expect(await find("otto-tower")).toMatchObject({ author: "Otto Other" });
+  for (const bad of ["olive@example.com", "https://olive.example", "www.olive.example", "O"])
+    expect((await rename(bad)).status, bad).toBe(400);
+  const outsider: User = { id: "u-ada", email: "ada@example.com", name: "" };
+  expect((await setProfile(call(outsider, "PUT", "/api/profile", { name: "Holo fan" }))).status).toBe(400);
+  expect(await json(await rename(""))).toEqual({ name: "Olive Owner" });
+  expect(await find("olive-tower")).toMatchObject({ author: "Olive Owner" });
 });
 
 test("deleting a fork deletes its starting model, record and name, and hides the session it continued in", async () => {

@@ -244,6 +244,15 @@ export async function rename(owner: string, id: string, name: string) {
   if (published?.owner === owner) await write(LIBRARY, { ...published, name });
 }
 
+/** Put `author` on every library build of `owner`'s, public or private; their files and links stay. */
+export async function reauthor(owner: string, author: string) {
+  for (const own of await privateOf(owner))
+    if (own.author !== author)
+      await privateWrite(privateEntry(owner, own.id), JSON.stringify({ ...own, author }), "application/json");
+  for (const published of await library())
+    if (published.owner === owner && published.author !== author) await write(LIBRARY, { ...published, author });
+}
+
 /** Every public build, newest first. */
 export const library = () => entries(LIBRARY);
 

@@ -3,6 +3,7 @@ import { gunzipSync, gzipSync } from "node:zlib";
 import { holder } from "./lib/account";
 import { Refusal, route } from "./lib/http";
 import { imported } from "./lib/imported";
+import { authorName } from "./lib/profile";
 import { enter, type Published, save } from "./lib/store";
 
 /** Under Vercel's 4.5 MB request limit; a gzipped 60,000-box model is well below it. */
@@ -47,7 +48,7 @@ export const POST = route(async (request) => {
     name: build.name,
     prompt: build.messages.find((m) => m.role === "user")?.text ?? "",
     steps: build.steps.length,
-    author: user.name,
+    author: await authorName(user),
     owner: user.id,
     published: at,
     thumbnail: image ? await keep(`thumbnail.${image.type.split("/")[1]}`, image.data, image.type) : null,
