@@ -8,6 +8,7 @@ import sys
 import time
 from pathlib import Path
 
+from blockyard.model import UNNAMED
 from blockyard.workbench import Workbench
 from blockyard.workspace import Workspace, write
 
@@ -47,6 +48,8 @@ def main() -> None:
 
     bench = Workbench(Workspace.open(Path.cwd()))
     if args.tool == "run":
+        if bench.build.name == UNNAMED:
+            parser.exit(1, 'Name the build first: blocks name "<title>". The model did not change.\n')
         out = bench.run_script(Path(args.script).read_text())
         out.text = tick(Path.cwd()) + out.text
     elif args.tool == "find":

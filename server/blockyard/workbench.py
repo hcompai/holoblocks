@@ -11,7 +11,7 @@ from collections import Counter
 from dataclasses import dataclass
 
 from blockyard import blocks
-from blockyard.model import Box, Build, Step
+from blockyard.model import UNNAMED, Box, Build, Step
 from blockyard.workspace import MODEL, Workspace
 from blockyard.world import World
 
@@ -215,7 +215,7 @@ class Workbench:
         return Result(", ".join(blocks.describe(h) for h in hits[:60]) if hits else f"No blocks match '{query}'.")
 
     def rename(self, name: str) -> Result:
-        self.workspace.save(self.build.model_copy(update={"name": name.strip()[:60] or "Untitled build"}))
+        self.workspace.save(self.build.model_copy(update={"name": name.strip()[:60] or UNNAMED}))
         return Result(f"Build is now called '{self.build.name}'.")
 
     def summary(self, world: World | None = None) -> str:

@@ -1,5 +1,12 @@
 import { replayDelay } from "./buildTiming";
-import { CaretLeftIcon, ClockCounterClockwiseIcon, GitForkIcon, PlusIcon, SignInIcon } from "@phosphor-icons/react";
+import {
+  CaretLeftIcon,
+  ClockCounterClockwiseIcon,
+  FilmStripIcon,
+  GitForkIcon,
+  PlusIcon,
+  SignInIcon,
+} from "@phosphor-icons/react";
 import { type CSSProperties, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { type Account, signInError } from "./account";
 import { AccountMenu } from "./AccountMenu";
@@ -578,6 +585,12 @@ export default function App({ account }: { account: Account | null }) {
           </span>
         )}
         <span className="spacer" />
+        {actionable && !error && actionable.status === "done" && built && !loading && (
+          <button className="primary" onClick={() => setFilmBuild(actionable)}>
+            <FilmStripIcon size={16} />
+            <span className="button-label">Share a GIF</span>
+          </button>
+        )}
         {actionable && !error && (
           <ShareMenu
             build={actionable}

@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { decompressFrames, parseGIF } from "gifuct-js";
 import { planFilm, rising } from "../src/filmPlan";
 import { model, shareMenu, site } from "./fixtures";
+import { platform } from "./platform";
 
 const HUT = {
   steps: model().steps,
@@ -27,6 +28,28 @@ test("a film raises each step in order, bottom layer first, before the turntable
   }
   expect(() => planFilm({ boxes: [], steps: [] }, 8)).toThrow();
   expect(() => planFilm(HUT, 5)).toThrow();
+});
+
+test("the GIF call to action appears only for a completed, nonempty build", async ({ page }) => {
+  await site(page);
+  const agp = await platform(page);
+  const cta = page.getByRole("button", { name: "Share a GIF", exact: true });
+  agp.session("live");
+  agp.say("live", "A little hut");
+  agp.state("live", "running");
+  agp.share("live", model());
+  await page.goto("/?build=live");
+  await expect(page.locator(".viewer")).toHaveAttribute("data-revision", model().revision);
+  await expect(cta).toHaveCount(0);
+  agp.answer("live", "Built.");
+  agp.state("live", "idle");
+  agp.sessions.get("live")!.status = "completed";
+  await expect(cta).toHaveCount(1);
+
+  await site(page, [{ ...model(), id: "empty", boxes: [], steps: [] }]);
+  await page.goto("/?showcase=empty");
+  await expect(page.locator(".viewer")).toHaveAttribute("data-revision", model().revision);
+  await expect(cta).toHaveCount(0);
 });
 
 test("Share a GIF makes a credited looping GIF of the build and leaves the viewer on its step", async ({
@@ -71,6 +94,22 @@ test("Share a GIF makes a credited looping GIF of the build and leaves the viewe
   await dialog.getByRole("checkbox", { name: "H Company credit" }).check();
   const link = dialog.getByRole("link", { name: "Download GIF" });
   await expect(link).toBeVisible({ timeout: 240000 });
+
+  await page.evaluate(() => {
+    window.open = (url, target, features) => {
+      Object.assign(window, { xPost: { url: String(url), target, features } });
+      return null;
+    };
+  });
+  const xDownload = page.waitForEvent("download");
+  await dialog.getByRole("button", { name: "Post on X", exact: true }).click();
+  expect((await xDownload).suggestedFilename()).toMatch(/\.gif$/);
+  const post = await page.evaluate(() => (window as unknown as { xPost: { url: string; features: string } }).xPost);
+  const intent = new URL(post.url);
+  expect(intent.origin + intent.pathname).toBe("https://x.com/intent/tweet");
+  expect(intent.searchParams.get("text")).toBe(await caption.inputValue());
+  expect(intent.searchParams.has("url")).toBe(false);
+  expect(post.features).toBe("noopener,noreferrer");
 
   const pending = page.waitForEvent("download");
   await link.click();

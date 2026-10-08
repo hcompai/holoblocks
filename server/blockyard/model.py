@@ -33,8 +33,11 @@ class Step(BaseModel):
     """Digest of the script step that made it, empty if that step had problems."""
 
 
+UNNAMED = "Untitled build"
+
+
 class Build(BaseModel):
-    name: str = "Untitled build"
+    name: str = UNNAMED
     width: int = 128
     depth: int = 128
     height: int = 100

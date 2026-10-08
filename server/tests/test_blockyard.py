@@ -1,5 +1,6 @@
 import gzip
 import json
+import sys
 
 import pytest
 
@@ -185,3 +186,19 @@ def test_gallery_exports_holo_showcases_with_their_story(tmp_path, monkeypatch):
     assert summary["id"] == "hut" and summary["revision"] == model["revision"]
     assert [m["text"] for m in model["messages"]][:2] == ["A hut.", "Stone walls."] and model["status"] == "done"
     assert not (out / "builds" / "shed.json").exists()
+
+
+def test_the_first_run_waits_for_a_name(tmp_path, monkeypatch, capsys):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "build.py").write_text('step("Base")\nfill(0, 0, 0, 3, 0, 3, "stone")')
+
+    def blocks(*argv: str) -> int:
+        monkeypatch.setattr(sys, "argv", ["blocks", *argv])
+        with pytest.raises(SystemExit) as stopped:
+            client.main()
+        return stopped.value.code
+
+    assert blocks("run") == 1 and "Name the build first" in capsys.readouterr().err
+    assert not (tmp_path / MODEL).exists()
+    assert blocks("name", "The Last Light of Gull Point") == 0
+    assert blocks("run") == 0 and (tmp_path / MODEL).exists()
