@@ -449,6 +449,11 @@ export class FilmRenderer {
     vignette.addColorStop(1, "rgba(20, 20, 40, 0.1)");
     ctx.fillStyle = vignette;
     ctx.fillRect(0, 0, width, height);
+    ctx.fillStyle = INK;
+    ctx.font = `500 ${Math.max(12, 26 * unit)}px ${FONT}`;
+    ctx.textAlign = "center";
+    ctx.fillText("blocks.hcompany.ai", width / 2, height - Math.max(10, 24 * unit));
+    ctx.textAlign = "left";
     if (branded) {
       const corner = margin * 0.75;
       const logo = LOGO_PX * unit;

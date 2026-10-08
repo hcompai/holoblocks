@@ -4,7 +4,6 @@ import {
   ClockCounterClockwiseIcon,
   FilmStripIcon,
   GithubLogoIcon,
-  StarIcon,
   GitForkIcon,
   PlusIcon,
   SignInIcon,
@@ -613,7 +612,7 @@ export default function App({ account }: { account: Account | null }) {
         <span className="spacer" />
         {home && (
           <a className="button github-star" href={REPO} target="_blank" rel="noopener noreferrer">
-            <GithubLogoIcon size={16} /> Star on GitHub <StarIcon size={14} />
+            <GithubLogoIcon size={16} /> Star
           </a>
         )}
         {actionable && !error && actionable.status === "done" && built && !loading && (
