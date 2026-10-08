@@ -64,6 +64,8 @@ jobs:
     concurrency:
       group: deploy-production
       cancel-in-progress: false
+    permissions:
+      contents: write
     environment:
       name: production
       url: https://blocks.hcompany.ai
@@ -73,6 +75,8 @@ jobs:
       VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: astral-sh/setup-uv@v6
       - working-directory: server
         run: uv sync --locked
@@ -83,13 +87,14 @@ jobs:
           cache-dependency-path: web/package-lock.json
       - working-directory: web
         run: npm ci && npx playwright install --with-deps chromium && npm install --global vercel@60
-      # Deploys finish in whatever order their tests do: only the branch's latest commit may reach production.
-      - name: Deploy, unless a newer commit landed, which deploys itself
+      # Deploys finish in whatever order their tests do: the production branch records what is live, so an
+      # older commit still ships when it is first to pass, and never overwrites a newer one that already did.
+      - name: Deploy, unless production is already at or past this commit
         run: |
-          git fetch --quiet --depth=1 origin "$GITHUB_REF"
-          latest=$(git rev-parse FETCH_HEAD)
-          if [ "$latest" != "$GITHUB_SHA" ]; then
-            echo "::notice::Skipped: ${latest::7} is newer and deploys itself."
+          git fetch --quiet origin +refs/heads/production:refs/remotes/origin/production || true
+          if git merge-base --is-ancestor "$GITHUB_SHA" origin/production 2>/dev/null; then
+            echo "::notice::Skipped: production is already at or past ${GITHUB_SHA::7}."
             exit 0
           fi
           scripts/deploy.sh --prod
+          git push --quiet origin "$GITHUB_SHA:refs/heads/production"
