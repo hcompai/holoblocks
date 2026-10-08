@@ -1923,7 +1923,6 @@ main {
 
 .sign-in-dialog .sign-in-terms {
   margin-top: 6px;
-  max-width: 300px;
   color: var(--text-tertiary);
   font-size: 12px;
   line-height: 16px;
