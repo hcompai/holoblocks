@@ -153,12 +153,13 @@ async function hidden(): Promise<BuildSummary[]> {
   );
 }
 
+/** A library build as anyone sees it: its model, never a chat, even if its file holds one. */
 export async function publicBuild(id: string): Promise<Build> {
   // Signed in, the owner can open their private builds too.
   const published = await api<Published>(read({ id }), current() ? { headers: signed() } : {});
   const response = await fetch(published.build, privateAsset(published.build, id) ? { headers: signed() } : {});
   if (!response.ok) throw new Error(`No public build ${id}`);
-  return { ...opened(await readJson<Shared>(await response.blob()), id), name: published.name };
+  return { ...opened(await readJson<Shared>(await response.blob()), id), name: published.name, messages: [] };
 }
 
 /** A private cover as a data URL, so no credential sits in an img URL; null if it does not load. */

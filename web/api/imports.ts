@@ -46,7 +46,7 @@ export const POST = route(async (request) => {
   const published: Published = {
     id,
     name: build.name,
-    prompt: build.messages.find((m) => m.role === "user")?.text ?? "",
+    prompt: "",
     steps: build.steps.length,
     author: await authorName(user),
     owner: user.id,

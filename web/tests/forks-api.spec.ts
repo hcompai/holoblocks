@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { gzipSync } from "node:zlib";
+import { gunzipSync, gzipSync } from "node:zlib";
 import { DELETE as unpublishBuild, GET as builds, POST as publishBuild } from "../api/builds";
 import { POST as deleteBuild } from "../api/deleted";
 import { GET as forks, PATCH as linkSession, POST as saveFork } from "../api/forks";
@@ -45,6 +45,35 @@ const seed = () =>
 const fork = (user = OWNER) => saveFork(call(user, "POST", "/api/forks", gzipped({ id: FORK, seed: seed() })));
 const json = (response: Response) => response.json();
 
+/** The owner's session: their secret prompt with two photos, then the model Holo shared. */
+const CHAT = [
+  {
+    timestamp: "2026-01-01T00:00:00Z",
+    type: "AgentEvent",
+    data: {
+      kind: "message_event",
+      caller_id: "user",
+      content: [
+        "A secret hut",
+        { type: "url", source: "data:image/png;base64,cGhvdG8=" },
+        { type: "url", source: "https://agp.eu.hcompany.ai/photo" },
+      ],
+    },
+  },
+  {
+    timestamp: "2026-01-01T00:00:00Z",
+    type: "AttachmentEvent",
+    data: {
+      origin: "agent",
+      name: "model.json.gz",
+      path: "/workspace/model.json.gz",
+      url: "https://agp.eu.hcompany.ai/model",
+      media_type: "application/json",
+      size_bytes: 1,
+    },
+  },
+];
+
 const realFetch = globalThis.fetch;
 let agentCalls: string[] = [];
 /** The fork the session says it was started on. */
@@ -63,6 +92,11 @@ test.beforeAll(async () => {
       const items = key === `Bearer ${keyOf(OWNER)}` ? [item] : [];
       return Response.json({ items, total: items.length, page: 1 });
     }
+    if (url.pathname.endsWith("/changes"))
+      return Number(url.searchParams.get("from_index")) > 0
+        ? new Response(null, { status: 204 })
+        : Response.json({ status: "idle", new_events: CHAT });
+    if (url.pathname === "/model") return new Response(gzipSync(JSON.stringify(model())));
     return Response.json({
       ...item,
       request: { agent: "blockyard", group_id: group, messages: [] },
@@ -210,6 +244,19 @@ test.describe("someone else's builds", () => {
       { id: imported, name: "Red tower", updated: expect.any(Number) },
     ]);
   });
+});
+
+test("publishing keeps the chat private: no message, prompt or photo of it reaches the public store", async () => {
+  expect((await publishBuild(call(OWNER, "POST", "/api/builds", { id: RUN, thumbnail: null }))).status).toBe(201);
+  expect(await find(RUN)).toMatchObject({ name: "Little Hut", prompt: "", author: "Olive Owner" });
+  const files = [...blob.objects.keys()].filter((p) => p.startsWith(`builds/${RUN}/`));
+  expect(files).toEqual([expect.stringMatching(/^builds\/own-run\/build\.json-\w+\.gz$/)]);
+  expect(JSON.parse(gunzipSync(blob.objects.get(files[0])!).toString())).toMatchObject({
+    revision: model().revision,
+    messages: [],
+  });
+  const stored = [...blob.objects].map(([path, data]) => (path.endsWith(".gz") ? gunzipSync(data) : data).toString());
+  expect(stored.join("\n")).not.toContain("secret");
 });
 
 test("a display name replaces the default on its owner's library builds, old ones too, and holds no email or link", async () => {

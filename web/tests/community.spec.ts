@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { createHash } from "node:crypto";
 import { gzipSync } from "node:zlib";
-import type { Model } from "../src/model";
+import type { Message, Model } from "../src/model";
 import { cookie, HANDOFF, PENDING, setCookie } from "../src/signin";
 import { ACCOUNT, model, shareMenu, site } from "./fixtures";
 import { platform } from "./platform";
@@ -9,7 +9,7 @@ import { platform } from "./platform";
 const BLOB = "https://blob.test";
 const PORTAL = "https://portal.api.eu.hcompany.ai/api";
 
-type Built = Model & { id: string };
+type Built = Model & { id: string; messages?: Message[] };
 
 const shown = (page: Page, revision: string) =>
   expect(page.locator(".viewer")).toHaveAttribute("data-revision", revision);
@@ -41,7 +41,7 @@ async function library(page: Page, published: ReturnType<typeof entry>[], builds
     return build
       ? route.fulfill({
           headers: { "access-control-allow-origin": "*" },
-          body: gzipSync(JSON.stringify({ ...build, status: "done", messages: [] })),
+          body: gzipSync(JSON.stringify({ status: "done", messages: [], ...build })),
         })
       : route.fulfill({ status: 404 });
   });
@@ -152,6 +152,27 @@ test("home shows one row of my builds and ten rows of public ones, with more bel
   if (columns * 20 < 80) await more.click();
   await expect(everyone.locator(".gallery-card")).toHaveCount(80);
   await expect(more).toHaveCount(0);
+});
+
+test("a public build shows no chat, even one its file still holds, and no author when it has no name", async ({
+  page,
+}) => {
+  const messages: Message[] = [
+    { role: "user", text: "A secret prompt", images: [] },
+    { role: "assistant", text: "Built your hut.", images: [] },
+  ];
+  const hut = { ...model(), id: "hut", name: "A hut", messages };
+  await site(page, [], null);
+  await library(page, [entry(hut, "", "u-anon")], [hut]);
+  await page.goto("/");
+  const card = page.getByRole("region", { name: "Public builds" }).locator(".gallery-card");
+  await expect(card.locator(".gallery-caption .muted")).toHaveText("2 steps");
+  await card.click();
+
+  await shown(page, hut.revision);
+  await expect(page.locator(".gallery-note")).toHaveText(/^Public build · 2 steps · Sign in to fork/);
+  await expect(page.locator(".msg")).toHaveCount(0);
+  await expect(page.locator("aside")).not.toContainText("secret");
 });
 
 test("a colleague's public build can be edited but not asked about", async ({ page }) => {

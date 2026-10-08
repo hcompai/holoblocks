@@ -1,19 +1,12 @@
 import { HaiAgentsClient, HaiAgentsError, type HaiAgents } from "hai-agents";
 import { H } from "../../src/hosts";
-import { platformAsset, externalImage, assetBlob } from "../../src/assetUrl";
-import { EMPTY_MODEL, type Message, type Model, type Shared } from "../../src/model";
+import { platformAsset, assetBlob } from "../../src/assetUrl";
+import { EMPTY_MODEL, type Model, type Shared } from "../../src/model";
 import { AGENT, EMPTY_TRANSCRIPT, read, readJson, status, type Transcript } from "../../src/session";
 import { applyEdits, type Edit, validEdits } from "../../src/voxelEdits";
 import { readFork } from "./forks";
 import { Refusal } from "./http";
 import { imported } from "./imported";
-
-/** Chat images kept with a public build; past this, the chat keeps its text only. */
-const MAX_IMAGES = 80;
-const PARALLEL = 8;
-
-/** Store one image of the chat under `name`, and return its public URL. */
-export type Keep = (name: string, image: Blob) => Promise<string>;
 
 const platform = (key: string) =>
   new HaiAgentsClient({
@@ -65,33 +58,6 @@ async function download(url: string, key: string): Promise<Blob> {
   return assetBlob(response);
 }
 
-const picture = (src: string, key: string): Promise<Blob> =>
-  src.startsWith("data:") ? fetch(src).then(assetBlob) : download(src, key);
-
-const extension = (image: Blob) => ({ "image/jpeg": "jpg", "image/webp": "webp" })[image.type] ?? "png";
-
-/** Copy session images without Holo's reasoning; external HTTPS photos remain links. */
-async function copied(messages: Message[], key: string, keep: Keep): Promise<Message[]> {
-  const sources = [...new Set(messages.flatMap((m) => m.images))].slice(0, MAX_IMAGES);
-  const urls = new Map<string, string>();
-  for (let i = 0; i < sources.length; i += PARALLEL)
-    await Promise.all(
-      sources.slice(i, i + PARALLEL).map(async (src, j) => {
-        if (!src.startsWith("data:") && !platformAsset(src)) {
-          if (externalImage(src)) urls.set(src, src);
-          return;
-        }
-        try {
-          const image = await picture(src, key);
-          urls.set(src, await keep(`images/${i + j + 1}.${extension(image)}`, image));
-        } catch (e) {
-          console.warn("Left an image out of the public build", e);
-        }
-      }),
-    );
-  return messages.map(({ work, ...m }) => ({ ...m, images: m.images.flatMap((src) => urls.get(src) ?? []) }));
-}
-
 /** Hand edits as the browser saved them: bound to the revision they were made on. */
 interface Edited {
   revision: string;
@@ -115,17 +81,17 @@ function withEdits(model: Model, edited: Edited | null): Model {
   return { ...model, blocks, boxes, steps, revision, script: "" };
 }
 
-/** The caller's finished build as the public sees it: its latest model with any hand edits, and its chat. */
-export async function snapshot(id: string, key: string, edited: unknown, keep: Keep, owner?: string): Promise<Shared> {
-  if (!id.startsWith("fork-")) return sessionSnapshot(id, key, edited, keep);
+/** The caller's finished build as the public sees it: its latest model with any hand edits, and no chat. */
+export async function snapshot(id: string, key: string, edited: unknown, owner?: string): Promise<Shared> {
+  if (!id.startsWith("fork-")) return sessionSnapshot(id, key, edited);
   const fork = owner ? await readFork(owner, id) : null;
   if (!fork) throw new Refusal(404, "No such build.");
-  if (fork.sessionId) return sessionSnapshot(fork.sessionId, key, edited, keep, fork.seed.model);
+  if (fork.sessionId) return sessionSnapshot(fork.sessionId, key, edited, fork.seed.model);
   return { ...withEdits(fork.seed.model, checked(edited)), status: "done", messages: [] };
 }
 
 /** A session's build; a fork's session keeps the name of `start`, its starting model, and shows it until it shares one. */
-async function sessionSnapshot(id: string, key: string, edited: unknown, keep: Keep, start?: Model): Promise<Shared> {
+async function sessionSnapshot(id: string, key: string, edited: unknown, start?: Model): Promise<Shared> {
   const agp = platform(key);
   const session = await mine(agp, id);
   const state = status(session.status.status);
@@ -136,5 +102,5 @@ async function sessionSnapshot(id: string, key: string, edited: unknown, keep: K
   const model = withEdits(latest, checked(edited));
   const prompt = t.messages.find((m) => m.role === "user")?.text ?? "";
   const name = start?.name ?? (model.name !== EMPTY_MODEL.name ? model.name : prompt.slice(0, 60) || model.name);
-  return { ...model, name, status: state, messages: await copied(t.messages, key, keep) };
+  return { ...model, name, status: state, messages: [] };
 }
