@@ -11,14 +11,14 @@ import { type CSSProperties, useCallback, useEffect, useLayoutEffect, useMemo, u
 import { type Account, signInError } from "./account";
 import { AccountMenu } from "./AccountMenu";
 import { PHASES } from "./activity";
-import { cancel, create, remix, say, stop } from "./agent";
+import { cancel, create, say, stop } from "./agent";
 import { BlockLoader } from "./BlockLoader";
 import { BlocksPanel } from "./BlocksPanel";
 import { type ChatHandle, ChatPanel } from "./ChatPanel";
 import { CodePanel } from "./CodePanel";
 import { useEdits } from "./edits";
 import { FilmExport } from "./FilmExport";
-import { startFork } from "./fork";
+import { forkOperation, startFork } from "./fork";
 import { type ForkSeed, forkSeed } from "./forkModel";
 import { HistoryPanel } from "./HistoryPanel";
 import { design, useHistory, type Version } from "./history";
@@ -341,7 +341,18 @@ export default function App({ account }: { account: Account | null }) {
     };
     setDraft({ at, build, since });
     try {
-      const id = await (from ? remix(from, prompt, images, attached) : create(prompt, images));
+      const id = await (from && at
+        ? forkOperation()(
+            forkSeed(
+              { ...from, ...pack(from.boxes) },
+              { ...at, name: from.name, version: selected?.number ?? null, revision: from.revision },
+              name,
+            ),
+            prompt,
+            images,
+            attached,
+          )
+        : create(prompt, images));
       started.current.add(id);
       remember(id, { name: name.slice(0, 60), prompt });
       refreshBuilds();

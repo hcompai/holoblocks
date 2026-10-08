@@ -27,8 +27,8 @@ export async function requestedSeed(id: string, signal: AbortSignal): Promise<Fo
   );
 }
 
-/** Starts fork `group`'s session once: after an ambiguous request it looks for the session rather than send again. */
-function forkStart(group: string) {
+/** Starts `group`'s session on a seed once: after an ambiguous request it looks for the session rather than send again. */
+export function forkOperation(group = `fork-${crypto.randomUUID()}`) {
   let sent = false;
   let pending: Promise<string> | null = null;
   let accepted: string | null = null;
@@ -81,7 +81,7 @@ function forkStart(group: string) {
   };
 }
 
-const starts = new Map<string, ReturnType<typeof forkStart>>();
+const starts = new Map<string, ReturnType<typeof forkOperation>>();
 
 /** Start Holo on fork `id` with its first message, and bind the fork to that session. */
 export async function startFork(
@@ -93,7 +93,7 @@ export async function startFork(
 ): Promise<string> {
   if (!FORK_ID.test(id)) throw new Error("No such fork.");
   let start = starts.get(id);
-  if (!start) starts.set(id, (start = forkStart(id)));
+  if (!start) starts.set(id, (start = forkOperation(id)));
   const begin = async () => {
     const session = await start(seed, text, photos, attached);
     await linkFork(id, session);
