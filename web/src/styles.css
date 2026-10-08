@@ -1812,23 +1812,52 @@ main {
   }
 }
 
-.sign-in-page {
-  min-height: 100dvh;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  padding: 24px;
-  text-align: center;
-  background: radial-gradient(60% 50% at 50% 38%, var(--background-muted), transparent 70%), var(--background-card);
-  animation: appear 0.4s ease-out both;
+.sign-in-button {
+  flex: none;
+  border-color: transparent;
+  background: var(--background-primary);
+  color: var(--text-on-primary);
+  font-weight: 600;
 }
 
-.sign-in-cube {
-  --cube: 72px;
+.sign-in-dialog {
+  width: min(400px, calc(100vw - 32px));
+  padding: 32px 24px 28px;
+  border: 1px solid var(--stroke-default);
+  border-radius: 16px;
+  text-align: center;
+  color: var(--text-default);
+  background: radial-gradient(60% 50% at 50% 30%, var(--background-muted), transparent 70%), var(--background-card);
+  box-shadow: 0 24px 100px #0005;
+}
+
+.sign-in-dialog::backdrop {
+  background: #11182788;
+}
+
+.sign-in-dialog p {
+  margin: 0;
+}
+
+.sign-in-dialog[open] {
   display: flex;
   flex-direction: column;
   align-items: center;
-  margin-bottom: 18px;
+  gap: 10px;
+}
+
+.sign-in-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+}
+
+.sign-in-cube {
+  --cube: 56px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 14px;
 }
 
 .cube-float {
@@ -1846,32 +1875,16 @@ main {
   animation: float-shadow 3.2s ease-in-out infinite;
 }
 
-.sign-in-cover {
-  width: min(320px, 80vw);
-  aspect-ratio: 1;
-  object-fit: cover;
-  margin-bottom: 16px;
-  border-radius: 16px;
-  background: var(--background-viewer);
-  border: 1px solid var(--stroke-default);
-}
-
-.sign-in-kicker {
+.sign-in-dialog h2 {
   margin: 0;
-  color: var(--text-secondary);
-  font-weight: 600;
-}
-
-.sign-in-page h1 {
-  margin: 0;
-  font-size: 30px;
-  line-height: 36px;
+  font-size: 24px;
+  line-height: 30px;
   font-weight: 700;
   letter-spacing: -0.02em;
 }
 
-.sign-in-lead {
-  margin: 0 0 18px;
+.sign-in-dialog .sign-in-lead {
+  margin: 0 0 14px;
   color: var(--text-secondary);
   font-size: 15px;
 }
@@ -1901,17 +1914,11 @@ main {
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
 }
 
-.sign-in-error {
+.sign-in-dialog .sign-in-error {
   margin: 4px 0 0;
   max-width: 320px;
   color: var(--text-error);
   font-size: 13px;
-}
-
-.sign-in-fine {
-  margin: 6px 0 0;
-  color: var(--text-tertiary);
-  font-size: 12px;
 }
 
 @keyframes float {
@@ -2932,7 +2939,8 @@ main {
   }
 
   .app:not(.home) > header > .back,
-  .app:not(.home) > header .share-button {
+  .app:not(.home) > header .share-button,
+  .app:not(.home) > header > .sign-in-button {
     flex: none;
     justify-content: center;
     width: 40px;

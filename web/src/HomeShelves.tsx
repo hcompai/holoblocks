@@ -12,8 +12,8 @@ interface Props {
   builds: BuildSummary[] | null;
   /** The shelves the last fetch could not load. */
   failed: Shelf[];
-  /** The signed-in user's id: the public builds they own count as theirs too, such as imported ones. */
-  me: string;
+  /** The signed-in user's id, or null signed out: the public builds they own count as theirs too, such as imported ones. */
+  me: string | null;
   onRetry: () => void;
   onOpen: (build: BuildSummary) => void;
   /** What sits beside the user's heading, such as the import button. */
@@ -101,7 +101,7 @@ export function HomeShelves({ builds, failed, me, onRetry, onOpen, mineActions, 
   // Private builds are their owner's alone: under the user's builds, never under Public.
   const everyone = builds?.filter((b) => b.source !== "session" && b.source !== "fork" && !b.private) ?? [];
   const published = new Set(everyone.filter((b) => b.source === "public").map((b) => b.id));
-  const yours = mine(builds ?? [], me);
+  const yours = me ? mine(builds ?? [], me) : [];
   const grid = { gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` };
 
   const section = (
@@ -164,29 +164,30 @@ export function HomeShelves({ builds, failed, me, onRetry, onOpen, mineActions, 
   const publicShown = everyone.slice(0, columns * publicRows);
   return (
     <div className="home-shelves" ref={root}>
-      {section(
-        "Your builds",
-        "mine",
-        yours,
-        allMine ? yours : yours.slice(0, columns),
-        "Your builds will show up here once you describe one above or import a model.",
-        <>
-          {yours.length > columns && (
-            <button className="quiet" onClick={() => setAllMine(!allMine)}>
-              {allMine ? "Show less" : "Show all"}
-            </button>
-          )}
-          {mineActions}
-        </>,
-        undefined,
-        true,
-      )}
+      {me &&
+        section(
+          "Your builds",
+          "mine",
+          yours,
+          allMine ? yours : yours.slice(0, columns),
+          "Your builds will show up here once you describe one above or import a model.",
+          <>
+            {yours.length > columns && (
+              <button className="quiet" onClick={() => setAllMine(!allMine)}>
+                {allMine ? "Show less" : "Show all"}
+              </button>
+            )}
+            {mineActions}
+          </>,
+          undefined,
+          true,
+        )}
       {section(
         "Public builds",
         "public",
         everyone,
         publicShown,
-        "Builds your teammates publish will show up here, and yours can be the first.",
+        "Builds people publish will show up here, and yours can be the first.",
         undefined,
         publicShown.length < everyone.length && (
           <button className="home-more" onClick={() => setPublicRows(publicRows + PUBLIC_ROWS)}>
