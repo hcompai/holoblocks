@@ -3865,3 +3865,8 @@ main {
     transition: none;
   }
 }
+
+.github-star {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
