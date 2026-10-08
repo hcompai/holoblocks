@@ -123,9 +123,9 @@ export function filmFilename(name: string, extension: string): string {
 }
 
 export function filmCaption(build: Pick<Build, "name" | "status">, blocks: number | null, branded: boolean): string {
-  const count = blocks === null ? "" : `: ${blocks.toLocaleString("en-US")} Minecraft blocks`;
+  const count = blocks === null ? "" : `: ${blocks.toLocaleString("en-US")} blocks`;
   const author = branded ? `${HOLO.name} by H Company` : "HoloBlocks";
   const state = build.status === "building" ? " · work in progress" : "";
-  const tags = branded ? "#Holo4 #HCompany #HoloBlocks #Minecraft" : "#HoloBlocks #Minecraft";
+  const tags = branded ? "#Holo4 #HCompany #HoloBlocks" : "#HoloBlocks";
   return `${build.name}${count}, built with ${author}${state}. ${tags}`;
 }

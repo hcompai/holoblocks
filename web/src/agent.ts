@@ -81,7 +81,7 @@ function agent(): HaiAgents.Agent {
     .replaceAll("{{max_minutes}}", String(MAX_TIME_S / 60));
   return {
     name: AGENT,
-    description: "Designs Minecraft structures in code, step by step, in HoloBlocks.",
+    description: "Designs block structures in code, step by step, in HoloBlocks.",
     model: HOLO.id,
     reasoningEffort: "xhigh",
     instructions,

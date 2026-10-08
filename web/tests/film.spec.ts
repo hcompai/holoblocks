@@ -64,10 +64,10 @@ test("Share a GIF makes a credited looping GIF of the build and leaves the viewe
     "Fixed",
   ]);
   await expect(caption).toHaveValue(
-    "Little Hut: 24 Minecraft blocks, built with Holo4 27B by H Company. #Holo4 #HCompany #HoloBlocks #Minecraft",
+    "Little Hut: 24 blocks, built with Holo4 27B by H Company. #Holo4 #HCompany #HoloBlocks",
   );
   await dialog.getByRole("checkbox", { name: "H Company credit" }).uncheck();
-  await expect(caption).toHaveValue("Little Hut: 24 Minecraft blocks, built with HoloBlocks. #HoloBlocks #Minecraft");
+  await expect(caption).toHaveValue("Little Hut: 24 blocks, built with HoloBlocks. #HoloBlocks");
   await dialog.getByRole("checkbox", { name: "H Company credit" }).check();
   const link = dialog.getByRole("link", { name: "Download GIF" });
   await expect(link).toBeVisible({ timeout: 240000 });
