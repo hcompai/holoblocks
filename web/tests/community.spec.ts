@@ -280,13 +280,8 @@ test("a hand-edited build publishes with its edits, for the server to apply", as
   expect(calls.find((c) => c.method === "POST")!.body.edits).toEqual({ revision: hut.revision, edits });
 });
 
-test("signed out, only the sign-in page shows; Google brings the user back signed in where they left", async ({
-  page,
-  context,
-}) => {
-  const hut = { ...model(), id: "hut" };
-  await site(page, [hut], null);
-  let handoff: object = { error: "HoloBlocks is open to H Company accounts." };
+/** The portal's Google sign-in, then /api/session handing over `handoff.value`; returns what they read. */
+async function portal(page: Page, handoff: { value: object }) {
   const pending: { verifier: string }[] = [];
   const challenges: (string | null)[] = [];
   await page.route(`${PORTAL}/auth/authorize?*`, (route) => {
@@ -303,18 +298,115 @@ test("signed out, only the sign-in page shows; Google brings the user back signe
     pending.push(back);
     return route.fulfill({
       status: 303,
-      headers: { location: back.back, "set-cookie": setCookie(HANDOFF, JSON.stringify(handoff), 60) },
+      headers: { location: back.back, "set-cookie": setCookie(HANDOFF, JSON.stringify(handoff.value), 60) },
     });
   });
+  return { pending, challenges };
+}
+
+/** Requests a signed-out visitor must never make: the Agents API, and the library's signed-in routes. */
+function signedInRequests(page: Page): string[] {
+  const made: string[] = [];
+  page.on("request", (request) => {
+    const url = request.url();
+    if (
+      url.startsWith("https://agp.eu.hcompany.ai/") ||
+      /\/api\/(names|forks|deleted|imports)/.test(url) ||
+      url.includes("mine=1") ||
+      request.headers()["x-agents-key"]
+    )
+      made.push(`${request.method()} ${url}`);
+  });
+  return made;
+}
+
+test("signed out, home lists the public builds and the showcases, which open read only", async ({ page }) => {
+  const hut = { ...model(), id: "hut", name: "Ada's hut" };
+  const tower = { ...model("f0e1d2c3b4a5"), id: "tower", name: "Tower" };
+  await site(page, [tower], null);
+  await library(page, [entry(hut, "Ada Lovelace", "u-ada")], [hut]);
+  const made = signedInRequests(page);
+  await page.goto("/");
+
+  await expect(page.getByRole("region", { name: "Your builds" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Import a build" })).toHaveCount(0);
+  const cards = page.getByRole("region", { name: "Public builds" }).locator(".gallery-card");
+  await expect(cards).toHaveText([/Ada's hut/, /Tower/]);
+  await cards.filter({ hasText: "Tower" }).click();
+  await expect(page).toHaveURL(/\?showcase=tower$/);
+  await shown(page, tower.revision);
+  await expect(page.locator(".gallery-note")).toHaveText(/^Showcase · Sign in to fork/);
+  await page.locator(".gallery-note").getByRole("button", { name: "Sign in" }).click();
+  await expect(page.getByRole("dialog", { name: "Sign in to build" })).toBeVisible();
+  expect(made).toEqual([]);
+});
+
+test("signed out, a public build's link opens it in the viewer, exports and all, with no signed-in request", async ({
+  page,
+}) => {
+  const hut = { ...model(), id: "hut", name: "Ada's hut" };
+  await site(page, [], null);
+  await library(page, [entry(hut, "Ada Lovelace", "u-ada")], [hut]);
+  const made = signedInRequests(page);
+  const errors: string[] = [];
+  page.on("console", (message) => message.type() === "error" && errors.push(message.text()));
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.goto("/?public=hut");
+
+  await shown(page, hut.revision);
+  await expect(page.locator(".gallery-note")).toHaveText(/^By Ada Lovelace · Sign in to fork/);
+  const menu = await shareMenu(page);
+  await expect(menu.getByRole("menuitem", { name: "Copy link" })).toBeEnabled();
+  await expect(menu.getByRole("menuitem", { name: "Download .schem" })).toBeEnabled();
+  await expect(menu.getByRole("menuitem", { name: /Publish/ })).toHaveCount(0);
+  expect(made).toEqual([]);
+  expect(errors).toEqual([]);
+});
+
+test("signed out, sending a new build asks to sign in, and the prompt waits in the composer after it", async ({
+  page,
+}) => {
+  await site(page, [], null);
+  const handoff = { value: ACCOUNT };
+  await portal(page, handoff);
+  const made = signedInRequests(page);
+  await page.goto("/");
+
+  const composer = page.getByRole("textbox", { name: "Describe a new build" });
+  const dialog = page.getByRole("dialog", { name: "Sign in to build" });
+  await composer.fill("A windmill by a river");
+  await page.getByRole("button", { name: "Send", exact: true }).click();
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Continue with Google" })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+  await expect(composer).toHaveValue("A windmill by a river");
+  await page.getByRole("button", { name: "A hilltop castle" }).click();
+  await expect(dialog).toBeVisible();
+  expect(made).toEqual([]);
+
+  await dialog.getByRole("button", { name: "Continue with Google" }).click();
+  await expect(page.getByRole("button", { name: "Account" })).toBeVisible();
+  await expect(composer).toHaveValue("A windmill by a river");
+  expect(made.filter((r) => r.startsWith("POST"))).toEqual([]);
+});
+
+test("signing in from the header comes back where the user left, or with why it failed", async ({ page, context }) => {
+  const hut = { ...model(), id: "hut" };
+  await site(page, [hut], null);
+  const handoff: { value: object } = { value: { error: "HoloBlocks is open to H Company accounts." } };
+  const { pending, challenges } = await portal(page, handoff);
+  const signIn = page.locator("header").getByRole("button", { name: "Sign in" });
   const google = page.getByRole("button", { name: "Continue with Google" });
 
   await page.goto(`/?showcase=${hut.id}`);
-  await expect(page.getByRole("heading", { name: "HoloBlocks" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "HoloBlocks", exact: true })).toHaveCount(0);
+  await shown(page, hut.revision);
+  await signIn.click();
   await google.click();
+  await expect(page.getByRole("dialog", { name: "Sign in to build" })).toBeVisible();
   await expect(page.getByRole("alert")).toHaveText("HoloBlocks is open to H Company accounts.");
 
-  handoff = ACCOUNT;
+  handoff.value = ACCOUNT;
   await google.click();
   await expect(page.getByRole("button", { name: "Account" })).toBeVisible();
   await expect(page).toHaveURL(new RegExp(`\\?showcase=${hut.id}$`));
@@ -322,6 +414,7 @@ test("signed out, only the sign-in page shows; Google brings the user back signe
 
   await page.getByRole("button", { name: "Account" }).click();
   await page.getByRole("menuitem", { name: "Sign out" }).click();
+  await signIn.click();
   await google.click();
   await expect(page.getByRole("button", { name: "Account" })).toBeVisible();
   const verifier = expect.stringMatching(/^[\w-]{43}$/);
