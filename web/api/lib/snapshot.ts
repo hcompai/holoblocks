@@ -4,6 +4,7 @@ import { platformAsset, assetBlob } from "../../src/assetUrl";
 import { EMPTY_MODEL, type Model, type Shared } from "../../src/model";
 import { AGENT, EMPTY_TRANSCRIPT, read, readJson, status, type Transcript } from "../../src/session";
 import { applyEdits, type Edit, validEdits } from "../../src/voxelEdits";
+import { readSeed } from "../../src/forkModel";
 import { readFork } from "./forks";
 import { Refusal } from "./http";
 import { imported } from "./imported";
@@ -90,13 +91,14 @@ export async function snapshot(id: string, key: string, edited: unknown, owner?:
   return { ...withEdits(fork.seed.model, checked(edited)), status: "done", messages: [] };
 }
 
-/** A session's build; a fork's session keeps the name of `start`, its starting model, and shows it until it shares one. */
+/** A session's build; a session started on a seed (a fork, or a remix of an ended build) keeps the seed's name, and shows it until it shares a model. */
 async function sessionSnapshot(id: string, key: string, edited: unknown, start?: Model): Promise<Shared> {
   const agp = platform(key);
   const session = await mine(agp, id);
   const state = status(session.status.status);
   if (state === "building") throw new Refusal(409, "Holo is still building: publish once it answers.");
   const t = await transcript(agp, id);
+  if (!start && t.fork) start = (await readSeed(await download(t.fork, key))).model;
   if (!t.model && !start) throw new Refusal(409, "Nothing is built yet.");
   const latest = t.model ? await readJson<Model>(await download(t.model.url, key)) : start!;
   const model = withEdits(latest, checked(edited));
