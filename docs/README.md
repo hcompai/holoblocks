@@ -88,6 +88,17 @@ rm .env.migrate.local
 
 The migration copies each private entry left in the public store, with its model and cover, before deleting the public copies. It stops on failure; rerun it to finish, and a finished run moves nothing. It logs only the count, never models or tokens. Owner access also moves an entry left behind. The Blob CDN can keep serving a deleted public file for a few minutes, and copies already downloaded cannot be revoked.
 
+### Stripping chats from builds published with them
+
+From `web/`, with the production environment pulled as above:
+
+```bash
+node --env-file=.env.migrate.local scripts/strip-public-chats.mjs ~/blockyard-chats            # counts them, changes nothing
+node --env-file=.env.migrate.local scripts/strip-public-chats.mjs ~/blockyard-chats --apply
+```
+
+For each public build with a chat, a prompt or chat images, it first saves its entry, build file and images under `<backup dir>/<id>/`, then writes the build file without `messages` and the entry without `prompt`, and deletes the old build file and the chat images. It stops on failure; rerun it to finish, and a finished run strips nothing more.
+
 ## Where to change things
 
 | To change | Edit |

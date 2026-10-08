@@ -1,4 +1,9 @@
 import { expect, test } from "@playwright/test";
+import { execFile } from "node:child_process";
+import { mkdtempSync, readdirSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { promisify } from "node:util";
 import { gunzipSync, gzipSync } from "node:zlib";
 import { DELETE as unpublishBuild, GET as builds, POST as publishBuild } from "../api/builds";
 import { POST as deleteBuild } from "../api/deleted";
@@ -7,7 +12,7 @@ import { POST as importBuild } from "../api/imports";
 import { pass, type User } from "../api/lib/account";
 import { linkFork } from "../api/lib/forks";
 import { projectName } from "../api/lib/names";
-import { enter, find, findOwn, forgotten } from "../api/lib/store";
+import { enter, find, findOwn, forgotten, save } from "../api/lib/store";
 import { GET as names, PATCH as renameBuild } from "../api/names";
 import { GET as profile, PUT as setProfile } from "../api/profile";
 import { forkSeed } from "../src/forkModel";
@@ -17,6 +22,7 @@ import { model } from "./fixtures";
 process.env.BLOCKYARD_SECRET = "forks-test-secret";
 process.env.BLOCKYARD_ADMINS = "ada.admin@hcompany.ai";
 const blob = blobStore();
+const run = promisify(execFile);
 
 const OWNER: User = { id: "u-owner", email: "olive.owner@hcompany.ai", name: "Olive Owner" };
 const OTHER: User = { id: "u-other", email: "otto.other@hcompany.ai", name: "Otto Other" };
@@ -257,6 +263,37 @@ test("publishing keeps the chat private: no message, prompt or photo of it reach
   });
   const stored = [...blob.objects].map(([path, data]) => (path.endsWith(".gz") ? gunzipSync(data) : data).toString());
   expect(stored.join("\n")).not.toContain("secret");
+});
+
+test("the chat migration backs up, then strips each public build's chat, prompt and chat images; a dry run changes nothing", async () => {
+  const id = "old-hut";
+  const chat = [{ role: "user", text: "A secret hut", images: [] }];
+  const file = gzipSync(JSON.stringify({ ...model(), status: "done", messages: chat }));
+  const build = await save(id, "build.json.gz", file, "application/gzip");
+  await save(id, "images/1.png", Buffer.from("photo"), "image/png");
+  const thumbnail = await save(id, "thumbnail.webp", Buffer.from("cover"), "image/webp");
+  const listed = { id, name: "Old hut", prompt: "A secret hut", steps: 2, author: "", owner: OWNER.id, published: 1 };
+  await enter({ ...listed, thumbnail, build }, [], []);
+  const backups = mkdtempSync(join(tmpdir(), "blockyard-chats-test-"));
+  const strip = async (...flags: string[]) =>
+    (await run("node", ["scripts/strip-public-chats.mjs", backups, ...flags], { env: process.env })).stdout;
+  const unpacked = (path: string) => JSON.parse(gunzipSync(blob.objects.get(path)!).toString());
+
+  const before = new Map(blob.objects);
+  expect(await strip()).toContain("Would strip 1 of 1 public builds and delete 1 chat images.");
+  expect(blob.objects).toEqual(before);
+  expect(readdirSync(backups)).toEqual([]);
+
+  expect(await strip("--apply")).toContain("Stripped 1 of 1 public builds and deleted 1 chat images");
+  const entry = (await find(id))!;
+  expect(entry).toMatchObject({ ...listed, prompt: "", thumbnail });
+  const files = [...blob.objects.keys()].filter((p) => p.startsWith(`builds/${id}/`));
+  expect(files.sort()).toEqual([expect.stringMatching(/build\.json-\w+\.gz$/), expect.stringMatching(/thumbnail/)]);
+  expect(unpacked(files[0])).toMatchObject({ revision: model().revision, messages: [] });
+  expect(JSON.parse(readFileSync(join(backups, id, "entry.json"), "utf8")).prompt).toBe("A secret hut");
+  expect(JSON.parse(gunzipSync(readFileSync(join(backups, id, "build.json.gz"))).toString()).messages).toEqual(chat);
+  expect(readdirSync(join(backups, id, "images"))).toHaveLength(1);
+  expect(await strip("--apply")).toContain("Stripped 0 of 1");
 });
 
 test("a display name replaces the default on its owner's library builds, old ones too, and holds no email or link", async () => {
