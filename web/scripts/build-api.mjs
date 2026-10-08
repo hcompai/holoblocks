@@ -2,12 +2,10 @@
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { rolldown } from "rolldown";
-import { loadEnv } from "vite";
 
 const out = process.argv[2];
 if (!out) throw new Error("usage: node scripts/build-api.mjs <output directory>");
 const MAX_DURATION_S = { builds: 300 };
-const { VITE_PLATFORM = "" } = loadEnv("production", process.cwd(), "VITE_");
 /** A link to a public build or a showcase gets the app's page with that build's link preview. */
 const ROUTES = [
   ...["public", "showcase"].map((key) => ({ src: "^/$", has: [{ type: "query", key }], dest: "/api/preview" })),
@@ -30,7 +28,6 @@ for (const file of (await readdir("api")).filter((f) => f.endsWith(".ts"))) {
     platform: "node",
     logLevel: "warn",
     plugins: [raw],
-    transform: { define: { "import.meta.env": JSON.stringify({ VITE_PLATFORM }) } },
   });
   await bundle.write({ file: join(dir, "index.mjs"), format: "esm", codeSplitting: false });
   await writeFile(

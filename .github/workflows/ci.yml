@@ -69,8 +69,8 @@ jobs:
       url: https://blocks.hcompany.ai
     env:
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-      VERCEL_ORG_ID: team_IU7YWZ6TFEyn6wR3s7Dd7uEH
-      VERCEL_PROJECT_ID: prj_vc11JR6zOv7gpGGTBy7uBCWy6cDq
+      VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6

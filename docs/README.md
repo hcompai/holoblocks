@@ -45,7 +45,7 @@ cd server && uv sync && cd ..
 server/.venv/bin/python scripts/pack-toolkit.py        # web/public/blockyard.tgz
 server/.venv/bin/blockyard-gallery web/public          # Holo's showcases, into web/public/gallery
 cd web && npm install
-vercel link --yes --scope h-company --project blockyard && vercel env pull .env.local   # the server's secrets
+vercel link && vercel env pull .env.local                                              # the server's secrets
 npm run dev                                                                            # http://127.0.0.1:5173
 ```
 
@@ -123,15 +123,16 @@ scripts/deploy.sh --preview                   # or --prod
 ```
 
 Every push to main that passes CI deploys to production (the `deploy` job in `.github/workflows/ci.yml`, secret
-`VERCEL_TOKEN`); or deploy from a laptop as above. `deploy.sh` packs the toolkit, exports Holo's showcases into
-`web/public/gallery`, builds the app and its functions, screenshots each showcase as its thumbnail and deploys them to
-the Vercel project `blockyard`. The bundle is public: it never carries an API key.
+`VERCEL_TOKEN`, repository variables `VERCEL_ORG_ID` and `VERCEL_PROJECT_ID`); or deploy from a laptop as above, from a
+linked `web/` or with `VERCEL_SCOPE` and `VERCEL_PROJECT` set. `deploy.sh` packs the toolkit, exports Holo's showcases
+into `web/public/gallery`, builds the app and its functions, screenshots each showcase as its thumbnail and deploys
+them to the Vercel project. The bundle is public: it never carries an API key.
 
 ## Blocks
 
 Textures are from [Faithful](https://faithfulpack.net/) (see `web/public/textures/LICENSE.txt`). Regenerate the
 palette and texture sheet from a Faithful 32x pack and the matching vanilla client jar (for block models) with
-`uv run scripts/palette.py <pack>/assets/minecraft/textures/block <jar>/assets/minecraft`.
+`uv run scripts/palette.py <pack>/assets/<namespace>/textures/block <jar>/assets/<namespace>`.
 
 ## Tests
 
