@@ -413,6 +413,47 @@ test("signed out, a public build's link opens it in the viewer, exports and all,
   expect(errors).toEqual([]);
 });
 
+test("no brand shows on home, its credits, a public build or the sign-in dialog, whose legal links open H's pages", async ({
+  page,
+}) => {
+  const brands = /lego|duplo|minecraft|mojang|pick a brick/i;
+  const hut = { ...model(), id: "hut", name: "Ada's hut" };
+  await site(page, [], null);
+  await library(page, [entry(hut, "Ada Lovelace", "u-ada")], [hut]);
+  const opensInTab = async (link: ReturnType<Page["getByRole"]>, href: string) => {
+    await expect(link).toHaveAttribute("href", href);
+    await expect(link).toHaveAttribute("target", "_blank");
+  };
+  await page.goto("/");
+
+  await expect(page.locator(".gallery-card")).toHaveText([/Ada's hut/]);
+  const meta = await page.locator("meta[content]").evaluateAll((tags) => tags.map((t) => t.getAttribute("content")));
+  expect([await page.title(), ...meta, await page.locator("body").innerText()].join("\n")).not.toMatch(brands);
+  const footer = page.locator("footer.legal");
+  await expect(footer).toHaveText("Terms·Privacy·Credits");
+  await opensInTab(footer.getByRole("link", { name: "Terms" }), "https://www.hcompany.ai/terms-of-use");
+  await opensInTab(footer.getByRole("link", { name: "Privacy" }), "https://www.hcompany.ai/privacy-policy");
+  await footer.getByRole("button", { name: "Credits" }).click();
+  const credits = page.getByRole("dialog", { name: "Credits" });
+  await opensInTab(credits.getByRole("link", { name: "Faithful 32x" }), "https://faithfulpack.net/");
+  expect(await credits.innerText()).not.toMatch(brands);
+  await credits.getByRole("button", { name: "Close" }).click();
+  await expect(credits).toBeHidden();
+
+  await page.goto("/?public=hut");
+  await shown(page, hut.revision);
+  expect(await page.locator("body").innerText()).not.toMatch(brands);
+  await page.locator(".gallery-note").getByRole("button", { name: "Sign in" }).click();
+  const signIn = page.getByRole("dialog", { name: "Sign in to build" });
+  await expect(signIn).toContainText("By signing in you agree to the Terms and Privacy Policy.");
+  await opensInTab(signIn.getByRole("link", { name: "Terms" }), "https://www.hcompany.ai/terms-of-use");
+  await opensInTab(signIn.getByRole("link", { name: "Privacy Policy" }), "https://www.hcompany.ai/privacy-policy");
+  expect(await signIn.innerText()).not.toMatch(brands);
+  await signIn.getByRole("button", { name: "Close" }).click();
+  await expect(await shareMenu(page)).toBeVisible();
+  expect(await page.locator("body").innerText()).not.toMatch(brands);
+});
+
 test("signed out, sending a new build asks to sign in, and the prompt waits in the composer after it", async ({
   page,
 }) => {
