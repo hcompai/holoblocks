@@ -9,19 +9,17 @@ export interface User {
   name: string;
 }
 
-/** "jane.doe@hcompany.ai" as "Jane Doe". */
-export const nameOf = (email: string) =>
-  email
-    .split("@")[0]
-    .split(/[._-]+/)
-    .filter(Boolean)
-    .map((w) => w[0].toUpperCase() + w.slice(1))
-    .join(" ");
+const capital = (word: string) => word[0].toUpperCase() + word.slice(1);
 
-export function admit(user: { id: string; email: string }): User {
-  if (!user.email.toLowerCase().endsWith(DOMAIN)) throw new Refusal(403, "HoloBlocks is open to H Company accounts.");
-  return { ...user, name: nameOf(user.email) };
+/** The name shown publicly for an email: "Jane Doe" at H Company, "Jane D." elsewhere, "" when it names nobody. */
+export function nameOf(email: string): string {
+  const words = email.split("@")[0].split(/[._-]+/).filter(Boolean);
+  if (email.toLowerCase().endsWith(DOMAIN)) return words.map(capital).join(" ");
+  if (words.length < 2 || !words.every((w) => /^\p{L}+$/u.test(w))) return "";
+  return `${capital(words[0])} ${words.at(-1)![0].toUpperCase()}.`;
 }
+
+export const admit = (user: { id: string; email: string }): User => ({ ...user, name: nameOf(user.email) });
 
 export const isAdmin = (user: User) =>
   (process.env.BLOCKYARD_ADMINS ?? "")

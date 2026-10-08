@@ -395,7 +395,7 @@ test("signed out, sending a new build asks to sign in, and the prompt waits in t
 test("signing in from the header comes back where the user left, or with why it failed", async ({ page, context }) => {
   const hut = { ...model(), id: "hut" };
   await site(page, [hut], null);
-  const handoff: { value: object } = { value: { error: "HoloBlocks is open to H Company accounts." } };
+  const handoff: { value: object } = { value: { error: "The Google sign-in failed: try again." } };
   const { pending, challenges } = await portal(page, handoff);
   const signIn = page.locator("header").getByRole("button", { name: "Sign in" });
   const google = page.getByRole("button", { name: "Continue with Google" });
@@ -405,7 +405,7 @@ test("signing in from the header comes back where the user left, or with why it 
   await signIn.click();
   await google.click();
   await expect(page.getByRole("dialog", { name: "Sign in to build" })).toBeVisible();
-  await expect(page.getByRole("alert")).toHaveText("HoloBlocks is open to H Company accounts.");
+  await expect(page.getByRole("alert")).toHaveText("The Google sign-in failed: try again.");
 
   handoff.value = ACCOUNT;
   await google.click();

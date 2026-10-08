@@ -39,4 +39,4 @@ Your browser renders every revision and shows it to Holo, so keep the tab open w
 
 ## Run it
 
-Live at [blocks.hcompany.ai](https://blocks.hcompany.ai): anyone can browse the public builds and showcases; building needs a sign-in with an `@hcompany.ai` account. Setup, deploy, tests and the toolkit are in [docs/README.md](docs/README.md).
+Live at [blocks.hcompany.ai](https://blocks.hcompany.ai): anyone can browse the public builds and showcases, and anyone can sign in with an H account to build. Setup, deploy, tests and the toolkit are in [docs/README.md](docs/README.md).

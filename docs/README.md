@@ -49,7 +49,7 @@ vercel link --yes --scope h-company --project blockyard && vercel env pull .env.
 npm run dev                                                                            # http://127.0.0.1:5173
 ```
 
-Needs Node 20+. Signed out, anyone can open the public builds and showcases, read only, and export them. Building, forking, importing and managing builds need a sign-in with an `@hcompany.ai` account on the H portal, which mints the user's Agents API key; the sign-in dialog opens on any of those actions.
+Needs Node 20+. Signed out, anyone can open the public builds and showcases, read only, and export them. Building, forking, importing and managing builds need a sign-in on the H portal, open to everyone, which mints the user's Agents API key; the sign-in dialog opens on any of those actions.
 
 With the dev server running, open `/dev/thinking.html` to try the thinking visuals without signing in. Change the request to try different subject sketches and material textures. **Replay photo arrivals** shows three credited sample references appearing one at a time; the naming stage reveals a sample title. Show the illustrative model and replay its placement at different speeds. Block sounds are on by default; the speaker button mutes them. This separate dev entry and its sample photos are not included in the production build.
 
