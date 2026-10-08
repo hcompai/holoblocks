@@ -1,4 +1,4 @@
-"""Build the showcases into the static gallery the web app serves: `blockyard-gallery SITE_DIR`."""
+"""Build Holo's showcases into the static gallery the web app serves: `blockyard-gallery SITE_DIR`."""
 
 from __future__ import annotations
 
@@ -7,20 +7,24 @@ import json
 import shutil
 from pathlib import Path
 
-from blockyard.showcases import SHOWCASES, told
+from blockyard.showcases import SHOWCASES, Showcase, told
 from blockyard.workbench import Workbench
 from blockyard.workspace import Workspace, bundle
 
 URL = "gallery"
 
 
+def public() -> list[Showcase]:
+    return [showcase for showcase in SHOWCASES if showcase.builder == "holo"]
+
+
 def export(site: Path) -> Path:
-    """Write every showcase under `site/gallery`, keeping its thumbnails; returns that folder."""
+    """Write every showcase Holo built under `site/gallery`, keeping its thumbnails; returns that folder."""
     out = site / URL
     shutil.rmtree(out / "builds", ignore_errors=True)
     (out / "builds").mkdir(parents=True)
     summaries = []
-    for showcase in SHOWCASES:
+    for showcase in public():
         build = showcase.build()
         messages = [
             {"role": "assistant", "text": text, "images": []}
@@ -48,4 +52,4 @@ def main() -> None:
     parser.add_argument("site", type=Path, help="static site folder; the gallery goes in its gallery/ subfolder")
     out = export(parser.parse_args().site)
     size = sum(f.stat().st_size for f in out.rglob("*") if f.is_file())
-    print(f"Exported {len(SHOWCASES)} showcases to {out} ({size / 1e6:.1f} MB)")
+    print(f"Exported {len(public())} showcases to {out} ({size / 1e6:.1f} MB)")

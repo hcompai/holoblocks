@@ -43,7 +43,7 @@ browser: this web app                  Agents API (agp.eu.hcompany.ai)          
 ```bash
 cd server && uv sync && cd ..
 server/.venv/bin/python scripts/pack-toolkit.py        # web/public/blockyard.tgz
-server/.venv/bin/blockyard-gallery web/public          # the showcases, into web/public/gallery
+server/.venv/bin/blockyard-gallery web/public          # Holo's showcases, into web/public/gallery
 cd web && npm install
 vercel link --yes --scope h-company --project blockyard && vercel env pull .env.local   # the server's secrets
 npm run dev                                                                            # http://127.0.0.1:5173
@@ -103,15 +103,15 @@ Try the toolkit by hand: in a folder with a `build.py`, run `<repo>/server/.venv
 ## Showcases and deploy
 
 The steampunk manor, the gothic cathedral, Bag End and Caras Galadhon are build scripts in `agent/showcase`, on the
-same calls as Holo's, each step told by the comment above it. Holo gets them in the toolkit with their renders, and
-Bag End is printed in full in its prompt as the worked example.
+same calls as Holo's, each step told by the comment above it. Holo gets them all in the toolkit with their renders.
+Claude scripted these four, so the gallery leaves them out: it shows only showcases whose `builder` is `holo`.
 
 ```bash
 scripts/deploy.sh --preview                   # or --prod
 ```
 
 Every push to main that passes CI deploys to production (the `deploy` job in `.github/workflows/ci.yml`, secret
-`VERCEL_TOKEN`); or deploy from a laptop as above. `deploy.sh` packs the toolkit, exports the showcases into
+`VERCEL_TOKEN`); or deploy from a laptop as above. `deploy.sh` packs the toolkit, exports Holo's showcases into
 `web/public/gallery`, builds the app and its functions, screenshots each showcase as its thumbnail and deploys them to
 the Vercel project `blockyard`. The bundle is public: it never carries an API key.
 
