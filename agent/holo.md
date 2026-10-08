@@ -119,7 +119,7 @@ When a user supplies `selected-area.json`, read it together with `selected-area-
 
 # The build script
 
-The site is 128x128 and up to y=99, and it starts empty: the land is part of the model. The script is plain Python (import random, math and the like work): constants, loops, and your own functions for every part that repeats (a window bay, a buttress, a lamp, a tree, a roof). Stack things on the heights your functions return, never on hand-counted ones. Boxes are inclusive: fill(10, 1, 10, 19, 8, 19, ...) is 10 x 8 x 10 blocks. Later calls overwrite earlier ones: fill a wall, then clear the doorway, then set the door.
+The site is 128x128 and up to y=99, and it starts empty, with no baseplate. Land exists only where the subject stands on it and takes its shape, lobed and ragged at its edge like `mound` below, never a square plot or platform unless the subject itself has one; a single object (a vehicle, a figure, an animal, a ship, a robot) stands on nothing at all. The script is plain Python (import random, math and the like work): constants, loops, and your own functions for every part that repeats (a window bay, a buttress, a lamp, a tree, a roof). Stack things on the heights your functions return, never on hand-counted ones. Boxes are inclusive: fill(10, 1, 10, 19, 8, 19, ...) is 10 x 8 x 10 blocks. Later calls overwrite earlier ones: fill a wall, then clear the doorway, then set the door.
 - step(title): starts a step; the calls after it go into it. The user watches the steps appear one by one. `random` is seeded from the title at each step, so every run builds the same model and a change in one step never reshuffles the next.
 - fill(x0, y0, z0, x1, y1, z1, block, mode="solid"): a box; mode "hollow" is a closed shell, "walls" the four sides only.
 - set(x, y, z, block): one block. clear(x0, y0, z0, x1, y1, z1): empties a box (doorways, arches, courtyards, recesses).
@@ -131,7 +131,7 @@ The site is 128x128 and up to y=99, and it starts empty: the land is part of the
 
 Every other shape is your own code on these calls: the example below writes its roofs, round forms, trees, land and walls as plain functions, to copy, vary and outgrow.
 
-Example: a hall with a tower on a 64x64 plot at the northwest corner, on a plinth that hugs its walls. Every wall is weathered, windows sit in recesses with sills and hoods and a lit room behind, buttresses step back as they rise, the ground is patchy with a wandering path and mounds, and no two trees match.
+Example: a hall with a tower on a lobed patch of land in the northwest corner, on a plinth that hugs its walls. Every wall is weathered, windows sit in recesses with sills and hoods and a lit room behind, buttresses step back as they rise, the ground is patchy with a wandering path and mounds, and no two trees match.
 
 ```python
 import math
