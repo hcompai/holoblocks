@@ -1,10 +1,9 @@
 import { type ReactNode, useLayoutEffect, useRef, useState } from "react";
 import type { Shelf } from "./library";
-import type { BuildSummary } from "./model";
+import { type BuildSummary, stepCount } from "./model";
 import { type ProjectActions, ProjectMenu } from "./ProjectMenu";
 
 const PUBLIC_ROWS = 10;
-const PLACEHOLDERS = 4;
 const GAP = 16;
 const TILE = 220;
 
@@ -28,7 +27,7 @@ function meta(b: BuildSummary, published = false): string {
     published ? "public" : null,
     b.id.startsWith("import-") ? "imported" : null,
     b.private ? "private" : null,
-    b.steps === null ? null : `${b.steps} step${b.steps === 1 ? "" : "s"}`,
+    b.steps === null ? null : stepCount(b.steps),
     b.status === "building" ? "building…" : b.status === "error" ? "stopped" : null,
   ]
     .filter(Boolean)
@@ -129,7 +128,7 @@ export function HomeShelves({ builds, failed, me, onRetry, onOpen, mineActions, 
       )}
       {builds === null ? (
         <div className="gallery-grid" style={grid} aria-busy="true">
-          {Array.from({ length: Math.min(PLACEHOLDERS, columns) }, (_, i) => (
+          {Array.from({ length: columns }, (_, i) => (
             <div key={i} className="skeleton">
               <div className="gallery-thumb" />
               <div className="gallery-caption">

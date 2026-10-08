@@ -1,4 +1,5 @@
 import { del, list, type ListBlobResultBlob, put } from "@vercel/blob";
+import { gunzipSync, gzipSync } from "node:zlib";
 import { Refusal } from "./http";
 import {
   privateConfigured,
@@ -43,6 +44,12 @@ const folder = (id: string) => `builds/${id}/`;
 const trash = (owner: string) => `deleted/${encodeURIComponent(owner)}/`;
 const MODEL = "build.json.gz";
 const COVER = "thumbnail";
+
+const unpacked = (file: Buffer) =>
+  JSON.parse((file[0] === 0x1f && file[1] === 0x8b ? gunzipSync(file) : file).toString());
+
+/** A build file, gzipped or not, as a gzipped one without the chat it may hold. */
+const chatless = (file: Buffer) => gzipSync(JSON.stringify({ ...unpacked(file), messages: [] }));
 
 async function listed(prefix: string) {
   const blobs = [];
@@ -191,13 +198,16 @@ async function reveal(owner: string, id: string) {
     if (!file) throw new Error("Private file unavailable");
     const type = file.headers.get("content-type") ?? "application/octet-stream";
     const data = Buffer.from(await file.arrayBuffer());
-    const url = await save(id, name === COVER ? `${COVER}.${type.split("/")[1]}` : name, data, type);
+    const url =
+      name === MODEL
+        ? await save(id, name, chatless(data), "application/gzip")
+        : await save(id, `${COVER}.${type.split("/")[1]}`, data, type);
     written.push(url);
     return url;
   };
   const build = await restored(MODEL);
   const thumbnail = stored.thumbnail ? await restored(COVER) : null;
-  await enter({ ...stored, build, thumbnail }, before, written);
+  await enter({ ...stored, prompt: "", build, thumbnail }, before, written);
 }
 
 async function removePrivate(owner: string, id: string) {
@@ -236,12 +246,53 @@ export async function migratePrivate(dryRun = false): Promise<number> {
   return builds.size;
 }
 
+/**
+ * Operator migration: every public build drops the chat, prompt and chat images it was published with, once `backup`
+ * holds its entry, build file and images under `<id>/`. `dryRun` only counts; a finished run strips nothing more.
+ */
+export async function stripChats(backup: (path: string, data: Buffer) => Promise<void>, dryRun = true) {
+  const builds = await library();
+  let chats = 0;
+  let images = 0;
+  const download = async (url: string) => {
+    const response = await fetch(url, { redirect: "error", signal: AbortSignal.timeout(60_000) });
+    if (!response.ok) throw new Error("Published file unavailable");
+    return Buffer.from(await response.arrayBuffer());
+  };
+  for (const published of builds) {
+    const { id } = published;
+    if (!ID.test(id)) throw new Error("Invalid library entry");
+    const original = await download(published.build);
+    const pictures = await listed(`${folder(id)}images/`);
+    if (!unpacked(original).messages?.length && !published.prompt && !pictures.length) continue;
+    chats++;
+    images += pictures.length;
+    if (dryRun) continue;
+    await backup(`${id}/entry.json`, Buffer.from(JSON.stringify(published)));
+    await backup(`${id}/${MODEL}`, original);
+    for (const p of pictures) await backup(`${id}/images/${p.pathname.split("/").pop()}`, await download(p.url));
+    const build = await save(id, MODEL, chatless(original), "application/gzip");
+    await write(LIBRARY, { ...published, prompt: "", build });
+    await del([published.build, ...pictures.map((p) => p.url)]);
+  }
+  return { builds: builds.length, chats, images };
+}
+
 /** Rename one of `owner`'s builds in the library, public or private; its files and link stay. */
 export async function rename(owner: string, id: string, name: string) {
   const own = await ownPrivate(owner, id);
   if (own) await privateWrite(privateEntry(owner, id), JSON.stringify({ ...own, name }), "application/json");
   const [published] = await entries(LIBRARY, id);
   if (published?.owner === owner) await write(LIBRARY, { ...published, name });
+}
+
+/** Put `author` on every library build of `owner`'s, public or private; their files and links stay. */
+export async function reauthor(owner: string, author: string) {
+  for (const own of await privateOf(owner))
+    if (own.author !== author)
+      await privateWrite(privateEntry(owner, own.id), JSON.stringify({ ...own, author }), "application/json");
+  for (const published of await library())
+    if (published.owner === owner && published.author !== author) await write(LIBRARY, { ...published, author });
 }
 
 /** Every public build, newest first. */

@@ -17,6 +17,7 @@ import { HistoryPanel } from "./HistoryPanel";
 import { design, useHistory, type Version } from "./history";
 import { HomeShelves } from "./HomeShelves";
 import { ImportBuild } from "./ImportBuild";
+import { SiteFooter } from "./Legal";
 import {
   card,
   library,
@@ -30,7 +31,7 @@ import {
   thumbnail,
   unpublish,
 } from "./library";
-import { type Build, type BuildSummary, EMPTY_MODEL, pack, PALETTE, type Source, unpack } from "./model";
+import { type Build, type BuildSummary, EMPTY_MODEL, pack, PALETTE, type Source, stepCount, unpack } from "./model";
 import type { ProjectActions } from "./ProjectMenu";
 import { ProjectTitle } from "./ProjectTitle";
 import { RecoveryPanel } from "./RecoveryPanel";
@@ -487,7 +488,9 @@ export default function App({ account }: { account: Account | null }) {
     ref?.source === "showcase" ? (
       `Showcase · ${forkHint}`
     ) : ref?.source === "public" ? (
-      `${summary?.author ? `By ${summary.author}` : "Public build"} · ${forkHint}`
+      [summary?.author ? `By ${summary.author}` : "Public build", live && stepCount(live.steps.length), forkHint]
+        .filter(Boolean)
+        .join(" · ")
     ) : live && !drafted && live.status === "error" ? (
       <RecoveryPanel
         key={live.id}
@@ -604,7 +607,7 @@ export default function App({ account }: { account: Account | null }) {
         )}
         {!sheeted && <ThemeToggle />}
         {account ? (
-          !sheeted && <AccountMenu account={account} building={running.length > 0} />
+          !sheeted && <AccountMenu account={account} building={running.length > 0} onRenamed={refreshBuilds} />
         ) : (
           <button className="sign-in-button" onClick={askSignIn}>
             <SignInIcon size={16} weight="bold" />
@@ -745,6 +748,7 @@ export default function App({ account }: { account: Account | null }) {
             />
           )}
         </div>
+        {home && <SiteFooter />}
       </aside>
       <main>
         <div className={home ? "workspace hidden" : "workspace"}>

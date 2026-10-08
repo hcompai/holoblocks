@@ -13,6 +13,7 @@ const IMPORTS = "/api/imports";
 const DELETED = "/api/deleted";
 const FORKS = "/api/forks";
 const NAMES = "/api/names";
+const PROFILE = "/api/profile";
 const STORE = "blockyard.library";
 
 /** What the browser remembers of a session's model, since the platform keeps only its chat. */
@@ -152,12 +153,13 @@ async function hidden(): Promise<BuildSummary[]> {
   );
 }
 
+/** A library build as anyone sees it: its model, never a chat, even if its file holds one. */
 export async function publicBuild(id: string): Promise<Build> {
   // Signed in, the owner can open their private builds too.
   const published = await api<Published>(read({ id }), current() ? { headers: signed() } : {});
   const response = await fetch(published.build, privateAsset(published.build, id) ? { headers: signed() } : {});
   if (!response.ok) throw new Error(`No public build ${id}`);
-  return { ...opened(await readJson<Shared>(await response.blob()), id), name: published.name };
+  return { ...opened(await readJson<Shared>(await response.blob()), id), name: published.name, messages: [] };
 }
 
 /** A private cover as a data URL, so no credential sits in an img URL; null if it does not load. */
@@ -287,6 +289,19 @@ export const renameProject = (id: string, name: string) =>
     headers: { ...signed(), "Content-Type": "application/json" },
     body: JSON.stringify({ id, name }),
   });
+
+/** The name on the signed-in user's public builds. */
+export const displayName = async () => (await api<{ name: string }>(PROFILE, { headers: signed() })).name;
+
+/** Set the name on the signed-in user's public builds, old ones too; "" for the default. Returns it. */
+export const saveDisplayName = async (name: string) =>
+  (
+    await api<{ name: string }>(PROFILE, {
+      method: "PUT",
+      headers: { ...signed(), "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    })
+  ).name;
 
 /** A part of the library that loads on its own. */
 export type Shelf = "mine" | "public";

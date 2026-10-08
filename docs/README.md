@@ -45,11 +45,11 @@ cd server && uv sync && cd ..
 server/.venv/bin/python scripts/pack-toolkit.py        # web/public/blockyard.tgz
 server/.venv/bin/blockyard-gallery web/public          # Holo's showcases, into web/public/gallery
 cd web && npm install
-vercel link --yes --scope h-company --project blockyard && vercel env pull .env.local   # the server's secrets
+vercel link && vercel env pull .env.local                                              # the server's secrets
 npm run dev                                                                            # http://127.0.0.1:5173
 ```
 
-Needs Node 20+. Signed out, anyone can open the public builds and showcases, read only, and export them. Building, forking, importing and managing builds need a sign-in with an `@hcompany.ai` account on the H portal, which mints the user's Agents API key; the sign-in dialog opens on any of those actions.
+Needs Node 20+. Signed out, anyone can open the public builds and showcases, read only, and export them. Building, forking, importing and managing builds need a sign-in on the H portal, open to everyone, which mints the user's Agents API key; the sign-in dialog opens on any of those actions.
 
 With the dev server running, open `/dev/thinking.html` to try the thinking visuals without signing in. Change the request to try different subject sketches and material textures. **Replay photo arrivals** shows three credited sample references appearing one at a time; the naming stage reveals a sample title. Show the illustrative model and replay its placement at different speeds. Block sounds are on by default; the speaker button mutes them. This separate dev entry and its sample photos are not included in the production build.
 
@@ -67,7 +67,8 @@ owner ──GET /api/builds?id=&file= (pass + key)──▶ Vercel Blob (private
 - `web/api/` holds the Vercel functions; `web/scripts/build-api.mjs` bundles them, and `npm run dev` serves them too. Deployed, `/?public=<id>` and `/?showcase=<id>` go to `/api/preview`: the app's page, with that build's name, step count, author and cover in its link preview.
 - The portal's cookie never reaches a local dev server, so there the portal sends a one-time code instead (PKCE, RFC 8252); it only redirects to `127.0.0.1`, where `localhost` forwards.
 - Signing in again revokes the previous key. The key lives in the browser's local storage; the pass, signed with `BLOCKYARD_SECRET`, names its holder to the functions.
-- Publishing copies the session's model (with this browser's edits, which drop its script), transcript and platform-hosted or embedded images, so they survive its session. External HTTPS photos remain links and depend on their original host; the server does not download them. The API key goes only to the Agents origin. Only its author can publish, unpublish, rename or delete a build; the emails in `BLOCKYARD_ADMINS` can take anyone's out of the public library, which makes it private for its owner. Publishing again deletes the private copy.
+- Publishing copies the session's model (with this browser's edits, which drop its script), so it survives its session; the chat, its photos and the prompt stay private: the public build's `messages` are empty, its entry's `prompt` too, and a public build never shows a chat. Its owner reads the chat in their own session (`?build=`). The API key goes only to the Agents origin.
+- An author is shown by their display name (`/api/profile`, `profiles/<owner>.json` in the private store; setting it rewrites the author on all their library builds), else, for an employee, the name from their `@hcompany.ai` address, and no name for anyone else. An email never goes public. Only its author can publish, unpublish, rename or delete a build; the emails in `BLOCKYARD_ADMINS` can take anyone's out of the public library, which makes it private for its owner. Publishing again deletes the private copy.
 - A fork is private: `/api/forks` keeps its record, starting model and session claim under `forks/<owner>/<id>/` in the private Blob store. Its first message starts a session in the fork's group, which the fork records; it continues in that session only, claimed once. Library ids are global, so `fork-owners/<id>.json` (private store) claims each fork id for good for the first owner to save it.
 - A name its owner gives a build is `names/<owner>/<id>.json` in the private store (`/api/names`), and renames its library entry too.
 - An imported build has no session, so it lives only in the library: **Make private** copies its entry, model and cover into a separate private Blob store, then deletes the public copies. It stays listed for its owner (`GET /api/builds?mine=1`) and opens through an owner-authenticated file route (`GET /api/builds?id=&file=`) that is never cached; for anyone else its link stops working. **Delete** removes its entry and files.
@@ -86,6 +87,17 @@ rm .env.migrate.local
 ```
 
 The migration copies each private entry left in the public store, with its model and cover, before deleting the public copies. It stops on failure; rerun it to finish, and a finished run moves nothing. It logs only the count, never models or tokens. Owner access also moves an entry left behind. The Blob CDN can keep serving a deleted public file for a few minutes, and copies already downloaded cannot be revoked.
+
+### Stripping chats from builds published with them
+
+From `web/`, with the production environment pulled as above:
+
+```bash
+node --env-file=.env.migrate.local scripts/strip-public-chats.mjs ~/blockyard-chats            # counts them, changes nothing
+node --env-file=.env.migrate.local scripts/strip-public-chats.mjs ~/blockyard-chats --apply
+```
+
+For each public build with a chat, a prompt or chat images, it first saves its entry, build file and images under `<backup dir>/<id>/`, then writes the build file without `messages` and the entry without `prompt`, and deletes the old build file and the chat images. It stops on failure; rerun it to finish, and a finished run strips nothing more.
 
 ## Where to change things
 
@@ -111,15 +123,16 @@ scripts/deploy.sh --preview                   # or --prod
 ```
 
 Every push to main that passes CI deploys to production (the `deploy` job in `.github/workflows/ci.yml`, secret
-`VERCEL_TOKEN`); or deploy from a laptop as above. `deploy.sh` packs the toolkit, exports Holo's showcases into
-`web/public/gallery`, builds the app and its functions, screenshots each showcase as its thumbnail and deploys them to
-the Vercel project `blockyard`. The bundle is public: it never carries an API key.
+`VERCEL_TOKEN`, repository variables `VERCEL_ORG_ID` and `VERCEL_PROJECT_ID`); or deploy from a laptop as above, from a
+linked `web/` or with `VERCEL_SCOPE` and `VERCEL_PROJECT` set. `deploy.sh` packs the toolkit, exports Holo's showcases
+into `web/public/gallery`, builds the app and its functions, screenshots each showcase as its thumbnail and deploys
+them to the Vercel project. The bundle is public: it never carries an API key.
 
 ## Blocks
 
 Textures are from [Faithful](https://faithfulpack.net/) (see `web/public/textures/LICENSE.txt`). Regenerate the
 palette and texture sheet from a Faithful 32x pack and the matching vanilla client jar (for block models) with
-`uv run scripts/palette.py <pack>/assets/minecraft/textures/block <jar>/assets/minecraft`.
+`uv run scripts/palette.py <pack>/assets/<namespace>/textures/block <jar>/assets/<namespace>`.
 
 ## Tests
 

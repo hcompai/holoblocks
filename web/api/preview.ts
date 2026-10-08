@@ -27,7 +27,7 @@ async function published(id: string): Promise<Card | null> {
   return build
     ? {
         name: build.name,
-        description: `Built in ${steps(build.steps)}, shared by ${build.author}`,
+        description: `Built in ${steps(build.steps)}${build.author ? `, shared by ${build.author}` : ""}`,
         url: link("public", id),
         image: build.thumbnail,
       }

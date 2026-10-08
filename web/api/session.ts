@@ -38,7 +38,7 @@ async function portalToken(request: Request, verifier: string | null): Promise<s
 
 /** Mint a HoloBlocks key for the Agents API and a pass for this API, both good for a month, and revoke the browser's previous key. */
 async function signIn(access: string, previous: string | null): Promise<Handoff> {
-  const user = admit(await whoami(access));
+  const user = await admit(await whoami(access));
   if (previous) await revoke(access, previous);
   const key = await mint(access, user.email);
   const expires = Date.parse(`${key.expires.slice(0, 10)}T23:59:59Z`) / 1000;

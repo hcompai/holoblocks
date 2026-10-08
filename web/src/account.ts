@@ -70,6 +70,11 @@ export function key(): string {
   return account.key;
 }
 
+/** Show the signed-in user under `name`, the one their public builds carry. */
+export function setName(name: string) {
+  if (account && account.user.name !== name) set({ ...account, user: { ...account.user, name } });
+}
+
 export function signOut() {
   if (account) localStorage.setItem(PREVIOUS, account.keyId);
   set(null);

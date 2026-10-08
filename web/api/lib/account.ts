@@ -1,7 +1,6 @@
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { bearer, Refusal } from "./http";
-
-const DOMAIN = "@hcompany.ai";
+import { authorName, nameOf } from "./profile";
 
 export interface User {
   id: string;
@@ -9,18 +8,14 @@ export interface User {
   name: string;
 }
 
-/** "jane.doe@hcompany.ai" as "Jane Doe". */
-export const nameOf = (email: string) =>
-  email
-    .split("@")[0]
-    .split(/[._-]+/)
-    .filter(Boolean)
-    .map((w) => w[0].toUpperCase() + w.slice(1))
-    .join(" ");
-
-export function admit(user: { id: string; email: string }): User {
-  if (!user.email.toLowerCase().endsWith(DOMAIN)) throw new Refusal(403, "HoloBlocks is open to H Company accounts.");
-  return { ...user, name: nameOf(user.email) };
+/** Any portal user, under their public name, or the default one if it cannot be read. */
+export async function admit(user: { id: string; email: string }): Promise<User> {
+  try {
+    return { ...user, name: await authorName(user) };
+  } catch (e) {
+    console.warn("Display name unavailable at sign-in, using the default", e);
+    return { ...user, name: nameOf(user.email) };
+  }
 }
 
 export const isAdmin = (user: User) =>

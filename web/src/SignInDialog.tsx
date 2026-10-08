@@ -2,6 +2,7 @@ import { EnvelopeSimpleIcon, GoogleLogoIcon, XIcon } from "@phosphor-icons/react
 import { useEffect, useRef, useState } from "react";
 import { signIn, signInError, signInOnPlatform } from "./account";
 import { Cube } from "./BlockLoader";
+import { External, PRIVACY, TERMS } from "./Legal";
 
 /** The ways in with an H account, asked for when a signed-out visitor wants to build. */
 export function SignInDialog({ onClose }: { onClose: () => void }) {
@@ -57,6 +58,10 @@ export function SignInDialog({ onClose }: { onClose: () => void }) {
         <EnvelopeSimpleIcon size={18} weight="bold" />
         {onPlatform ? "Finish signing in in the popup…" : "Sign in with email"}
       </button>
+      <p className="sign-in-terms">
+        By signing in you agree to the <External href={TERMS}>Terms</External> and{" "}
+        <External href={PRIVACY}>Privacy Policy</External>.
+      </p>
       {(blocked || signInError) && (
         <p className="sign-in-error" role="alert">
           {blocked ? "Your browser blocked the sign-in popup: allow popups for this site and try again." : signInError}

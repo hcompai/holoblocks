@@ -16,7 +16,7 @@ const exported = () => ({
   messages: [{ role: "user", text: "A stone hut", images: ["/gallery/images/1.png"] }],
 });
 
-test("an import is checked and rebuilt: recomputed revision, its steps and script, no images", () => {
+test("an import is checked and rebuilt: recomputed revision, its steps and script, no chat", () => {
   const given = exported();
   const build = imported({ ...given, revision: "forged" });
   expect(build.revision).toMatch(/^[0-9a-f]{64}$/);
@@ -24,7 +24,7 @@ test("an import is checked and rebuilt: recomputed revision, its steps and scrip
   expect(build.boxes).toEqual(given.boxes);
   expect(build.steps.map((s) => s.title)).toEqual(["Floor", "Cube"]);
   expect(build.script).toBe(given.script);
-  expect(build.messages).toEqual([{ role: "user", text: "A stone hut", images: [] }]);
+  expect(build.messages).toEqual([]);
 });
 
 for (const [why, damage, message] of [

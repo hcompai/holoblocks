@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { createHash } from "node:crypto";
 import { gzipSync } from "node:zlib";
-import type { Model } from "../src/model";
+import type { Message, Model } from "../src/model";
 import { cookie, HANDOFF, PENDING, setCookie } from "../src/signin";
 import { ACCOUNT, model, shareMenu, site } from "./fixtures";
 import { platform } from "./platform";
@@ -9,7 +9,7 @@ import { platform } from "./platform";
 const BLOB = "https://blob.test";
 const PORTAL = "https://portal.api.eu.hcompany.ai/api";
 
-type Built = Model & { id: string };
+type Built = Model & { id: string; messages?: Message[] };
 
 const shown = (page: Page, revision: string) =>
   expect(page.locator(".viewer")).toHaveAttribute("data-revision", revision);
@@ -41,7 +41,7 @@ async function library(page: Page, published: ReturnType<typeof entry>[], builds
     return build
       ? route.fulfill({
           headers: { "access-control-allow-origin": "*" },
-          body: gzipSync(JSON.stringify({ ...build, status: "done", messages: [] })),
+          body: gzipSync(JSON.stringify({ status: "done", messages: [], ...build })),
         })
       : route.fulfill({ status: 404 });
   });
@@ -89,9 +89,38 @@ test("a colleague's public build opens from the home page's public builds, under
   await card.click();
   await expect(page).toHaveURL(/\?public=hut$/);
   await shown(page, hut.revision);
-  await expect(page.locator(".gallery-note")).toHaveText(/^By Ada Lovelace · Fork to edit/);
+  await expect(page.locator(".gallery-note")).toHaveText(/^By Ada Lovelace · 2 steps · Fork to edit/);
   const menu = await shareMenu(page);
   await expect(menu.getByRole("menuitem", { name: /Publish/ })).toHaveCount(0);
+});
+
+test("the user sets a display name from the account menu, and their public builds carry it at once", async ({
+  page,
+}) => {
+  const hut = { ...model(), id: "hut", name: "Jane's hut" };
+  await site(page);
+  const published = [entry(hut, ACCOUNT.user.name, ACCOUNT.user.id)];
+  await library(page, published, [hut]);
+  await page.route("**/api/profile", (route) => {
+    if (route.request().method() === "GET") return route.fulfill({ json: { name: published[0].author } });
+    const { name } = route.request().postDataJSON();
+    for (const p of published) p.author = name;
+    return route.fulfill({ json: { name } });
+  });
+  await page.goto("/");
+
+  const tile = page.getByRole("region", { name: "Public builds" }).locator(".gallery-card");
+  await expect(tile).toContainText("by Jane Doe");
+  const account = page.getByRole("button", { name: "Account" });
+  await account.click();
+  await page.getByRole("menuitem", { name: /Display name/ }).click();
+  const field = page.getByRole("textbox", { name: "Display name" });
+  await expect(field).toHaveValue("Jane Doe");
+  await field.fill("Jane the Builder");
+  await field.press("Enter");
+  await expect(tile).toContainText("by Jane the Builder");
+  await account.click();
+  await expect(page.getByRole("menu")).toContainText("Jane the Builder");
 });
 
 test("home shows one row of my builds and ten rows of public ones, with more below on demand", async ({ page }) => {
@@ -123,6 +152,27 @@ test("home shows one row of my builds and ten rows of public ones, with more bel
   if (columns * 20 < 80) await more.click();
   await expect(everyone.locator(".gallery-card")).toHaveCount(80);
   await expect(more).toHaveCount(0);
+});
+
+test("a public build shows no chat, even one its file still holds, and no author when it has no name", async ({
+  page,
+}) => {
+  const messages: Message[] = [
+    { role: "user", text: "A secret prompt", images: [] },
+    { role: "assistant", text: "Built your hut.", images: [] },
+  ];
+  const hut = { ...model(), id: "hut", name: "A hut", messages };
+  await site(page, [], null);
+  await library(page, [entry(hut, "", "u-anon")], [hut]);
+  await page.goto("/");
+  const card = page.getByRole("region", { name: "Public builds" }).locator(".gallery-card");
+  await expect(card.locator(".gallery-caption .muted")).toHaveText("2 steps");
+  await card.click();
+
+  await shown(page, hut.revision);
+  await expect(page.locator(".gallery-note")).toHaveText(/^Public build · 2 steps · Sign in to fork/);
+  await expect(page.locator(".msg")).toHaveCount(0);
+  await expect(page.locator("aside")).not.toContainText("secret");
 });
 
 test("a colleague's public build can be edited but not asked about", async ({ page }) => {
@@ -213,7 +263,7 @@ test("the author publishes a build after a confirmation, stays on it, then makes
 
   const publishing = page.getByRole("dialog", { name: "Publish" });
   await menu.getByRole("menuitem", { name: "Publish to the library…" }).click();
-  await expect(publishing).toContainText("the chat, and the photos you attached");
+  await expect(publishing).toContainText("Your chat and photos stay private");
   await publishing.getByRole("button", { name: "Publish" }).click();
   await expect(publishing).toBeHidden();
   await expect(page).toHaveURL(/\?build=mine$/);
@@ -354,13 +404,55 @@ test("signed out, a public build's link opens it in the viewer, exports and all,
   await page.goto("/?public=hut");
 
   await shown(page, hut.revision);
-  await expect(page.locator(".gallery-note")).toHaveText(/^By Ada Lovelace · Sign in to fork/);
+  await expect(page.locator(".gallery-note")).toHaveText(/^By Ada Lovelace · 2 steps · Sign in to fork/);
   const menu = await shareMenu(page);
   await expect(menu.getByRole("menuitem", { name: "Copy link" })).toBeEnabled();
   await expect(menu.getByRole("menuitem", { name: "Download .schem" })).toBeEnabled();
   await expect(menu.getByRole("menuitem", { name: /Publish/ })).toHaveCount(0);
   expect(made).toEqual([]);
   expect(errors).toEqual([]);
+});
+
+test("no brand shows on home, its credits, a public build or the sign-in dialog, whose legal links open H's pages", async ({
+  page,
+}) => {
+  const brands = /lego|duplo|minecraft|mojang|pick a brick/i;
+  const hut = { ...model(), id: "hut", name: "Ada's hut" };
+  await site(page, [], null);
+  await library(page, [entry(hut, "Ada Lovelace", "u-ada")], [hut]);
+  const opensInTab = async (link: ReturnType<Page["getByRole"]>, href: string) => {
+    await expect(link).toHaveAttribute("href", href);
+    await expect(link).toHaveAttribute("target", "_blank");
+  };
+  await page.goto("/");
+
+  await expect(page.locator(".gallery-card")).toHaveText([/Ada's hut/]);
+  const meta = await page.locator("meta[content]").evaluateAll((tags) => tags.map((t) => t.getAttribute("content")));
+  expect([await page.title(), ...meta, await page.locator("body").innerText()].join("\n")).not.toMatch(brands);
+  const footer = page.locator("footer.site-footer");
+  await opensInTab(footer.getByRole("link", { name: "Docs" }), "https://hub.hcompany.ai/");
+  await opensInTab(footer.getByRole("link", { name: "H Platform" }), "https://platform.hcompany.ai");
+  await opensInTab(footer.getByRole("link", { name: "Terms of Service" }), "https://www.hcompany.ai/terms-of-use");
+  await opensInTab(footer.getByRole("link", { name: "Privacy Policy" }), "https://www.hcompany.ai/privacy-policy");
+  await footer.getByRole("button", { name: "Credits" }).click();
+  const credits = page.getByRole("dialog", { name: "Credits" });
+  await opensInTab(credits.getByRole("link", { name: "Faithful 32x" }), "https://faithfulpack.net/");
+  expect(await credits.innerText()).not.toMatch(brands);
+  await credits.getByRole("button", { name: "Close" }).click();
+  await expect(credits).toBeHidden();
+
+  await page.goto("/?public=hut");
+  await shown(page, hut.revision);
+  expect(await page.locator("body").innerText()).not.toMatch(brands);
+  await page.locator(".gallery-note").getByRole("button", { name: "Sign in" }).click();
+  const signIn = page.getByRole("dialog", { name: "Sign in to build" });
+  await expect(signIn).toContainText("By signing in you agree to the Terms and Privacy Policy.");
+  await opensInTab(signIn.getByRole("link", { name: "Terms" }), "https://www.hcompany.ai/terms-of-use");
+  await opensInTab(signIn.getByRole("link", { name: "Privacy Policy" }), "https://www.hcompany.ai/privacy-policy");
+  expect(await signIn.innerText()).not.toMatch(brands);
+  await signIn.getByRole("button", { name: "Close" }).click();
+  await expect(await shareMenu(page)).toBeVisible();
+  expect(await page.locator("body").innerText()).not.toMatch(brands);
 });
 
 test("signed out, sending a new build asks to sign in, and the prompt waits in the composer after it", async ({
@@ -395,7 +487,7 @@ test("signed out, sending a new build asks to sign in, and the prompt waits in t
 test("signing in from the header comes back where the user left, or with why it failed", async ({ page, context }) => {
   const hut = { ...model(), id: "hut" };
   await site(page, [hut], null);
-  const handoff: { value: object } = { value: { error: "HoloBlocks is open to H Company accounts." } };
+  const handoff: { value: object } = { value: { error: "The Google sign-in failed: try again." } };
   const { pending, challenges } = await portal(page, handoff);
   const signIn = page.locator("header").getByRole("button", { name: "Sign in" });
   const google = page.getByRole("button", { name: "Continue with Google" });
@@ -405,7 +497,7 @@ test("signing in from the header comes back where the user left, or with why it 
   await signIn.click();
   await google.click();
   await expect(page.getByRole("dialog", { name: "Sign in to build" })).toBeVisible();
-  await expect(page.getByRole("alert")).toHaveText("HoloBlocks is open to H Company accounts.");
+  await expect(page.getByRole("alert")).toHaveText("The Google sign-in failed: try again.");
 
   handoff.value = ACCOUNT;
   await google.click();

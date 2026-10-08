@@ -1,5 +1,10 @@
 import { expect, test } from "@playwright/test";
-import { gzipSync } from "node:zlib";
+import { execFile } from "node:child_process";
+import { mkdtempSync, readdirSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { promisify } from "node:util";
+import { gunzipSync, gzipSync } from "node:zlib";
 import { DELETE as unpublishBuild, GET as builds, POST as publishBuild } from "../api/builds";
 import { POST as deleteBuild } from "../api/deleted";
 import { GET as forks, PATCH as linkSession, POST as saveFork } from "../api/forks";
@@ -7,8 +12,9 @@ import { POST as importBuild } from "../api/imports";
 import { pass, type User } from "../api/lib/account";
 import { linkFork } from "../api/lib/forks";
 import { projectName } from "../api/lib/names";
-import { enter, find, findOwn, forgotten } from "../api/lib/store";
+import { enter, find, findOwn, forgotten, save } from "../api/lib/store";
 import { GET as names, PATCH as renameBuild } from "../api/names";
+import { GET as profile, PUT as setProfile } from "../api/profile";
 import { forkSeed } from "../src/forkModel";
 import { blobStore } from "./blobStore";
 import { model } from "./fixtures";
@@ -16,6 +22,7 @@ import { model } from "./fixtures";
 process.env.BLOCKYARD_SECRET = "forks-test-secret";
 process.env.BLOCKYARD_ADMINS = "ada.admin@hcompany.ai";
 const blob = blobStore();
+const run = promisify(execFile);
 
 const OWNER: User = { id: "u-owner", email: "olive.owner@hcompany.ai", name: "Olive Owner" };
 const OTHER: User = { id: "u-other", email: "otto.other@hcompany.ai", name: "Otto Other" };
@@ -44,6 +51,35 @@ const seed = () =>
 const fork = (user = OWNER) => saveFork(call(user, "POST", "/api/forks", gzipped({ id: FORK, seed: seed() })));
 const json = (response: Response) => response.json();
 
+/** The owner's session: their secret prompt with two photos, then the model Holo shared. */
+const CHAT = [
+  {
+    timestamp: "2026-01-01T00:00:00Z",
+    type: "AgentEvent",
+    data: {
+      kind: "message_event",
+      caller_id: "user",
+      content: [
+        "A secret hut",
+        { type: "url", source: "data:image/png;base64,cGhvdG8=" },
+        { type: "url", source: "https://agp.eu.hcompany.ai/photo" },
+      ],
+    },
+  },
+  {
+    timestamp: "2026-01-01T00:00:00Z",
+    type: "AttachmentEvent",
+    data: {
+      origin: "agent",
+      name: "model.json.gz",
+      path: "/workspace/model.json.gz",
+      url: "https://agp.eu.hcompany.ai/model",
+      media_type: "application/json",
+      size_bytes: 1,
+    },
+  },
+];
+
 const realFetch = globalThis.fetch;
 let agentCalls: string[] = [];
 /** The fork the session says it was started on. */
@@ -62,6 +98,11 @@ test.beforeAll(async () => {
       const items = key === `Bearer ${keyOf(OWNER)}` ? [item] : [];
       return Response.json({ items, total: items.length, page: 1 });
     }
+    if (url.pathname.endsWith("/changes"))
+      return Number(url.searchParams.get("from_index")) > 0
+        ? new Response(null, { status: 204 })
+        : Response.json({ status: "idle", new_events: CHAT });
+    if (url.pathname === "/model") return new Response(gzipSync(JSON.stringify(model())));
     return Response.json({
       ...item,
       request: { agent: "blockyard", group_id: group, messages: [] },
@@ -209,6 +250,80 @@ test.describe("someone else's builds", () => {
       { id: imported, name: "Red tower", updated: expect.any(Number) },
     ]);
   });
+});
+
+test("publishing keeps the chat private: no message, prompt or photo of it reaches the public store", async () => {
+  expect((await publishBuild(call(OWNER, "POST", "/api/builds", { id: RUN, thumbnail: null }))).status).toBe(201);
+  expect(await find(RUN)).toMatchObject({ name: "Little Hut", prompt: "", author: "Olive Owner" });
+  const files = [...blob.objects.keys()].filter((p) => p.startsWith(`builds/${RUN}/`));
+  expect(files).toEqual([expect.stringMatching(/^builds\/own-run\/build\.json-\w+\.gz$/)]);
+  expect(JSON.parse(gunzipSync(blob.objects.get(files[0])!).toString())).toMatchObject({
+    revision: model().revision,
+    messages: [],
+  });
+  const stored = [...blob.objects].map(([path, data]) => (path.endsWith(".gz") ? gunzipSync(data) : data).toString());
+  expect(stored.join("\n")).not.toContain("secret");
+});
+
+test("the chat migration backs up, then strips each public build's chat, prompt and chat images; a dry run changes nothing", async () => {
+  const id = "old-hut";
+  const chat = [{ role: "user", text: "A secret hut", images: [] }];
+  const file = gzipSync(JSON.stringify({ ...model(), status: "done", messages: chat }));
+  const build = await save(id, "build.json.gz", file, "application/gzip");
+  await save(id, "images/1.png", Buffer.from("photo"), "image/png");
+  const thumbnail = await save(id, "thumbnail.webp", Buffer.from("cover"), "image/webp");
+  const listed = { id, name: "Old hut", prompt: "A secret hut", steps: 2, author: "", owner: OWNER.id, published: 1 };
+  await enter({ ...listed, thumbnail, build }, [], []);
+  const backups = mkdtempSync(join(tmpdir(), "blockyard-chats-test-"));
+  const strip = async (...flags: string[]) =>
+    (await run("node", ["scripts/strip-public-chats.mjs", backups, ...flags], { env: process.env })).stdout;
+  const unpacked = (path: string) => JSON.parse(gunzipSync(blob.objects.get(path)!).toString());
+
+  const before = new Map(blob.objects);
+  expect(await strip()).toContain("Would strip 1 of 1 public builds and delete 1 chat images.");
+  expect(blob.objects).toEqual(before);
+  expect(readdirSync(backups)).toEqual([]);
+
+  expect(await strip("--apply")).toContain("Stripped 1 of 1 public builds and deleted 1 chat images");
+  const entry = (await find(id))!;
+  expect(entry).toMatchObject({ ...listed, prompt: "", thumbnail });
+  const files = [...blob.objects.keys()].filter((p) => p.startsWith(`builds/${id}/`));
+  expect(files.sort()).toEqual([expect.stringMatching(/build\.json-\w+\.gz$/), expect.stringMatching(/thumbnail/)]);
+  expect(unpacked(files[0])).toMatchObject({ revision: model().revision, messages: [] });
+  expect(JSON.parse(readFileSync(join(backups, id, "entry.json"), "utf8")).prompt).toBe("A secret hut");
+  expect(JSON.parse(gunzipSync(readFileSync(join(backups, id, "build.json.gz"))).toString()).messages).toEqual(chat);
+  expect(readdirSync(join(backups, id, "images"))).toHaveLength(1);
+  expect(await strip("--apply")).toContain("Stripped 0 of 1");
+});
+
+test("a display name replaces the default on its owner's library builds, old ones too, and holds no email or link", async () => {
+  const listed = (id: string, user: User) => ({
+    id,
+    name: id,
+    prompt: "",
+    steps: 2,
+    author: user.name,
+    owner: user.id,
+    published: 1,
+    thumbnail: null,
+    build: `${blob.base}/objects/builds/${id}/build.json.gz`,
+  });
+  await enter(listed("olive-tower", OWNER), [], []);
+  await enter(listed("otto-tower", OTHER), [], []);
+  const named = async (user: User) => (await json(await profile(call(user, "GET", "/api/profile")))).name;
+  const rename = (name: string) => setProfile(call(OWNER, "PUT", "/api/profile", { name }));
+
+  expect(await named(OWNER)).toBe("Olive Owner");
+  expect(await json(await rename("  Olive   the Builder "))).toEqual({ name: "Olive the Builder" });
+  expect(await named(OWNER)).toBe("Olive the Builder");
+  expect(await find("olive-tower")).toMatchObject({ author: "Olive the Builder" });
+  expect(await find("otto-tower")).toMatchObject({ author: "Otto Other" });
+  for (const bad of ["olive@example.com", "https://olive.example", "www.olive.example", "O"])
+    expect((await rename(bad)).status, bad).toBe(400);
+  const outsider: User = { id: "u-ada", email: "ada@example.com", name: "" };
+  expect((await setProfile(call(outsider, "PUT", "/api/profile", { name: "Holo fan" }))).status).toBe(400);
+  expect(await json(await rename(""))).toEqual({ name: "Olive Owner" });
+  expect(await find("olive-tower")).toMatchObject({ author: "Olive Owner" });
 });
 
 test("deleting a fork deletes its starting model, record and name, and hides the session it continued in", async () => {

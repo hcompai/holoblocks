@@ -12,10 +12,15 @@ esac
 vercel=()
 [[ -n "${VERCEL_TOKEN:-}" ]] && vercel=(--token "$VERCEL_TOKEN")
 
+# A project token cannot link; CI names the project with VERCEL_ORG_ID and VERCEL_PROJECT_ID instead.
+if [[ ! -f web/.vercel/project.json && -z "${VERCEL_PROJECT_ID:-}" ]]; then
+  unlinked="set VERCEL_SCOPE and VERCEL_PROJECT, or link web/ with vercel link"
+  : "${VERCEL_SCOPE:?$unlinked}" "${VERCEL_PROJECT:?$unlinked}"
+  (cd web && vercel link --yes --scope "$VERCEL_SCOPE" --project "$VERCEL_PROJECT" ${vercel[@]+"${vercel[@]}"})
+fi
+
 server/.venv/bin/python scripts/pack-toolkit.py
 server/.venv/bin/blockyard-gallery web/public
-# A project token cannot link; CI names the project with VERCEL_ORG_ID and VERCEL_PROJECT_ID instead.
-[[ -f web/.vercel/project.json || -n "${VERCEL_PROJECT_ID:-}" ]] || (cd web && vercel link --yes --scope h-company --project blockyard ${vercel[@]+"${vercel[@]}"})
 # The bundle is public: it must never carry an API key.
 (cd web && npm run build && node scripts/thumbnails.mjs)
 rm -rf web/.vercel/output && mkdir -p web/.vercel/output

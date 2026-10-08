@@ -1,9 +1,9 @@
 import { createHash } from "node:crypto";
-import { type Message, PALETTE, type Shared, type Step } from "../../src/model";
+import { PALETTE, type Shared, type Step } from "../../src/model";
 import { Refusal } from "./http";
 
 /** What one import may hold; the largest Holo builds are about 60,000 boxes. */
-export const LIMITS = { boxes: 500_000, blocks: 5_000, steps: 2_000, side: 256, messages: 500, text: 20_000 };
+export const LIMITS = { boxes: 500_000, blocks: 5_000, steps: 2_000, side: 256, text: 20_000 };
 const SCRIPT = 1_000_000;
 const BLOCK = /^([a-z0-9_]+)(?:\[[a-z0-9_]+=[a-z0-9_]+(?:,[a-z0-9_]+=[a-z0-9_]+)*\])?$/;
 
@@ -60,17 +60,7 @@ function steps(value: unknown, packed: number[]): Step[] {
   }));
 }
 
-function messages(value: unknown): Message[] {
-  const given = Array.isArray(value) ? value.slice(0, LIMITS.messages) : [];
-  // Images stay behind: they point at wherever the file came from.
-  return given.flatMap((m): Message[] =>
-    m && ["user", "assistant", "system", "tool"].includes(m.role) && typeof m.text === "string"
-      ? [{ role: m.role, text: text(m.text, LIMITS.text), images: [] }]
-      : [],
-  );
-}
-
-/** A model file (a session's model.json.gz, or a showcase or published build), checked and made into a library build. */
+/** A model file (a session's model.json.gz, or a showcase or published build), checked and made into a library build, without its chat. */
 export function imported(input: unknown): Shared {
   const given = input as Record<string, unknown> | null;
   if (!given || typeof given !== "object") refuse("it is not a model");
@@ -90,6 +80,6 @@ export function imported(input: unknown): Shared {
     steps: steps(given!.steps, packed),
     script: text(given!.script, SCRIPT),
     status: "done",
-    messages: messages(given!.messages),
+    messages: [],
   };
 }

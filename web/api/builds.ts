@@ -2,6 +2,7 @@ import { gzipSync } from "node:zlib";
 import { holder, isAdmin } from "./lib/account";
 import { body, Refusal, route, SHARED } from "./lib/http";
 import { projectName } from "./lib/names";
+import { authorName } from "./lib/profile";
 import { snapshot } from "./lib/snapshot";
 import {
   enter,
@@ -82,22 +83,16 @@ export const POST = route(async (request) => {
     written.push(url);
     return url;
   };
-  const build = await snapshot(
-    id,
-    key,
-    given.edits,
-    (name, image) => keep(name, image, image.type || "image/png"),
-    user.id,
-  );
+  const build = await snapshot(id, key, given.edits, user.id);
   build.name = (await projectName(user.id, id))?.name ?? build.name;
   const coverUrl = cover ? await keep(`thumbnail.${cover.type.split("/")[1]}`, cover.data, cover.type) : null;
   if (!cover && previous?.thumbnail) written.push(previous.thumbnail);
   const published: Published = {
     id,
     name: build.name,
-    prompt: build.messages.find((m) => m.role === "user")?.text ?? "",
+    prompt: "",
     steps: build.steps.length,
-    author: user.name,
+    author: await authorName(user),
     owner: user.id,
     published: at,
     thumbnail: coverUrl ?? previous?.thumbnail ?? null,
