@@ -383,11 +383,12 @@ test("signed out, sending a new build asks to sign in, and the prompt waits in t
   await expect(composer).toHaveValue("A windmill by a river");
   await page.getByRole("button", { name: "A hilltop castle" }).click();
   await expect(dialog).toBeVisible();
+  await expect(composer).toHaveValue(/^A medieval castle crowning a rocky hill/);
   expect(made).toEqual([]);
 
   await dialog.getByRole("button", { name: "Continue with Google" }).click();
   await expect(page.getByRole("button", { name: "Account" })).toBeVisible();
-  await expect(composer).toHaveValue("A windmill by a river");
+  await expect(composer).toHaveValue(/^A medieval castle crowning a rocky hill/);
   expect(made.filter((r) => r.startsWith("POST"))).toEqual([]);
 });
 

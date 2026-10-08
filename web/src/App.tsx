@@ -487,7 +487,7 @@ export default function App({ account }: { account: Account | null }) {
     ref?.source === "showcase" ? (
       `Showcase · ${forkHint}`
     ) : ref?.source === "public" ? (
-      `By ${summary?.author ?? "a HoloBlocks builder"} · ${forkHint}`
+      `${summary?.author ? `By ${summary.author}` : "Public build"} · ${forkHint}`
     ) : live && !drafted && live.status === "error" ? (
       <RecoveryPanel
         key={live.id}

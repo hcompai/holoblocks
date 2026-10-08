@@ -254,6 +254,10 @@ export function ChatPanel(props: Props) {
   /** Hand `prompt` to the builder, even mid-build; whether it took it. */
   const deliver = async (prompt: string, attached: string[], files: Record<string, Blob> = {}) => {
     if (onSignIn) {
+      if (!changing) {
+        setText(prompt);
+        sessionStorage.setItem(DRAFT, prompt);
+      }
       onSignIn();
       return false;
     }
