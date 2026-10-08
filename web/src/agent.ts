@@ -3,8 +3,6 @@ import prompt from "../../agent/holo.md?raw";
 import { expired, key } from "./account";
 import { H } from "./hosts";
 import { platformAsset, externalImage, assetBlob } from "./assetUrl";
-import type { Build } from "./model";
-import { script } from "./remix";
 import { AGENT } from "./session";
 import { HOLO } from "./holo";
 
@@ -139,10 +137,6 @@ export const firstMessage = async (text: string, photos: string[], attached: Rec
 /** Start a build: its message carries the toolkit, `attached` and the photos. */
 export const create = async (text: string, photos: string[], attached: Record<string, Blob> = {}) =>
   begin([await firstMessage(text, photos, attached)]);
-
-/** Start a build from an exact copy of `build`, which Holo then changes as `text` asks. */
-export const remix = (build: Build, text: string, photos: string[], attached: Record<string, Blob> = {}) =>
-  create(text, photos, { ...attached, "remix.py": new Blob([script(build)], { type: "text/x-python" }) });
 
 export async function say(id: string, text: string, photos: string[], attached: Record<string, Blob> = {}) {
   await client.session(id).sendMessage(await message(text, photos, attached));
