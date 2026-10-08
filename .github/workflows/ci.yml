@@ -59,7 +59,7 @@ jobs:
 
   deploy:
     needs: [server, web]
-    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    if: github.repository == 'hcompai/blockyard' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     concurrency:
       group: deploy-production
