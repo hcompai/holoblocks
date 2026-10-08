@@ -16,12 +16,12 @@ export function AccountMenu({ account, building }: { account: Account; building:
         aria-haspopup="menu"
         aria-expanded={open}
       >
-        {name.slice(0, 1)}
+        {(name || email).slice(0, 1).toUpperCase()}
       </button>
       {open && (
         <div className="menu" role="menu">
           <div className="menu-head">
-            <b>{name}</b>
+            {name && <b>{name}</b>}
             <span className="muted small">{email}</span>
           </div>
           <button

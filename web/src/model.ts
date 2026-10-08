@@ -37,6 +37,8 @@ export interface Message {
 
 export type Status = "building" | "done" | "error";
 
+export const stepCount = (count: number) => `${count.toLocaleString("en-US")} step${count === 1 ? "" : "s"}`;
+
 /** What `blocks run` writes to model.json.gz, its boxes packed eight numbers each: x0 y0 z0 x1 y1 z1 block step. */
 export interface Model {
   name: string;

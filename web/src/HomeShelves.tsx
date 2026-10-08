@@ -1,6 +1,6 @@
 import { type ReactNode, useLayoutEffect, useRef, useState } from "react";
 import type { Shelf } from "./library";
-import type { BuildSummary } from "./model";
+import { type BuildSummary, stepCount } from "./model";
 import { type ProjectActions, ProjectMenu } from "./ProjectMenu";
 
 const PUBLIC_ROWS = 10;
@@ -28,7 +28,7 @@ function meta(b: BuildSummary, published = false): string {
     published ? "public" : null,
     b.id.startsWith("import-") ? "imported" : null,
     b.private ? "private" : null,
-    b.steps === null ? null : `${b.steps} step${b.steps === 1 ? "" : "s"}`,
+    b.steps === null ? null : stepCount(b.steps),
     b.status === "building" ? "building…" : b.status === "error" ? "stopped" : null,
   ]
     .filter(Boolean)

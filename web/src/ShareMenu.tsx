@@ -48,6 +48,7 @@ interface Props {
 type Ask = Omit<ComponentProps<typeof Confirm>, "onClose">;
 
 function publishAsk({ published, imported, author, onPublish, onUnpublish }: Publishing): Ask {
+  const by = author ? `, as ${author}'s` : "";
   return published
     ? {
         name: "Make private",
@@ -63,8 +64,8 @@ function publishAsk({ published, imported, author, onPublish, onUnpublish }: Pub
         name: "Publish",
         question: "Publish this build?",
         note: imported
-          ? `Anyone can open it from the library, as ${author}'s.`
-          : `Anyone can open it, as ${author}'s: the model, the chat, and the photos you attached.`,
+          ? `Anyone can open it from the library${by}.`
+          : `Anyone can open its model from the library${by}. Your chat and photos stay private.`,
         doing: "Publishing…",
         icon: <GlobeIcon size={16} />,
         action: onPublish,

@@ -30,7 +30,7 @@ import {
   thumbnail,
   unpublish,
 } from "./library";
-import { type Build, type BuildSummary, EMPTY_MODEL, pack, PALETTE, type Source, unpack } from "./model";
+import { type Build, type BuildSummary, EMPTY_MODEL, pack, PALETTE, type Source, stepCount, unpack } from "./model";
 import type { ProjectActions } from "./ProjectMenu";
 import { ProjectTitle } from "./ProjectTitle";
 import { RecoveryPanel } from "./RecoveryPanel";
@@ -487,7 +487,9 @@ export default function App({ account }: { account: Account | null }) {
     ref?.source === "showcase" ? (
       `Showcase · ${forkHint}`
     ) : ref?.source === "public" ? (
-      `${summary?.author ? `By ${summary.author}` : "Public build"} · ${forkHint}`
+      [summary?.author ? `By ${summary.author}` : "Public build", live && stepCount(live.steps.length), forkHint]
+        .filter(Boolean)
+        .join(" · ")
     ) : live && !drafted && live.status === "error" ? (
       <RecoveryPanel
         key={live.id}
