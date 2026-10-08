@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { decompressFrames, parseGIF } from "gifuct-js";
 import { planFilm, rising } from "../src/filmPlan";
 import { model, shareMenu, site } from "./fixtures";
+import { platform } from "./platform";
 
 const HUT = {
   steps: model().steps,
@@ -30,16 +31,25 @@ test("a film raises each step in order, bottom layer first, before the turntable
 });
 
 test("the GIF call to action appears only for a completed, nonempty build", async ({ page }) => {
-  const hut = model();
-  for (const status of ["building", "error", "done"] as const) {
-    await site(page, [{ ...hut, id: "hut", status }]);
-    await page.goto("/?showcase=hut");
-    await expect(page.locator(".viewer")).toHaveAttribute("data-revision", hut.revision);
-    await expect(page.getByRole("button", { name: "Share a GIF", exact: true })).toHaveCount(status === "done" ? 1 : 0);
-  }
-  await site(page, [{ ...hut, id: "hut", boxes: [], steps: [] }]);
-  await page.goto("/?showcase=hut");
-  await expect(page.getByRole("button", { name: "Share a GIF", exact: true })).toHaveCount(0);
+  await site(page);
+  const agp = await platform(page);
+  const cta = page.getByRole("button", { name: "Share a GIF", exact: true });
+  agp.session("live");
+  agp.say("live", "A little hut");
+  agp.state("live", "running");
+  agp.share("live", model());
+  await page.goto("/?build=live");
+  await expect(page.locator(".viewer")).toHaveAttribute("data-revision", model().revision);
+  await expect(cta).toHaveCount(0);
+  agp.answer("live", "Built.");
+  agp.state("live", "idle");
+  agp.sessions.get("live")!.status = "completed";
+  await expect(cta).toHaveCount(1);
+
+  await site(page, [{ ...model(), id: "empty", boxes: [], steps: [] }]);
+  await page.goto("/?showcase=empty");
+  await expect(page.locator(".viewer")).toHaveAttribute("data-revision", model().revision);
+  await expect(cta).toHaveCount(0);
 });
 
 test("Share a GIF makes a credited looping GIF of the build and leaves the viewer on its step", async ({

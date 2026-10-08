@@ -21,7 +21,7 @@ const entry = (build: Built, author: string, owner: string) => ({
   steps: build.steps.length,
   author,
   owner,
-  published: 1,
+  published: Math.floor(Date.now() / 1000) - 300,
   thumbnail: null,
   build: `${BLOB}/builds/${build.id}/build.json.gz`,
 });
@@ -166,7 +166,7 @@ test("a public build shows no chat, even one its file still holds, and no author
   await library(page, [entry(hut, "", "u-anon")], [hut]);
   await page.goto("/");
   const card = page.getByRole("region", { name: "Public builds" }).locator(".gallery-card");
-  await expect(card.locator(".gallery-caption .muted")).toHaveText("2 steps");
+  await expect(card.locator(".gallery-caption .muted")).toHaveText("2 steps · 5 minutes ago");
   await card.click();
 
   await shown(page, hut.revision);
