@@ -11,16 +11,16 @@ const path = (owner: string) => `profiles/${encodeURIComponent(owner)}.json`;
 const colleague = (email: string) => email.toLowerCase().endsWith(DOMAIN);
 const capital = (word: string) => word[0].toUpperCase() + word.slice(1);
 
-/** The default public name for an email: "Jane Doe" at H Company, "Jane D." elsewhere, "" when it names nobody. */
-export function nameOf(email: string): string {
-  const words = email
-    .split("@")[0]
-    .split(/[._-]+/)
-    .filter(Boolean);
-  if (colleague(email)) return words.map(capital).join(" ");
-  if (words.length < 2 || !words.every((w) => /^\p{L}+$/u.test(w))) return "";
-  return `${capital(words[0])} ${words.at(-1)![0].toUpperCase()}.`;
-}
+/** The default public name: an employee's name from their H Company address, else none. */
+export const nameOf = (email: string) =>
+  colleague(email)
+    ? email
+        .split("@")[0]
+        .split(/[._-]+/)
+        .filter(Boolean)
+        .map(capital)
+        .join(" ")
+    : "";
 
 /** The name on the user's public builds: the one they chose, else the default. */
 export async function authorName(user: Pick<User, "id" | "email">): Promise<string> {

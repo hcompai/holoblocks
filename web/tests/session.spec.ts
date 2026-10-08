@@ -45,10 +45,16 @@ async function comeBack(cookies: Record<string, string>, url = "https://blocks.t
   return { response, handoff: JSON.parse(cookie(handed.split(";")[0], HANDOFF)!) };
 }
 
-test("anyone signs in; a default name is a colleague's full name, an outsider's first name and initial, or none", async () => {
+test("anyone signs in; only an employee gets a default name, from their address, even when profiles cannot be read", async () => {
   expect((await admit({ id: "u-1", email: "jane.doe@hcompany.ai" })).name).toBe("Jane Doe");
-  expect((await admit({ id: "u-2", email: "jane.doe@gmail.com" })).name).toBe("Jane D.");
-  expect((await admit({ id: "u-3", email: "jd1987@gmail.com" })).name).toBe("");
+  expect((await admit({ id: "u-2", email: "jane.doe@gmail.com" })).name).toBe("");
+  process.env.BLOB_READ_WRITE_TOKEN = process.env.BLOCKYARD_PRIVATE_BLOB_TOKEN = "same-token";
+  try {
+    expect((await admit({ id: "u-1", email: "jane.doe@hcompany.ai" })).name).toBe("Jane Doe");
+  } finally {
+    delete process.env.BLOB_READ_WRITE_TOKEN;
+    delete process.env.BLOCKYARD_PRIVATE_BLOB_TOKEN;
+  }
 });
 
 test("the portal's Google sign-in comes back as a key and a pass for any H account, where the user left", async () => {

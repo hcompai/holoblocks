@@ -17,7 +17,7 @@ import { HistoryPanel } from "./HistoryPanel";
 import { design, useHistory, type Version } from "./history";
 import { HomeShelves } from "./HomeShelves";
 import { ImportBuild } from "./ImportBuild";
-import { LegalFooter } from "./Legal";
+import { SiteFooter } from "./Legal";
 import {
   card,
   library,
@@ -747,8 +747,8 @@ export default function App({ account }: { account: Account | null }) {
               }
             />
           )}
-          {home && <LegalFooter />}
         </div>
+        {home && <SiteFooter />}
       </aside>
       <main>
         <div className={home ? "workspace hidden" : "workspace"}>

@@ -1,6 +1,6 @@
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { bearer, Refusal } from "./http";
-import { authorName } from "./profile";
+import { authorName, nameOf } from "./profile";
 
 export interface User {
   id: string;
@@ -8,11 +8,15 @@ export interface User {
   name: string;
 }
 
-/** Any portal user, under their public name. */
-export const admit = async (user: { id: string; email: string }): Promise<User> => ({
-  ...user,
-  name: await authorName(user),
-});
+/** Any portal user, under their public name, or the default one if it cannot be read. */
+export async function admit(user: { id: string; email: string }): Promise<User> {
+  try {
+    return { ...user, name: await authorName(user) };
+  } catch (e) {
+    console.warn("Display name unavailable at sign-in, using the default", e);
+    return { ...user, name: nameOf(user.email) };
+  }
+}
 
 export const isAdmin = (user: User) =>
   (process.env.BLOCKYARD_ADMINS ?? "")

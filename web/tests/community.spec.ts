@@ -429,10 +429,11 @@ test("no brand shows on home, its credits, a public build or the sign-in dialog,
   await expect(page.locator(".gallery-card")).toHaveText([/Ada's hut/]);
   const meta = await page.locator("meta[content]").evaluateAll((tags) => tags.map((t) => t.getAttribute("content")));
   expect([await page.title(), ...meta, await page.locator("body").innerText()].join("\n")).not.toMatch(brands);
-  const footer = page.locator("footer.legal");
-  await expect(footer).toHaveText("Terms·Privacy·Credits");
-  await opensInTab(footer.getByRole("link", { name: "Terms" }), "https://www.hcompany.ai/terms-of-use");
-  await opensInTab(footer.getByRole("link", { name: "Privacy" }), "https://www.hcompany.ai/privacy-policy");
+  const footer = page.locator("footer.site-footer");
+  await opensInTab(footer.getByRole("link", { name: "Docs" }), "https://hub.hcompany.ai/");
+  await opensInTab(footer.getByRole("link", { name: "H Platform" }), "https://platform.hcompany.ai");
+  await opensInTab(footer.getByRole("link", { name: "Terms of Service" }), "https://www.hcompany.ai/terms-of-use");
+  await opensInTab(footer.getByRole("link", { name: "Privacy Policy" }), "https://www.hcompany.ai/privacy-policy");
   await footer.getByRole("button", { name: "Credits" }).click();
   const credits = page.getByRole("dialog", { name: "Credits" });
   await opensInTab(credits.getByRole("link", { name: "Faithful 32x" }), "https://faithfulpack.net/");
