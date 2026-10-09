@@ -99,13 +99,13 @@ export function AccountMenu({
           </form>
         ) : (
           <div className="menu" role="menu">
-            <div className="menu-head">
+            <div className="menu-head ph-private">
               {name && <b>{name}</b>}
               <span className="muted small">{email}</span>
             </div>
             <button role="menuitem" onClick={startNaming}>
               <IdentificationCardIcon size={16} /> Display name
-              <span className="menu-value muted small">{name || "None"}</span>
+              <span className="menu-value muted small ph-private">{name || "None"}</span>
             </button>
             <ThemeToggle />
             <hr />
