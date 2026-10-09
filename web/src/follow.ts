@@ -4,7 +4,7 @@ import { cachedSeed, requestedSeed } from "./fork";
 import { type ForkSeed, readSeed } from "./forkModel";
 import { card, remember } from "./library";
 import { caption, dataUrl, type View, view } from "./look";
-import { type Build, EMPTY_MODEL, type Message, type Model, PALETTE, unpack } from "./model";
+import { type Build, EMPTY_MODEL, type Message, type Model, type RenderRequest, PALETTE, unpack } from "./model";
 import { BlockScene, type Site } from "./scene";
 import {
   type Activity,
@@ -26,6 +26,8 @@ const RENDER_TRIES = 3;
 
 /** A session as the Agents API last told it. */
 export interface Followed {
+  /** The completed inspection of the currently loaded revision. */
+  inspection: RenderRequest | null;
   build: Build | null;
   /** What the builder is doing, while it builds. */
   activity: Activity | null;
@@ -38,7 +40,15 @@ export interface Followed {
   seed: ForkSeed | null;
 }
 
-export const NOTHING: Followed = { build: null, activity: null, error: null, syncError: null, models: [], seed: null };
+export const NOTHING: Followed = {
+  build: null,
+  activity: null,
+  error: null,
+  syncError: null,
+  models: [],
+  seed: null,
+  inspection: null,
+};
 
 type Listener = (state: Followed) => void;
 
@@ -130,7 +140,12 @@ function follow(id: string, signal: AbortSignal, notify: Listener, displayed: ()
       try {
         const drawn = await render(shot, request);
         if (!drawn) throw new Error("the render came back empty");
-        return await answer(id, call, [caption(request, drawn.blocks), await dataUrl(drawn.png)]);
+        await answer(id, call, [caption(request, drawn.blocks), await dataUrl(drawn.png)]);
+        if (!signal.aborted && model.revision === shot.revision) {
+          transcript = { ...transcript, inspection: request };
+          publish();
+        }
+        return;
       } catch (e) {
         if (signal.aborted || status(e) === 409) return;
         console.error("Could not answer a look", e);
@@ -148,6 +163,10 @@ function follow(id: string, signal: AbortSignal, notify: Listener, displayed: ()
     const request = transcript.messages.find((m) => m.role === "user")?.text;
     const state = transcript.crashed ? "error" : buildStatus(session);
     set({
+      inspection:
+        transcript.inspection && model.revision.startsWith(transcript.inspection.revision)
+          ? { ...transcript.inspection, revision: model.revision }
+          : null,
       models: transcript.models,
       seed,
       build: {

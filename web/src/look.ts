@@ -1,4 +1,4 @@
-import type { RenderRequest } from "./model";
+import type { Message, RenderRequest } from "./model";
 
 export type View = Omit<RenderRequest, "request" | "revision">;
 
@@ -64,3 +64,16 @@ export const dataUrl = (blob: Blob) =>
     reader.onerror = () => reject(reader.error);
     reader.readAsDataURL(blob);
   });
+
+/** Recover a completed inspection from its public tool result; the follower resolves its revision prefix. */
+export function inspected(
+  request: string | null | undefined,
+  args: Record<string, unknown> | undefined,
+  result: Message,
+): RenderRequest | null {
+  const revision = result.text.match(/^Revision ([a-f0-9]{8}),/)?.[1];
+  const wanted = view(args);
+  return request && revision && result.images.length && typeof wanted !== "string"
+    ? { request, revision, ...wanted }
+    : null;
+}
