@@ -17,6 +17,40 @@ const PHOTO = {
 const shown = (page: Page, revision: string) =>
   expect(page.locator(".viewer")).toHaveAttribute("data-revision", revision);
 
+test("Enter sends the home suggestion, while Shift+Enter and an empty follow-up do not", async ({ page }) => {
+  await site(page);
+  const agp = await platform(page);
+  await page.goto("/");
+  const composer = page.getByPlaceholder("A castle on a cliff… or drop a photo");
+  await expect(page.getByRole("button", { name: "Send", exact: true })).toBeEnabled();
+  await composer.press("Shift+Enter");
+  await expect(composer).toHaveValue("\n");
+  expect(agp.posted("/api/v2/sessions")).toHaveLength(0);
+  await composer.fill("");
+  await composer.press("Enter");
+  await expect(page).toHaveURL(/\?build=new-build$/);
+  expect(agp.posted("/api/v2/sessions")[0].messages[0]).toMatchObject({
+    message: "A castle on a cliff",
+    images: [],
+  });
+  await page.getByPlaceholder("Ask for a change").press("Enter");
+  expect(agp.posted("/messages")).toHaveLength(0);
+});
+
+test("a photo-only request overrides the home suggestion", async ({ page }) => {
+  await site(page);
+  const agp = await platform(page);
+  await page.goto("/");
+  await page.getByLabel("Photos to attach").setInputFiles(PHOTO);
+  await expect(page.getByRole("img", { name: "Attached image 1", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Send", exact: true }).click();
+  await expect(page).toHaveURL(/\?build=new-build$/);
+  expect(agp.posted("/api/v2/sessions")[0].messages[0]).toMatchObject({
+    message: "",
+    images: [expect.stringMatching(/^data:image\//)],
+  });
+});
+
 test("a live build shows each shared model and answers `look` with a render of the latest revision", async ({
   page,
 }) => {

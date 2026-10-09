@@ -19,6 +19,7 @@ const RENDER_PX = 240;
 const ATTACHMENT_PX = 96;
 const MAX_EDGE = 1568;
 const MAX_IMAGES = 2;
+const STARTER = "A castle on a cliff";
 const IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp"];
 /** The new build's prompt a signed-out visitor typed, kept in this tab across the sign-in round trip. */
 const DRAFT = "blockyard.draft";
@@ -192,7 +193,8 @@ export function ChatPanel(props: Props) {
   /** The builder no longer takes messages here: a change starts a copy of the build. */
   const ended = !!build && !build.open && !busy;
   const typed = !!(text.trim() || images.length);
-  const ready = typed && !sending && !closed && !preview && (!changing || !!build?.id);
+  const suggestion = !changing && !typed ? STARTER : "";
+  const ready = (typed || !!suggestion) && !sending && !closed && !preview && (!changing || !!build?.id);
   const heard = build?.messages.filter((m) => m.role === "user").length ?? 0;
   const waiting = queued.length ? queued.slice(Math.max(0, heard - queued[0].heard)) : queued;
   const scrolledFor = useRef<string | null>(null);
@@ -293,9 +295,12 @@ export function ChatPanel(props: Props) {
   /** The composer empties at once, and gets its text and images back if the builder does not take them. */
   const send = async () => {
     if (!ready) return;
-    const prompt = text.trim() || (images.some((image) => image.files) ? "Apply my marks." : "");
+    const prompt = text.trim() || (images.some((image) => image.files) ? "Apply my marks." : suggestion);
     if (onSignIn) {
-      if (!changing) sessionStorage.setItem(DRAFT, prompt);
+      if (!changing) {
+        setText(prompt);
+        sessionStorage.setItem(DRAFT, prompt);
+      }
       return onSignIn();
     }
     const draft = images;
@@ -389,7 +394,7 @@ export function ChatPanel(props: Props) {
         rows={changing ? 1 : 2}
         value={text}
         aria-label={ended ? "Remix this build" : changing ? "Change this build" : "Describe a new build"}
-        placeholder={changing ? "Ask for a change" : "A castle on a cliff… or drop a photo"}
+        placeholder={changing ? "Ask for a change" : `${STARTER}… or drop a photo`}
         onChange={(e) => setText(e.target.value)}
         onPaste={(e) => {
           const files = [...e.clipboardData.files].filter((f) => IMAGE_TYPES.includes(f.type));
