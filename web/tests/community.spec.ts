@@ -94,6 +94,17 @@ test("a colleague's public build opens from the home page's public builds, under
   await expect(menu.getByRole("menuitem", { name: /Publish/ })).toHaveCount(0);
 });
 
+for (const viewer of ["signed out", "a teammate"] as const) {
+  test(`${viewer} opening the owner's link to a published fork sees the public build`, async ({ page }) => {
+    const hut = { ...model(), id: "fork-hut", name: "Ada's hut" };
+    await site(page, [], viewer === "signed out" ? null : ACCOUNT);
+    await library(page, [entry(hut, "Ada Lovelace", "u-ada")], [hut]);
+    await page.goto("/?fork=fork-hut");
+    await expect(page).toHaveURL(/\?public=fork-hut$/);
+    await shown(page, hut.revision);
+  });
+}
+
 test("the user sets a display name from the account menu, and their public builds carry it at once", async ({
   page,
 }) => {
