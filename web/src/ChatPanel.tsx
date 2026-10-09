@@ -1,3 +1,4 @@
+import { annotationFile, type VisualInstruction } from "./Annotation";
 import { ArrowUpIcon, GitForkIcon, PlusIcon, SignInIcon, StopIcon, XIcon } from "@phosphor-icons/react";
 import { type ReactNode, type Ref, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from "react";
 import Markdown from "react-markdown";
@@ -123,6 +124,7 @@ function Live({ activity, early }: { activity: Activity; early: boolean }) {
 }
 
 export interface ChatHandle {
+  annotate: (instruction: VisualInstruction) => Promise<void>;
   ask: (prompt: string, attached: Record<string, Blob>) => Promise<boolean>;
 }
 
@@ -169,7 +171,7 @@ export function ChatPanel(props: Props) {
     dockRef,
   } = props;
   const [text, setText] = useState(() => (buildId || build ? "" : (sessionStorage.getItem(DRAFT) ?? "")));
-  const [images, setImages] = useState<string[]>([]);
+  const [images, setImages] = useState<{ src: string; files?: Record<string, Blob> }[]>([]);
   const [dropping, setDropping] = useState(false);
   const [sending, setSending] = useState(false);
   const [stopping, setStopping] = useState(false);
@@ -245,7 +247,7 @@ export function ChatPanel(props: Props) {
     const picked = [...files].filter((f) => IMAGE_TYPES.includes(f.type)).slice(0, MAX_IMAGES - images.length);
     const shrunk = await Promise.allSettled(picked.map(shrink));
     const urls = shrunk.flatMap((r) => (r.status === "fulfilled" ? [r.value] : []));
-    setImages((list) => [...list, ...urls].slice(0, MAX_IMAGES));
+    setImages((list) => [...list, ...urls.map((src) => ({ src }))].slice(0, MAX_IMAGES));
   };
 
   /** Hand `prompt` to the builder, even mid-build; whether it took it. */
@@ -278,23 +280,34 @@ export function ChatPanel(props: Props) {
   };
 
   useImperativeHandle(ref, () => ({
+    annotate: async (instruction) => {
+      if (sending || closed || preview || !build?.id || build.id !== instruction.context.build)
+        throw new Error("This build cannot receive directions here.");
+      if (images.length >= MAX_IMAGES) throw new Error("Remove an attachment first.");
+      setImages((list) => [...list, { src: instruction.image, files: annotationFile(instruction) }]);
+      requestAnimationFrame(() => composer.current?.focus());
+    },
     ask: (prompt, files) => (sending || !build?.id ? Promise.resolve(false) : deliver(prompt, [], files)),
   }));
 
   /** The composer empties at once, and gets its text and images back if the builder does not take them. */
   const send = async () => {
     if (!ready) return;
-    const prompt = text.trim();
+    const prompt = text.trim() || (images.some((image) => image.files) ? "Apply my marks." : "");
     if (onSignIn) {
       if (!changing) sessionStorage.setItem(DRAFT, prompt);
       return onSignIn();
     }
-    const attached = images;
+    const draft = images;
+    const attached = draft.map((a) => a.src);
     setText("");
     setImages([]);
-    if (await deliver(prompt, attached)) return;
+    const files = Object.assign({}, ...draft.map((a) => a.files ?? {}));
+    if (await deliver(prompt, attached, files)) {
+      return;
+    }
     setText((typed) => typed || prompt);
-    setImages((added) => (added.length ? added : attached));
+    setImages((added) => [...draft, ...added]);
   };
 
   const lightboxDialog = (
@@ -353,7 +366,7 @@ export function ChatPanel(props: Props) {
     >
       {images.length > 0 && (
         <div className="attachments">
-          {images.map((src, i) => (
+          {images.map(({ src }, i) => (
             <div key={i} className="attachment">
               <button className="attachment-open" title="Open the image" onClick={(e) => zoom(src, e.currentTarget)}>
                 <img src={src} alt={`Attached image ${i + 1}`} />
@@ -361,7 +374,9 @@ export function ChatPanel(props: Props) {
               <button
                 className="attachment-remove"
                 aria-label={`Remove image ${i + 1}`}
-                onClick={() => setImages((list) => list.filter((_, j) => j !== i))}
+                onClick={() => {
+                  setImages((list) => list.filter((_, j) => j !== i));
+                }}
               >
                 <XIcon size={10} weight="bold" />
               </button>
