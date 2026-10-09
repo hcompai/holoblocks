@@ -52,7 +52,7 @@ const WALK_FOV = 70;
 const WALK_FRONT = 6;
 const FOCUS_BACKGROUND = "#141414";
 const HOVER_COLOR = 0x5eb1ff;
-const SELECTED_COLOR = 0xffa133;
+const SELECTED_COLOR = 0x9a5bec;
 /** Rays cast at most across a selection box, at least a few pixels apart. */
 const BOX_RAYS = 20000;
 /** Blocks a box takes at most through the model, so the selection stays light to draw and save. */
