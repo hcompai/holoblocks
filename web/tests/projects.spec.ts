@@ -14,6 +14,22 @@ async function hut(page: Page) {
 
 const mine = (page: Page) => page.getByRole("region", { name: "Your builds" }).locator(".tile-owned");
 
+test("Your builds lists the user's own sessions, never a teammate's", async ({ page }) => {
+  await site(page);
+  const agp = await platform(page);
+  for (const [id, teammate] of [
+    ["hut", false],
+    ["theirs", true],
+  ] as const) {
+    agp.session(id, "idle", { teammate });
+    agp.say(id, "A little hut");
+    agp.share(id, model());
+    agp.answer(id, "Built.");
+  }
+  await page.goto("/");
+  await expect(mine(page)).toHaveCount(1);
+});
+
 test("the owner renames a build from its title or its card, and the name sticks", async ({ page }) => {
   const { names } = await hut(page);
   await page.goto("/?build=hut");
