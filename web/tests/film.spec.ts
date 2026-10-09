@@ -33,7 +33,7 @@ test("a film raises each step in order, bottom layer first, before the turntable
 test("the GIF call to action appears only for a completed, nonempty build", async ({ page }) => {
   await site(page);
   const agp = await platform(page);
-  const cta = page.getByRole("button", { name: "GIF", exact: true });
+  const cta = page.locator("header").getByRole("button", { name: "GIF", exact: true });
   agp.session("live");
   agp.say("live", "A little hut");
   agp.state("live", "running");
@@ -65,7 +65,9 @@ test("Share GIF makes a credited looping GIF of the build and leaves the viewer 
     Object.assign(window, { filmText: drawn, filmMarks: marks });
     const fill = CanvasRenderingContext2D.prototype.fillText;
     CanvasRenderingContext2D.prototype.fillText = function (text, x, y, ...rest) {
-      drawn.push({ text, fits: x + this.measureText(text).width <= this.canvas.width });
+      const width = this.measureText(text).width;
+      const left = this.textAlign === "right" ? x - width : this.textAlign === "center" ? x - width / 2 : x;
+      drawn.push({ text, fits: left >= 0 && left + width <= this.canvas.width });
       return fill.call(this, text, x, y, ...rest);
     };
     const arc = CanvasRenderingContext2D.prototype.arc;
