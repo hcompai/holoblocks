@@ -1,5 +1,6 @@
 import { UploadSimpleIcon } from "@phosphor-icons/react";
 import { useRef, useState } from "react";
+import { track } from "./analytics";
 import { importModel, type ModelFile, readModel } from "./library";
 
 /** Import a model file as a public build of the signed-in user: pick it, confirm, and it opens once imported. */
@@ -26,6 +27,7 @@ export function ImportBuild({ onImported }: { onImported: (id: string) => void }
     setError(null);
     try {
       const id = await importModel(model);
+      track("build_imported");
       setModel(null);
       onImported(id);
     } catch (e) {

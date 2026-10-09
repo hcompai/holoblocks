@@ -1,17 +1,20 @@
+import { isTerminalSessionStatus } from "hai-agents";
 import { gunzipSync } from "node:zlib";
 import { checkedSeed, forkSeed } from "../src/forkModel";
 import { holder } from "./lib/account";
 import { body, Refusal, route } from "./lib/http";
 import { imported } from "./lib/imported";
-import { forkList, linkFork, readFork, saveFork } from "./lib/forks";
+import { carriedFrom, findFork, forkList, isFork, linkFork, readFork, saveFork } from "./lib/forks";
 import { ownedSession } from "./lib/snapshot";
+import { ID } from "./lib/store";
 
 const OWN = { "Cache-Control": "private, no-store" };
 const MAX_UPLOAD = 4 * 1024 * 1024;
 const MAX_UNPACKED = 64 * 1024 * 1024;
 
+/** A fork of its own, or one of the caller's builds carried on past its ended session under its id. */
 function forkId(value: unknown): string {
-  if (typeof value !== "string" || !/^fork-[a-f0-9-]{36}$/.test(value)) throw new Refusal(400, "No such fork.");
+  if (typeof value !== "string" || !ID.test(value)) throw new Refusal(400, "No such fork.");
   return value;
 }
 
@@ -27,7 +30,7 @@ export const GET = route(async (request) => {
 
 /** Save a private copy of a model as the caller's fork: `{ id, seed }`, gzipped. Holo only starts on its first message. */
 export const POST = route(async (request) => {
-  const { user } = holder(request);
+  const { user, key } = holder(request);
   const upload = Buffer.from(await request.arrayBuffer());
   if (upload.length > MAX_UPLOAD) throw new Refusal(413, "The model is too large to fork.");
   let given: { id?: unknown; seed?: unknown };
@@ -37,6 +40,7 @@ export const POST = route(async (request) => {
     throw new Refusal(400, "The fork could not be read.");
   }
   const id = forkId(given?.id);
+  if (!isFork(id)) await ownedSession(id, key);
   let seed;
   try {
     seed = checkedSeed(given.seed);
@@ -50,13 +54,26 @@ export const POST = route(async (request) => {
 });
 
 /** Bind one of the caller's forks to the session its first message started: `{ id, sessionId }`. */
+/**
+ * Bind a fork to the session its message started: `{ id, sessionId }`. A fork continues in one session; once that
+ * session ended, the one carrying it on takes its place.
+ */
 export const PATCH = route(async (request) => {
   const { user, key } = holder(request);
   const given = await body<{ id?: unknown; sessionId?: unknown }>(request);
   const id = forkId(given.id);
   if (typeof given.sessionId !== "string") throw new Refusal(400, "No such session.");
   const session = await ownedSession(given.sessionId, key);
-  if (session.request.groupId !== id) throw new Refusal(400, "This session was not started on this fork.");
-  await linkFork(user.id, id, given.sessionId);
+  const fork = await findFork(user.id, id);
+  if (!fork) throw new Refusal(404, "No such fork of yours.");
+  if (fork.sessionId !== given.sessionId) {
+    const after = carriedFrom(id, session.request.groupId);
+    const current = fork.sessionId ?? (isFork(id) ? null : id);
+    if (after === undefined || (after !== null && after !== current))
+      throw new Refusal(400, "This session was not started on this fork.");
+    if (after && !isTerminalSessionStatus((await ownedSession(after, key)).status.status))
+      throw new Refusal(409, "The fork's session is still open.");
+    await linkFork(user.id, id, given.sessionId, fork.sessionId);
+  }
   return new Response(null, { status: 204, headers: OWN });
 });

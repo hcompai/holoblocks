@@ -33,7 +33,7 @@ test("a film raises each step in order, bottom layer first, before the turntable
 test("the GIF call to action appears only for a completed, nonempty build", async ({ page }) => {
   await site(page);
   const agp = await platform(page);
-  const cta = page.getByRole("button", { name: "Share a GIF", exact: true });
+  const cta = page.locator("header").getByRole("button", { name: "GIF", exact: true });
   agp.session("live");
   agp.say("live", "A little hut");
   agp.state("live", "running");
@@ -52,7 +52,7 @@ test("the GIF call to action appears only for a completed, nonempty build", asyn
   await expect(cta).toHaveCount(0);
 });
 
-test("Share a GIF makes a credited looping GIF of the build and leaves the viewer on its step", async ({
+test("Share GIF makes a credited looping GIF of the build and leaves the viewer on its step", async ({
   page,
 }, testInfo) => {
   test.setTimeout(300000);
@@ -60,13 +60,20 @@ test("Share a GIF makes a credited looping GIF of the build and leaves the viewe
   page.on("pageerror", (e) => errors.push(e.message));
   await page.addInitScript(() => {
     Object.defineProperty(navigator, "canShare", { configurable: true, value: () => false });
-    const credits: { text: string; fits: boolean }[] = [];
-    Object.assign(window, { filmCredits: credits });
+    const drawn: { text: string; fits: boolean }[] = [];
+    const marks = { count: 0 };
+    Object.assign(window, { filmText: drawn, filmMarks: marks });
     const fill = CanvasRenderingContext2D.prototype.fillText;
     CanvasRenderingContext2D.prototype.fillText = function (text, x, y, ...rest) {
-      if (text.startsWith("Powered by ") || text === "from H Company")
-        credits.push({ text, fits: x + this.measureText(text).width <= this.canvas.width });
+      const width = this.measureText(text).width;
+      const left = this.textAlign === "right" ? x - width : this.textAlign === "center" ? x - width / 2 : x;
+      drawn.push({ text, fits: left >= 0 && left + width <= this.canvas.width });
       return fill.call(this, text, x, y, ...rest);
+    };
+    const arc = CanvasRenderingContext2D.prototype.arc;
+    CanvasRenderingContext2D.prototype.arc = function (...args) {
+      marks.count++;
+      return arc.apply(this, args);
     };
   });
   const hut = model();
@@ -74,25 +81,22 @@ test("Share a GIF makes a credited looping GIF of the build and leaves the viewe
   await page.goto("/?showcase=hut");
   await expect(page.locator(".viewer")).toHaveAttribute("data-revision", hut.revision);
   await page.getByRole("button", { name: "First step" }).click();
-  await (await shareMenu(page)).getByRole("menuitem", { name: "Share a GIF…" }).click();
+  await (await shareMenu(page)).getByRole("menuitem", { name: "Share GIF…" }).click();
 
   const dialog = page.getByRole("dialog");
-  const caption = dialog.getByLabel("Suggested caption");
-  await dialog.getByText("Options", { exact: true }).click();
-  await expect(dialog.getByRole("combobox", { name: "Duration" })).toHaveValue("8");
-  await expect(dialog.getByRole("combobox", { name: "Camera", exact: true })).toHaveValue("follow");
-  await expect(dialog.getByRole("combobox", { name: "Camera", exact: true }).locator("option")).toHaveText([
-    "Follow build",
-    "Orbit",
-    "Fixed",
-  ]);
+  const caption = dialog.getByLabel("Caption");
+  const duration = dialog.getByRole("radiogroup", { name: "Duration", exact: true });
+  await expect(duration.getByRole("radio", { name: "8s" })).toHaveAttribute("aria-checked", "true");
+  const camera = dialog.getByRole("radiogroup", { name: "Camera", exact: true });
+  await expect(camera.getByRole("radio", { name: "Follow" })).toHaveAttribute("aria-checked", "true");
+  await expect(camera.getByRole("radio")).toHaveText(["Follow", "Orbit", "Fixed"]);
   await expect(caption).toHaveValue(
     "Little Hut: 24 blocks, built with Holo4 27B by H Company. #Holo4 #HCompany #HoloBlocks",
   );
-  await dialog.getByRole("checkbox", { name: "H Company credit" }).uncheck();
+  await dialog.getByRole("checkbox", { name: "H logo" }).uncheck();
   await expect(caption).toHaveValue("Little Hut: 24 blocks, built with HoloBlocks. #HoloBlocks");
-  await dialog.getByRole("checkbox", { name: "H Company credit" }).check();
-  const link = dialog.getByRole("link", { name: "Download GIF" });
+  await dialog.getByRole("checkbox", { name: "H logo" }).check();
+  const link = dialog.getByRole("link", { name: "Download" });
   await expect(link).toBeVisible({ timeout: 240000 });
 
   await page.evaluate(() => {
@@ -124,12 +128,14 @@ test("Share a GIF makes a credited looping GIF of the build and leaves the viewe
   const frames = decompressFrames(gif, false);
   expect(frames).toHaveLength(8 * 20);
   expect(frames.every((f) => f.delay === 50)).toBe(true);
-  const credits = await page.evaluate(
-    () => (window as unknown as { filmCredits: { text: string; fits: boolean }[] }).filmCredits,
-  );
-  expect(credits.filter((c) => c.text === "Powered by Holo4 27B").length).toBeGreaterThanOrEqual(160);
-  expect(credits.filter((c) => c.text === "from H Company").length).toBeGreaterThanOrEqual(160);
-  expect(credits.every((c) => c.fits)).toBe(true);
+  const { drawn, marks } = await page.evaluate(() => {
+    const w = window as unknown as { filmText: { text: string; fits: boolean }[]; filmMarks: { count: number } };
+    return { drawn: w.filmText, marks: w.filmMarks.count };
+  });
+  expect(drawn.filter((c) => c.text === " blocks").length).toBeGreaterThanOrEqual(160);
+  expect(drawn.some((c) => c.text.startsWith("Powered by"))).toBe(false);
+  expect(drawn.every((c) => c.fits)).toBe(true);
+  expect(marks).toBeGreaterThanOrEqual(160);
   await dialog.locator(".film-preview img").screenshot({ path: testInfo.outputPath("credited-gif.png") });
   // Held shots deliberately produce identical frames between layer placements.
   const sceneChanges = (i: number) =>
@@ -153,7 +159,7 @@ test("Share a GIF makes a credited looping GIF of the build and leaves the viewe
     });
   });
   // A render lets the dialog see the platform that can now share files.
-  await dialog.getByRole("button", { name: "Copy caption" }).click();
+  await dialog.getByRole("button", { name: "Copy" }).click();
   await dialog.getByRole("button", { name: "Share…" }).click();
   expect(await page.evaluate(() => (window as unknown as { shared: object }).shared)).toEqual({
     name: "Little Hut-build.gif",
@@ -165,4 +171,35 @@ test("Share a GIF makes a credited looping GIF of the build and leaves the viewe
   await expect(dialog).toBeHidden();
   await expect(page.getByRole("slider", { name: "Step" })).toHaveValue("0");
   expect(errors).toEqual([]);
+});
+
+test("film frames include a readable website address", async ({ page }, testInfo) => {
+  test.setTimeout(120000);
+  await page.addInitScript((host) => {
+    const frames: boolean[] = [];
+    Object.assign(window, { websiteFrames: frames });
+    const fill = CanvasRenderingContext2D.prototype.fillText;
+    CanvasRenderingContext2D.prototype.fillText = function (text, x, y, ...rest) {
+      if (text === host) {
+        const width = this.measureText(text).width;
+        const left = this.textAlign === "right" ? x - width : this.textAlign === "center" ? x - width / 2 : x;
+        frames.push(left >= 0 && left + width <= this.canvas.width && y < this.canvas.height);
+      }
+      return fill.call(this, text, x, y, ...rest);
+    };
+  }, "blocks.hcompany.ai");
+  const hut = model();
+  await site(page, [{ ...hut, id: "hut" }]);
+  await page.goto("/?showcase=hut");
+  await (await shareMenu(page)).getByRole("menuitem", { name: "Share GIF…" }).click();
+  await expect
+    .poll(() => page.evaluate(() => (window as unknown as { websiteFrames: boolean[] }).websiteFrames.length), {
+      timeout: 90000,
+    })
+    .toBeGreaterThan(0);
+  expect(
+    await page.evaluate(() => (window as unknown as { websiteFrames: boolean[] }).websiteFrames.every(Boolean)),
+  ).toBe(true);
+  await page.locator(".film-preview").screenshot({ path: testInfo.outputPath("website-preview.png") });
+  await page.keyboard.press("Escape");
 });

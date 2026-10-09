@@ -68,6 +68,7 @@ export async function site(
     if (id) return forks.has(id) ? route.fulfill({ json: forks.get(id) }) : route.fulfill({ status: 404, json: {} });
     return route.fulfill({ json: [...forks.values()].map(({ seed, ...fork }) => fork) });
   });
+  await page.route("**/api/hearts*", (route) => route.fulfill({ json: { counts: {}, mine: [] } }));
   await page.route("https://agp.eu.hcompany.ai/**", (route) =>
     route.fulfill({
       headers: { "access-control-allow-origin": "*", "access-control-allow-headers": "*" },

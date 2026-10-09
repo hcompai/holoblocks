@@ -27,6 +27,8 @@ export interface Publishing {
   /** Why the build cannot be published yet, or null when it can. */
   blocked: string | null;
   author: string;
+  /** The user has never made a build public: publishing asks what that means first. */
+  first: boolean;
   onPublish: () => Promise<void>;
   onUnpublish: () => Promise<void>;
 }
@@ -46,31 +48,6 @@ interface Props {
 }
 
 type Ask = Omit<ComponentProps<typeof Confirm>, "onClose">;
-
-function publishAsk({ published, imported, author, onPublish, onUnpublish }: Publishing): Ask {
-  const by = author ? `, as ${author}'s` : "";
-  return published
-    ? {
-        name: "Make private",
-        question: "Make this build private?",
-        note: imported
-          ? "It leaves the public library and stays under Your builds for you alone: its link only opens it for you. You can publish it again."
-          : "It leaves the public library and its link stops working. You can publish it again.",
-        doing: "Making private…",
-        icon: <LockSimpleIcon size={16} />,
-        action: onUnpublish,
-      }
-    : {
-        name: "Publish",
-        question: "Publish this build?",
-        note: imported
-          ? `Anyone can open it from the library${by}.`
-          : `Anyone can open its model from the library${by}. Your chat and photos stay private.`,
-        doing: "Publishing…",
-        icon: <GlobeIcon size={16} />,
-        action: onPublish,
-      };
-}
 
 const DELETE_NOTE = "It leaves your builds and the public library. This cannot be undone.";
 /** The platform keeps every session, so deleting one hides it. */
@@ -163,14 +140,6 @@ export function ShareMenu({ build, link, publishing, onDelete, deleteNote, image
                     ? "In the public library: anyone can open it"
                     : "Private: not in the public library"}
                 </p>
-                <button
-                  role="menuitem"
-                  disabled={!publishing.published && publishing.blocked !== null}
-                  onClick={() => setAsk(publishAsk(publishing))}
-                >
-                  {publishing.published ? <LockSimpleIcon size={16} /> : <GlobeIcon size={16} />}
-                  {publishing.published ? "Make private…" : (publishing.blocked ?? "Publish to the library…")}
-                </button>
               </>
             )}
             {(link || publishing) && (
@@ -186,7 +155,7 @@ export function ShareMenu({ build, link, publishing, onDelete, deleteNote, image
               <>
                 <button role="menuitem" disabled={!built} onClick={then(onGif)}>
                   <FilmStripIcon size={16} />
-                  Share a GIF…
+                  Share GIF…
                 </button>
                 <hr />
               </>

@@ -22,6 +22,7 @@ export function useSession(id: string | null): LiveBuild {
     syncError: current.syncError,
     models: current.models,
     seed: current.seed,
+    inspection: current.inspection,
   };
 }
 
