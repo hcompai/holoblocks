@@ -105,7 +105,7 @@ function HeartButton({ count, mine, onToggle }: HeartProps) {
 
 function Card({ build: b, published, onOpen }: TileProps) {
   return (
-    <button className="gallery-card" title={b.prompt} onClick={onOpen}>
+    <button className="gallery-card ph-private-labels" title={b.prompt} onClick={onOpen}>
       {b.thumbnail != null ? (
         <img src={b.thumbnail} alt="" loading="lazy" decoding="async" />
       ) : (
