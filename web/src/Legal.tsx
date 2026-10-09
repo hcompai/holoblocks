@@ -1,5 +1,6 @@
 import { DiscordLogoIcon, GithubLogoIcon, LinkedinLogoIcon, XIcon, XLogoIcon } from "@phosphor-icons/react";
 import { useRef } from "react";
+import { openCookiePreferences } from "./analytics";
 
 export const TERMS = "https://www.hcompany.ai/terms-of-use";
 export const PRIVACY = "https://www.hcompany.ai/privacy-policy";
@@ -102,6 +103,9 @@ export function SiteFooter() {
             </li>
             <li>
               <External href="https://trust.hcompany.ai/">Trust Center</External>
+            </li>
+            <li>
+              <button onClick={openCookiePreferences}>Cookie preferences</button>
             </li>
             <li>
               <button aria-haspopup="dialog" onClick={() => credits.current?.showModal()}>

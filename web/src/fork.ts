@@ -4,6 +4,7 @@ import { card, linkFork, remember } from "./library";
 import { unpack } from "./model";
 import { script } from "./remix";
 import { FORK_FILE } from "./session";
+import { track } from "./analytics";
 
 const FORK_ID = /^fork-[a-f0-9-]{36}$/;
 const UNCONFIRMED = "The fork may have started: send again to check.";
@@ -97,6 +98,7 @@ export async function startFork(
   const begin = async () => {
     const session = await start(seed, text, photos, attached);
     await linkFork(id, session);
+    track("build_forked");
     return session;
   };
   return navigator.locks ? navigator.locks.request(`blockyard-fork-${id}`, begin) : begin();
