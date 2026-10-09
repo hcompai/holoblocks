@@ -49,7 +49,8 @@ interface ControlsProps {
   framing: Framing;
   spin: boolean;
   followCamera: boolean;
-  onFollowCamera: (follow: boolean) => void;
+  /** Shown while the build is live or replaying, the only times the camera follows it. */
+  onFollowCamera?: (follow: boolean) => void;
   mode: Mode;
   canEdit: boolean;
   /** Why Edit is unavailable and what unlocks it. */
@@ -99,16 +100,18 @@ export function ViewControls({
           <CrosshairSimpleIcon size={14} weight="bold" />
         </button>
         <span className="tabs-sep" />
-        <button
-          className={followCamera ? "active" : ""}
-          aria-pressed={followCamera}
-          disabled={mode !== "view"}
-          title="Frame each step during builds and replay. Drag or zoom to take control."
-          onClick={() => onFollowCamera(!followCamera)}
-        >
-          <VideoCameraIcon size={14} weight="bold" />
-          <span className="button-label">Follow build</span>
-        </button>
+        {onFollowCamera && (
+          <button
+            className={followCamera ? "active" : ""}
+            aria-pressed={followCamera}
+            disabled={mode !== "view"}
+            title="Frame each step during builds and replay. Drag or zoom to take control."
+            onClick={() => onFollowCamera(!followCamera)}
+          >
+            <VideoCameraIcon size={14} weight="bold" />
+            <span className="button-label">Follow</span>
+          </button>
+        )}
         <button className={spin ? "active" : ""} aria-pressed={spin} onClick={() => onSpin(!spin)}>
           <ArrowsClockwiseIcon size={14} weight="bold" />
           <span className="button-label">Spin</span>

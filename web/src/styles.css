@@ -265,6 +265,11 @@ header {
   background: none;
 }
 
+.menu > button > .menu-check {
+  margin-left: auto;
+  color: inherit;
+}
+
 .menu > button.danger,
 .menu > button.danger svg {
   color: var(--text-error);
@@ -2316,28 +2321,13 @@ main {
   color: var(--text-on-primary);
 }
 
-.speeds {
-  display: flex;
-  gap: 2px;
-  background: var(--background-muted);
-  border-radius: var(--radius-button);
-  padding: 2px;
-}
-
-.speeds button {
-  border: none;
-  background: transparent;
-  border-radius: var(--radius-medium);
+.timeline .speed {
+  flex: none;
+  min-width: 44px;
+  justify-content: center;
   font-size: 12px;
-  line-height: 16px;
-  padding: 3px 8px;
-  color: var(--text-secondary);
-}
-
-.speeds button.active {
-  background: var(--background-card);
-  color: var(--text-default);
-  box-shadow: var(--elevation-1);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
 
 .timeline-live {
@@ -2583,27 +2573,36 @@ main {
 
 .film-controls,
 .film-controls label,
-.film-generation,
-.film-options[open] {
+.film-choice,
+.film-generation {
   display: flex;
   flex-direction: column;
   gap: 12px;
   min-width: 0;
 }
 
-.film-options summary {
-  cursor: pointer;
-  font-weight: 600;
-  color: var(--text-secondary);
-}
-
-.film-controls label {
+.film-controls label,
+.film-choice {
   gap: 5px;
   font-size: 12px;
   font-weight: 600;
 }
 
-.film-controls select,
+.film-choice > span {
+  color: var(--text-secondary);
+}
+
+.film-tabs {
+  align-self: stretch;
+}
+
+.film-tabs button {
+  flex: 1;
+  padding: 5px 8px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
 .film-caption textarea {
   width: 100%;
   font: inherit;
@@ -3371,15 +3370,10 @@ main {
     line-height: 15px;
   }
 
-  .app:not(.home) .timeline .speeds,
+  .app:not(.home) .timeline .speed,
   .app:not(.home) .timeline-live {
     order: 1;
     border-radius: 12px;
-  }
-
-  .app:not(.home) .timeline .speeds button {
-    padding: 4px 6px;
-    border-radius: 10px;
   }
 
   .app:not(.home) .placement-hud {

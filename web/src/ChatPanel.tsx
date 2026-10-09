@@ -446,7 +446,6 @@ export function ChatPanel(props: Props) {
     return (
       <div className="home-intro">
         <h1>What should we build?</h1>
-        <p>Describe anything you like and {WHO} will build it block by block while you watch.</p>
         {input}
         {problem}
         <div className="chips">

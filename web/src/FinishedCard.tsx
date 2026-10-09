@@ -32,7 +32,7 @@ export function FinishedCard({
         <VisibilityToggle publishing={publishing} name={build.name} />
         <button onClick={onGif} title="Share a GIF">
           <FilmStripIcon size={16} />
-          <span className="button-label">Share a GIF</span>
+          <span className="button-label">GIF</span>
         </button>
       </div>
       <button className="quiet icon-button" aria-label="Dismiss" onClick={onClose}>

@@ -21,12 +21,15 @@ for (const singleStep of [false, true]) {
     const viewer = page.locator(".viewer");
     const slider = page.getByRole("slider", { name: "Step", exact: true });
     await expect(viewer).toHaveAttribute("data-revision", build.revision);
-    await page.getByRole("button", { name: "0.5×", exact: true }).click();
+    for (let i = 0; i < 3; i++) await page.getByTitle("Playback speed", { exact: true }).click();
+    const follow = page.getByRole("button", { name: "Follow", exact: true });
+    await expect(follow).toHaveCount(0);
     if (singleStep) {
       await page.locator(".scrub-label").click();
       await page.keyboard.press("Space");
     } else await page.getByTitle("Play", { exact: true }).click();
     await expect(slider).toHaveValue("-1");
+    await expect(follow).toBeVisible();
     await page.getByTitle("Pause", { exact: true }).click();
     await expect(page.locator(".scrub-label")).toHaveText(`Empty canvas0 blocks · 0/${build.steps.length} steps`);
     await expect(slider).toHaveCSS("--fill", "0%");

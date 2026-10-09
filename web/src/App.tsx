@@ -44,7 +44,6 @@ import { selectedArea } from "./selectedArea";
 import { SESSION_DELETE_NOTE, ShareMenu, type Publishing } from "./ShareMenu";
 import { SignInDialog } from "./SignInDialog";
 import { label } from "./suggestions";
-import { ThemeToggle } from "./ThemeToggle";
 import { VisibilityToggle } from "./VisibilityToggle";
 import { Timeline } from "./Timeline";
 import { type BuildRef, useBuild } from "./useBuild";
@@ -636,9 +635,9 @@ export default function App({ account }: { account: Account | null }) {
         )}
         <span className="spacer" />
         {actionable && !error && actionable.status === "done" && built && !loading && (
-          <button className="primary" onClick={() => setFilmBuild(actionable)}>
+          <button onClick={() => setFilmBuild(actionable)} title="Share a GIF">
             <FilmStripIcon size={16} />
-            <span className="button-label">Share a GIF</span>
+            <span className="button-label">GIF</span>
           </button>
         )}
         {publishing && !error && (
@@ -655,7 +654,6 @@ export default function App({ account }: { account: Account | null }) {
             onGif={() => setFilmBuild(actionable)}
           />
         )}
-        {!sheeted && <ThemeToggle />}
         {account ? (
           !sheeted && <AccountMenu account={account} building={running.length > 0} onRenamed={refreshBuilds} />
         ) : (
@@ -705,7 +703,7 @@ export default function App({ account }: { account: Account | null }) {
             {ref && (
               <button className="quiet" onClick={() => open(null)}>
                 <PlusIcon size={14} weight="bold" />
-                New build
+                New
               </button>
             )}
           </div>
@@ -848,10 +846,14 @@ export default function App({ account }: { account: Account | null }) {
                 framing={framing}
                 spin={spin}
                 followCamera={followCamera && mode === "view"}
-                onFollowCamera={(follow) => {
-                  setFollowCamera(follow);
-                  if (follow) setSpin(false);
-                }}
+                onFollowCamera={
+                  live?.status === "building" || playing
+                    ? (follow) => {
+                        setFollowCamera(follow);
+                        if (follow) setSpin(false);
+                      }
+                    : undefined
+                }
                 mode={mode}
                 canEdit={!previewing && edits.editable && built}
                 editHint={

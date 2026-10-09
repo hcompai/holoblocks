@@ -155,7 +155,7 @@ export function ShareMenu({ build, link, publishing, onDelete, deleteNote, image
               <>
                 <button role="menuitem" disabled={!built} onClick={then(onGif)}>
                   <FilmStripIcon size={16} />
-                  Share a GIF…
+                  Share GIF…
                 </button>
                 <hr />
               </>

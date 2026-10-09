@@ -2,11 +2,12 @@ import { IdentificationCardIcon, SignOutIcon } from "@phosphor-icons/react";
 import { type FormEvent, useEffect, useState } from "react";
 import { type Account, setName, signOut } from "./account";
 import { displayName, saveDisplayName } from "./library";
+import { ThemeToggle } from "./ThemeToggle";
 import { useMenu } from "./useMenu";
 
 const MAX_NAME = 32;
 
-/** The signed-in user, with a menu to set the name on their public builds or sign out. */
+/** The signed-in user, with a menu for their display name, the theme and to sign out. */
 export function AccountMenu({
   account,
   building,
@@ -106,6 +107,8 @@ export function AccountMenu({
               <IdentificationCardIcon size={16} /> Display name
               <span className="menu-value muted small">{name || "None"}</span>
             </button>
+            <ThemeToggle />
+            <hr />
             <button
               role="menuitem"
               onClick={() => {
