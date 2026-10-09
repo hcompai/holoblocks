@@ -1,3 +1,4 @@
+import { Annotation, type AnnotationContext, type VisualInstruction } from "./Annotation";
 import {
   ArrowsClockwiseIcon,
   CrosshairSimpleIcon,
@@ -160,6 +161,7 @@ export function ViewControls({
 }
 
 interface Props {
+  onAnnotate?: (instruction: VisualInstruction) => Promise<void>;
   /** The build as shown, with this browser's hand edits. */
   build: Build | null;
   step: number;
@@ -197,6 +199,35 @@ export function Viewer(props: Props) {
     props;
   const { mode, edits, onMode } = props;
   const walkScreen = useWalkFullscreen(mode === "walk");
+  const [annotation, setAnnotation] = useState<{ image: Blob; context: AnnotationContext } | null>(null);
+  const [capturing, setCapturing] = useState(false);
+  const [annotationError, setAnnotationError] = useState("");
+  const captureKey = useRef("");
+  captureKey.current = `${build?.id}:${build?.revision}:${step}`;
+  useEffect(() => {
+    setAnnotation(null);
+    setAnnotationError("");
+  }, [build?.id]);
+  const capture = async () => {
+    if (!build || capturing) return;
+    const key = captureKey.current;
+    const context = { build: build.id, revision: build.revision, step };
+    setCapturing(true);
+    setAnnotationError("");
+    try {
+      // Finish only the browser's reveal so removal marks do not target temporary/ghost geometry.
+      scene.current?.skipPlacement();
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      const image = await scene.current?.image();
+      if (captureKey.current !== key) throw new Error("The model changed. Try Annotate again.");
+      if (!image) throw new Error("The model is not ready. Try again.");
+      setAnnotation({ image, context });
+    } catch (error) {
+      setAnnotationError(error instanceof Error ? error.message : "Could not capture this view.");
+    } finally {
+      setCapturing(false);
+    }
+  };
   const container = useRef<HTMLDivElement>(null);
   const framedBuild = useRef<string | null>(null);
   const thumbnailed = useRef(new Set<string>());
@@ -507,6 +538,21 @@ export function Viewer(props: Props) {
         onPointerLeave={() => setHover(null)}
         onClick={clicked}
       />
+      {props.onAnnotate && mode === "view" && !annotation && (
+        <div className="annotate-launch">
+          <button onClick={capture} disabled={capturing || !(shown && drawn === build?.revision && !failed)}>
+            <PencilSimpleIcon size={16} /> {capturing ? "Opening…" : "Annotate"}
+          </button>
+          {annotationError && (
+            <p className="error-text" role="alert">
+              {annotationError}
+            </p>
+          )}
+        </div>
+      )}
+      {annotation && props.onAnnotate && (
+        <Annotation {...annotation} onDone={props.onAnnotate} onClose={() => setAnnotation(null)} />
+      )}
       {shown && (edits.stale > 0 || edits.hidden > 0) && (
         <div className="edit-notice" role="status">
           {edits.stale > 0 ? (

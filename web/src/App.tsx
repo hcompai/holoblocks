@@ -907,6 +907,14 @@ export default function App({ account }: { account: Account | null }) {
           <div className="stage">
             <div className={center === "model" || sheeted ? "pane" : "pane hidden"}>
               <Viewer
+                onAnnotate={
+                  !previewing && !closed && owned
+                    ? async (instruction) => {
+                        if (!chat.current) throw new Error("Chat is not ready. Try again.");
+                        await chat.current.annotate(instruction);
+                      }
+                    : undefined
+                }
                 build={build}
                 step={visibleStep}
                 framing={framing}
