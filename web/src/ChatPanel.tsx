@@ -118,7 +118,7 @@ function Live({ activity, early }: { activity: Activity; early: boolean }) {
     </span>
   );
   return (
-    <div className="msg assistant live" title={`${WHO} is working`}>
+    <div className="msg assistant live ph-private" title={`${WHO} is working`}>
       {activity.work ? <WorkLog work={activity.work} summary={head} /> : head}
     </div>
   );
@@ -490,7 +490,7 @@ export function ChatPanel(props: Props) {
         }}
       >
         {build?.messages.map((m, i) => (
-          <div key={i} className={`msg ${m.role} ${m.error ? "error" : ""}`}>
+          <div key={i} className={`msg ${m.role} ph-private ${m.error ? "error" : ""}`}>
             {m.work && <WorkLog work={m.work} summary={`Worked for ${duration(m.work.end - m.work.start)}`} />}
             {m.role === "user" && m.images.length > 0 && attachments(m.images)}
             {m.role === "tool" ? (
@@ -520,7 +520,7 @@ export function ChatPanel(props: Props) {
         ))}
         {busy && build && activity && <Live activity={activity} early={!build.boxes.length} />}
         {waiting.map((q, i) => (
-          <div key={i} className="msg user queued" title={`Sent: ${WHO} reads it at its next step`}>
+          <div key={i} className="msg user queued ph-private" title={`Sent: ${WHO} reads it at its next step`}>
             {q.images.length > 0 && attachments(q.images)}
             <div className="markdown">
               <Markdown remarkPlugins={[remarkGfm]}>{q.text}</Markdown>
