@@ -1,4 +1,4 @@
-import { ArrowUpIcon, GitForkIcon, PlusIcon, SignInIcon, StopIcon, XIcon } from "@phosphor-icons/react";
+import { ArrowUpIcon, GitForkIcon, PlusIcon, StopIcon, XIcon } from "@phosphor-icons/react";
 import { type ReactNode, type Ref, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -522,9 +522,7 @@ export function ChatPanel(props: Props) {
             {typeof closed === "string" ? <p>{closed}</p> : closed}
             {!!build?.boxes.length &&
               (onSignIn ? (
-                <button onClick={onSignIn}>
-                  <SignInIcon size={14} weight="bold" /> Sign in
-                </button>
+                <button onClick={onSignIn}>Sign in</button>
               ) : (
                 <button onClick={onFork} title="Save a private copy of this build to change">
                   <GitForkIcon size={14} weight="bold" /> {typeof closed === "string" ? "Fork" : "Fork a copy"}

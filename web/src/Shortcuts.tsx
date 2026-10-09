@@ -1,4 +1,3 @@
-import { QuestionIcon } from "@phosphor-icons/react";
 import { useEffect, useRef, useState } from "react";
 import { typing } from "./scene";
 
@@ -48,7 +47,7 @@ const SECTIONS: { title: string; rows: [string, string][] }[] = [
   },
 ];
 
-/** A "?" button beside the view controls opening every shortcut; the ? key toggles it too. */
+/** Every shortcut, listed beside the view controls when the ? key opens it. */
 export function Shortcuts() {
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
@@ -74,16 +73,6 @@ export function Shortcuts() {
 
   return (
     <div className="menu-anchor" ref={root}>
-      <button
-        className={open ? "active" : ""}
-        onClick={() => setOpen(!open)}
-        aria-expanded={open}
-        aria-haspopup="dialog"
-        aria-label="Shortcuts"
-        title="Shortcuts (?)"
-      >
-        <QuestionIcon size={14} weight="bold" />
-      </button>
       {open && (
         <div className="shortcuts" role="dialog" aria-label="Shortcuts">
           {SECTIONS.map((section) => (

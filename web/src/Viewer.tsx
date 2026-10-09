@@ -56,14 +56,10 @@ interface ControlsProps {
   editHint?: string;
   /** The build has blocks, so it can be edited or walked through. */
   built: boolean;
-  /** Blocks spanned along x, y and z. */
-  size: Vec3 | null;
   onFrame: (framing: Framing) => void;
   onSpin: (spin: boolean) => void;
   onMode: (mode: Mode) => void;
 }
-
-const blocks = (n: number) => `${n.toLocaleString()} block${n === 1 ? "" : "s"}`;
 
 export function ViewControls({
   framing,
@@ -74,7 +70,6 @@ export function ViewControls({
   canEdit,
   editHint,
   built,
-  size,
   onFrame,
   onSpin,
   onMode,
@@ -150,29 +145,11 @@ export function ViewControls({
         <Shortcuts />
         {built && <PlacementSoundToggle />}
       </div>
-      {(hint || size) && (
+      {hint && (
         <div className="view-notes">
-          {hint && (
-            <p id={hintId} className="edit-availability" role="status">
-              {hint}
-            </p>
-          )}
-          {size && (
-            <dl className="model-size" aria-label="Model size" title="1 block = 1 m">
-              {[
-                { label: "Height", value: size[1] },
-                { label: "Width", value: size[0] },
-                { label: "Depth", value: size[2] },
-              ].map(({ label, value }) => (
-                <div key={label}>
-                  <dt>{label}</dt>
-                  <dd>
-                    {blocks(value)} · {value.toLocaleString()} m
-                  </dd>
-                </div>
-              ))}
-            </dl>
-          )}
+          <p id={hintId} className="edit-availability" role="status">
+            {hint}
+          </p>
         </div>
       )}
     </>

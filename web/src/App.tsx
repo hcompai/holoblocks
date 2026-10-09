@@ -1,12 +1,5 @@
 import { replayDelay } from "./buildTiming";
-import {
-  CaretLeftIcon,
-  ClockCounterClockwiseIcon,
-  FilmStripIcon,
-  GitForkIcon,
-  PlusIcon,
-  SignInIcon,
-} from "@phosphor-icons/react";
+import { CaretLeftIcon, ClockCounterClockwiseIcon, FilmStripIcon, GitForkIcon, PlusIcon } from "@phosphor-icons/react";
 import { type CSSProperties, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { type Account, signInError } from "./account";
 import { AccountMenu } from "./AccountMenu";
@@ -44,6 +37,7 @@ import { type Build, type BuildSummary, EMPTY_MODEL, pack, PALETTE, type Source,
 import type { ProjectActions } from "./ProjectMenu";
 import { ProjectTitle } from "./ProjectTitle";
 import { FinishedCard } from "./FinishedCard";
+import { useHearts } from "./hearts";
 import { RecoveryPanel } from "./RecoveryPanel";
 import type { BlockScene } from "./scene";
 import { selectedArea } from "./selectedArea";
@@ -60,7 +54,6 @@ import { useSheet } from "./useSheet";
 import { usePhone } from "./usePhone";
 import { useViewport } from "./useViewport";
 import { type Framing, type Mode, RenderFailed, ViewControls, Viewer } from "./Viewer";
-import { extent } from "./voxels";
 
 const TITLE = document.title;
 const NEW_BUILD = "New build";
@@ -110,6 +103,7 @@ export default function App({ account }: { account: Account | null }) {
   const { names, rename } = useProjectNames(account?.user.id ?? null);
   const [signingIn, setSigningIn] = useState(() => !account && signInError !== null);
   const askSignIn = () => setSigningIn(true);
+  const { hearts, toggle: heartBuild } = useHearts(account?.user.id ?? null, askSignIn);
   /** What the user just asked for, shown as a starting build where they asked it, until its session answers. */
   const [draft, setDraft] = useState<{ at: BuildRef | null; build: Build; since: number } | null>(null);
   const drafted = draft && same(draft.at, ref) && read.build?.id !== draft.build.id ? draft.build : null;
@@ -182,10 +176,6 @@ export default function App({ account }: { account: Account | null }) {
   const chat = useRef<ChatHandle>(null);
   const last = (build?.steps.length ?? 0) - 1;
   const built = !!build?.boxes.length;
-  const size = useMemo(
-    () => (build?.boxes.length ? extent(build, PALETTE) : null),
-    [build?.boxes, build?.width, build?.height, build?.depth],
-  );
 
   const latest = useRef(0);
   const refreshBuilds = useCallback(() => {
@@ -315,6 +305,12 @@ export default function App({ account }: { account: Account | null }) {
     if (url.href !== window.location.href) window.history.pushState(null, "", url);
   };
 
+  // A build carried on past its session lists as a fork under its own id: its old link follows it there.
+  useEffect(() => {
+    if (ref?.source === "session" && builds?.some((b) => b.source === "fork" && b.id === ref.id))
+      open({ id: ref.id, source: "fork" });
+  });
+
   useEffect(() => {
     const sync = () => show(urlBuild(), urlVersion());
     window.addEventListener("popstate", sync);
@@ -381,6 +377,19 @@ export default function App({ account }: { account: Account | null }) {
       setDraft((current) => (current?.build === build ? null : current));
       throw e;
     }
+  };
+
+  /** Carry the open build on past its ended session: a fresh run seeded with the model as it stands, under the same id. */
+  const carryOn = async (text: string, images: string[], attached: Record<string, Blob> = {}) => {
+    if (!live || !ref || (ref.source !== "session" && ref.source !== "fork")) return;
+    const origin = { ...ref, name: live.name, version: null, revision: live.revision };
+    const seed = forkSeed({ ...live, ...pack(live.boxes) }, origin, live.name);
+    if (ref.source === "session") await saveFork(ref.id, seed);
+    const id = await startFork(ref.id, seed, text, images, attached, runId ?? undefined);
+    started.current.add(id);
+    if (ref.source === "fork") attachSession(id);
+    else if (same(ref, opened.current)) open({ id: ref.id, source: "fork" });
+    refreshBuilds();
   };
 
   /** Open a listed build: the user's public builds as their session, when they have one. */
@@ -651,7 +660,6 @@ export default function App({ account }: { account: Account | null }) {
           !sheeted && <AccountMenu account={account} building={running.length > 0} onRenamed={refreshBuilds} />
         ) : (
           <button className="sign-in-button" onClick={askSignIn}>
-            <SignInIcon size={16} weight="bold" />
             <span className="button-label">Sign in</span>
           </button>
         )}
@@ -757,7 +765,9 @@ export default function App({ account }: { account: Account | null }) {
               if (runId) await stop(runId);
             }}
             onRemix={async (text, images, attached) => {
-              if (build && !previewing) await start(text, images, build, attached);
+              if (!build || previewing) return;
+              if (owned && ref?.source !== "public") await carryOn(text, images, attached);
+              else await start(text, images, build, attached);
             }}
             onFork={beginFork}
             onSignIn={account ? undefined : askSignIn}
@@ -776,6 +786,8 @@ export default function App({ account }: { account: Account | null }) {
               onRetry={refreshBuilds}
               onOpen={openListed}
               manage={manage}
+              hearts={hearts}
+              onHeart={heartBuild}
               mineActions={
                 account && (
                   <ImportBuild
@@ -852,7 +864,6 @@ export default function App({ account }: { account: Account | null }) {
                         : undefined
                 }
                 built={built}
-                size={size}
                 onFrame={(next) => {
                   if (mode === "walk") setMode("view");
                   setFollowCamera(false);

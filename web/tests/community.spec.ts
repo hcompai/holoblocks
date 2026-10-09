@@ -166,7 +166,7 @@ test("a public build shows no chat, even one its file still holds, and no author
   await library(page, [entry(hut, "", "u-anon")], [hut]);
   await page.goto("/");
   const card = page.getByRole("region", { name: "Public builds" }).locator(".gallery-card");
-  await expect(card.locator(".gallery-caption .muted")).toHaveText("2 steps · 5 minutes ago");
+  await expect(card.locator(".gallery-caption span")).toHaveText("5 minutes ago");
   await card.click();
 
   await shown(page, hut.revision);

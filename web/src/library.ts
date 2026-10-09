@@ -360,15 +360,18 @@ export async function library(): Promise<{ builds: BuildSummary[]; failed: Shelf
       owner: null,
     };
   });
-  const continued = new Set(forks.flatMap((f) => (f.sessionId ? [f.sessionId] : [])));
+  // A fork stands for the runs behind it: the one it links to and every ended session it carried on from.
+  const continued = new Set(forks.flatMap((f) => [f.id, ...(f.runs ?? []), ...(f.sessionId ? [f.sessionId] : [])]));
   // A build is public or private, never both: the public listing wins if a stale private entry lingers.
   const carded = new Set([...mine.map((s) => s.id), ...forks.map((f) => f.id)]);
   const privately = own.filter((p) => !listed.has(p.id) && !carded.has(p.id));
   const copies = forks.map((f): BuildSummary => {
     const run = builds.find((b) => b.id === f.sessionId);
+    const origin = builds.find((b) => b.id === f.id);
     return {
       ...f,
-      prompt: run?.prompt ?? "",
+      created: origin?.created ?? f.created,
+      prompt: run?.prompt ?? origin?.prompt ?? "",
       status: run?.status ?? "done",
       steps: run?.steps ?? f.steps,
       thumbnail: known[f.id]?.thumbnail ?? run?.thumbnail ?? null,

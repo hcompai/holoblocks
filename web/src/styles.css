@@ -12,6 +12,7 @@
   --text-tertiary: light-dark(#7a7a8a, #7c7c7c);
   --text-on-primary: light-dark(#ffffff, #121212);
   --text-error: light-dark(#c0404a, #ef7078);
+  --text-heart: light-dark(#e0245e, #f0608a);
   --stroke-default: light-dark(#ebebf1, #242424);
   --stroke-strong: light-dark(#d8d8e2, #343434);
   --stroke-focus: light-dark(#adadbc, #555555);
@@ -435,6 +436,7 @@ aside > .aside-head + * {
 
 .app.home .aside-body {
   flex: none;
+  min-height: 100vh;
   gap: 32px;
   width: min(1600px, 100%);
   margin: 0 auto;
@@ -1130,7 +1132,6 @@ aside > .aside-head + * {
 }
 
 .skeleton .gallery-caption {
-  flex: 1;
   gap: 8px;
 }
 
@@ -1191,27 +1192,6 @@ main {
 
 .edit-availability {
   margin: 0;
-}
-
-.model-size {
-  display: flex;
-  gap: 12px;
-  margin: 0;
-  font-variant-numeric: tabular-nums;
-}
-
-.model-size > div {
-  display: flex;
-  gap: 4px;
-}
-
-.model-size dt {
-  color: var(--text-tertiary);
-}
-
-.model-size dd {
-  margin: 0;
-  white-space: nowrap;
 }
 
 .view-toggle {
@@ -2176,7 +2156,8 @@ main {
   box-shadow: var(--elevation-1);
 }
 
-.gallery-card:hover {
+.gallery-card:hover,
+.tile-frame:hover > .gallery-card {
   border-color: var(--stroke-strong);
 }
 
@@ -2203,11 +2184,108 @@ main {
   font-weight: 700;
 }
 
+.gallery-card {
+  position: relative;
+}
+
+.tile-frame {
+  position: relative;
+  display: grid;
+}
+
+/* The caption rests on the bottom of the thumbnail, on a veil of the card's colour that blurs away into the picture. */
 .gallery-caption {
+  position: absolute;
+  inset: auto 0 0 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  padding: 10px 12px;
+  gap: 1px;
+  padding: 26px 12px 10px;
+  color: var(--text-default);
+  background: linear-gradient(
+    to top,
+    color-mix(in srgb, var(--background-card) 78%, transparent) 0%,
+    color-mix(in srgb, var(--background-card) 45%, transparent) 50%,
+    transparent 100%
+  );
+  pointer-events: none;
+}
+
+.gallery-caption > b {
+  font-weight: 600;
+}
+
+.gallery-caption > span {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+/* A glass pill in the top corner: shown on hover, and always once the user's heart is in it. */
+.tile-heart {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--text-default) 8%, transparent);
+  background: color-mix(in srgb, var(--background-card) 82%, transparent);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  box-shadow: var(--elevation-1);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  opacity: 0;
+  transition:
+    opacity 0.15s,
+    color 0.15s,
+    transform 0.15s;
+}
+
+.tile-owned .tile-heart {
+  right: 44px;
+}
+
+.tile-frame:hover .tile-heart,
+.tile-frame:focus-within .tile-heart,
+.tile-heart[aria-pressed="true"] {
+  opacity: 1;
+}
+
+.tile-heart:hover {
+  color: var(--text-heart);
+  transform: scale(1.06);
+}
+
+.tile-heart[aria-pressed="true"] {
+  color: var(--text-heart);
+}
+
+.tile-heart[aria-pressed="true"] > svg {
+  animation: heart-pop 0.3s ease-out;
+}
+
+@keyframes heart-pop {
+  0% {
+    transform: scale(0.6);
+  }
+  60% {
+    transform: scale(1.3);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@media (hover: none) {
+  .tile-heart {
+    opacity: 1;
+  }
 }
 
 .timeline {
@@ -3188,25 +3266,6 @@ main {
     gap: 8px;
   }
 
-  .app:not(.home) .model-size {
-    flex-direction: column;
-    gap: 2px;
-    padding: 5px 10px;
-    border: 0.5px solid var(--glass-stroke);
-    border-radius: 12px;
-    background: var(--glass);
-    -webkit-backdrop-filter: var(--glass-blur);
-    backdrop-filter: var(--glass-blur);
-  }
-
-  .app:not(.home) .model-size > div {
-    justify-content: space-between;
-  }
-
-  .app:not(.home):not(:has(.view-tabs.open)) .model-size {
-    display: none;
-  }
-
   .app:not(.home) .edit-availability {
     max-width: 160px;
     padding: 5px 10px;
@@ -3722,11 +3781,6 @@ main {
 }
 
 /* The owner's menu on their cards: rename, publish or make private, delete. */
-.tile-owned {
-  position: relative;
-  display: grid;
-}
-
 .project-menu {
   position: absolute;
   top: 8px;
