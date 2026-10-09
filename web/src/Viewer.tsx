@@ -15,7 +15,7 @@ import { type RefObject, useEffect, useId, useRef, useState } from "react";
 import { BlockLoader } from "./BlockLoader";
 import { ACTION_KEYS, type Action, blockLabel, EditBar, EditPanel } from "./EditPanel";
 import type { Edits } from "./edits";
-import type { Build, Palette } from "./model";
+import type { RenderRequest, Build, Palette } from "./model";
 import { BlockScene, type PlacementProgress, typing, type View } from "./scene";
 import { Shortcuts } from "./Shortcuts";
 import type { Activity } from "./session";
@@ -106,7 +106,7 @@ export function ViewControls({
             className={followCamera ? "active" : ""}
             aria-pressed={followCamera}
             disabled={mode !== "view"}
-            title="Frame each step during builds and replay. Drag or zoom to take control."
+            title="Follow Holo’s views and replay. Drag or zoom to take control."
             onClick={() => onFollowCamera(!followCamera)}
           >
             <VideoCameraIcon size={14} weight="bold" />
@@ -161,6 +161,7 @@ export function ViewControls({
 }
 
 interface Props {
+  inspection?: RenderRequest | null;
   onAnnotate?: (instruction: VisualInstruction) => Promise<void>;
   /** The build as shown, with this browser's hand edits. */
   build: Build | null;
@@ -347,6 +348,32 @@ export function Viewer(props: Props) {
     s.onFollowBuild = props.onFollowCamera ?? null;
     s.setFollowBuild((props.followCamera ?? true) && mode === "view" && !spin);
   }, [props.followCamera, props.onFollowCamera, mode, spin]);
+  useEffect(() => {
+    const s = scene.current;
+    if (!s) return;
+    // Capture and draw on exactly the view the user chose, even if another inspection finishes meanwhile.
+    if (annotation || capturing) return;
+    const follow = (props.followCamera ?? true) && mode === "view" && !spin;
+    const request = props.inspection;
+    const ready = !!build && opened === build.id && drawn === build.revision && !failed;
+    const live = follow && ready && build.status === "building" && last && request?.revision === build.revision;
+    s.setInspection(live ? request : null, follow && ready && build.status !== "building");
+  }, [
+    props.inspection,
+    props.followCamera,
+    drawn,
+    opened,
+    failed,
+    build?.id,
+    build?.revision,
+    build?.status,
+    last,
+    mode,
+    spin,
+    !!annotation,
+    capturing,
+  ]);
+
   useEffect(() => scene.current?.setBuildComplete(build?.status === "done" && last), [build?.status, last]);
   useEffect(() => scene.current?.setPlacementSpeed(props.placementSpeed ?? 1), [props.placementSpeed]);
 

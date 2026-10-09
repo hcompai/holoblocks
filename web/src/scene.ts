@@ -304,6 +304,7 @@ export class BlockScene {
   private placementSpeed = 1;
   private placementPaused = false;
   private followBuild = true;
+  private inspection: RenderRequest | null = null;
   private buildComplete = false;
   private cameraMotion: {
     plan: Pick<PlacementPlan, "camera" | "duration">;
@@ -417,7 +418,8 @@ export class BlockScene {
     this.renderer.setSize(w, h);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
-    if (this.cameraMotion)
+    if (this.inspection && this.followingBuild) this.frameInspection(this.inspection);
+    else if (this.cameraMotion)
       this.planCamera(this.cameraMotion.plan, Math.min(this.cameraMotion.elapsed, this.cameraMotion.plan.duration));
     this.dirty = true;
   }
@@ -528,8 +530,10 @@ export class BlockScene {
 
   setFollowBuild(follow: boolean) {
     this.followBuild = follow;
-    if (!follow) this.cameraMotion = null;
-    else {
+    if (!follow) {
+      this.cameraMotion = null;
+      this.setInspection(null);
+    } else {
       this.userMoved = false;
       this.controls.autoRotate = false;
       const animation = this.placing?.model.placement;
@@ -726,8 +730,58 @@ export class BlockScene {
     this.dirty = true;
   }
 
+  /** Follow a completed inspection; dragging clears its crop while retaining the camera pose. */
+  setInspection(request: RenderRequest | null, overview = false) {
+    if (request && !this.followingBuild) return;
+    if (this.inspection?.request === request?.request && this.inspection?.revision === request?.revision) return;
+    const previous = this.inspection;
+    this.inspection = request;
+    this.renderer.clippingPlanes = request?.box ? clippingPlanes(this.inspectionBox(request.box)) : [];
+    this.dome.visible = !request?.box;
+    this.scene.fog = request?.box ? null : this.fog;
+    this.dirty = true;
+    if (request) {
+      this.skipPlacement();
+      this.cameraMotion = null;
+      this.frameInspection(request);
+    } else if (previous && overview) this.frameView("iso", this.framing.width, this.framing.depth);
+  }
+
+  private inspectionBox(box: number[]) {
+    return new THREE.Box3(
+      new THREE.Vector3(box[0], box[1], box[2]),
+      new THREE.Vector3(box[3] + 1, box[4] + 1, box[5] + 1),
+    );
+  }
+
+  private frameInspection(request: RenderRequest) {
+    // Consume residual drag damping before applying an absolute inspection camera.
+    const damping = this.controls.enableDamping;
+    this.controls.enableDamping = false;
+    this.controls.update();
+    const { box, angle, pitch, zoom, eye } = request;
+    const focus = box ? this.inspectionBox(box) : undefined;
+    this.camera.zoom = zoom;
+    const { width, depth } = this.framing;
+    if (eye) this.placeEye(new THREE.Vector3(...eye), pitch, width, depth, focus);
+    else if (angle === null) this.aim("iso", width, depth, focus);
+    else {
+      const around = THREE.MathUtils.degToRad(angle);
+      const up = THREE.MathUtils.degToRad(Math.min(pitch, 89.9));
+      this.aim(
+        new THREE.Vector3(Math.sin(around) * Math.cos(up), Math.sin(up), Math.cos(around) * Math.cos(up)),
+        width,
+        depth,
+        focus,
+      );
+    }
+    this.controls.enableDamping = damping;
+  }
+
   /** Point the camera along `view` so the build (or the empty site) fills the frame, once back from walking if walking. */
   frameView(view: View, width: number, depth: number) {
+    this.setInspection(null);
+    this.camera.zoom = 1;
     this.framing = { view, width, depth };
     if (!this.walking) this.aim(view, width, depth);
   }
@@ -844,6 +898,10 @@ export class BlockScene {
       near,
       far,
       fov,
+      zoom: this.camera.zoom,
+      dome: this.dome.visible,
+      fog: this.scene.fog,
+      planes: this.renderer.clippingPlanes,
     };
     const pixelRatio = this.renderer.getPixelRatio();
     const canvas = document.createElement("canvas");
@@ -883,14 +941,14 @@ export class BlockScene {
       this.put(shown);
       disposeModel(full);
     }
-    this.dome.visible = true;
+    this.dome.visible = saved.dome;
     this.overlay.visible = true;
-    this.scene.fog = this.fog;
-    this.renderer.clippingPlanes = [];
+    this.scene.fog = saved.fog;
+    this.renderer.clippingPlanes = saved.planes;
     this.paintSky(this.theme);
     this.renderer.setPixelRatio(pixelRatio);
     this.resize();
-    Object.assign(this.camera, { near: saved.near, far: saved.far, fov: saved.fov, zoom: 1 });
+    Object.assign(this.camera, { near: saved.near, far: saved.far, fov: saved.fov, zoom: saved.zoom });
     this.camera.position.copy(saved.position);
     this.camera.updateProjectionMatrix();
     this.controls.target.copy(saved.target);

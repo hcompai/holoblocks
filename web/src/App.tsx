@@ -918,6 +918,7 @@ export default function App({ account }: { account: Account | null }) {
                     : undefined
                 }
                 build={build}
+                inspection={following && !previewing && !syncError ? read.inspection : null}
                 step={visibleStep}
                 framing={framing}
                 spin={spin}
