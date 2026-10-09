@@ -9,6 +9,7 @@ import {
 } from "@phosphor-icons/react";
 import { type CSSProperties, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { type Account, signInError } from "./account";
+import { track } from "./analytics";
 import { AccountMenu } from "./AccountMenu";
 import { PHASES } from "./activity";
 import { cancel, create, say, stop } from "./agent";
@@ -373,6 +374,7 @@ export default function App({ account }: { account: Account | null }) {
           )
         : create(prompt, images));
       started.current.add(id);
+      track("build_started", { from: from ? "remix" : "prompt", image_count: images.length });
       remember(id, { name: name.slice(0, 60), prompt });
       refreshBuilds();
       if (!same(opened.current, at)) return;

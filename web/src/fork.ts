@@ -4,6 +4,7 @@ import { card, linkFork, remember } from "./library";
 import { unpack } from "./model";
 import { script } from "./remix";
 import { FORK_FILE } from "./session";
+import { track } from "./analytics";
 
 /** A fork of its own, or a build carried on under its session id. */
 const FORK_ID = /^[\w-]{1,100}$/;
@@ -103,6 +104,7 @@ export async function startFork(
   const begin = async () => {
     const session = await start(seed, text, photos, attached);
     await linkFork(id, session);
+    track("build_forked");
     return session;
   };
   return navigator.locks ? navigator.locks.request(`blockyard-fork-${group}`, begin) : begin();
