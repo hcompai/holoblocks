@@ -87,7 +87,7 @@ async function library(page: Page, build: Model & { id: string }) {
   return calls;
 }
 
-test("an imported build goes private and stays under the user's builds, goes public again, then is deleted after a confirmation", async ({
+test("an imported build toggles private and public without losing it, then is deleted after a confirmation", async ({
   page,
 }) => {
   const build = { ...model(), id: "import-1", name: "Granite house" };
@@ -97,13 +97,10 @@ test("an imported build goes private and stays under the user's builds, goes pub
   await expect(page.locator(".viewer")).toHaveAttribute("data-revision", build.revision);
 
   const menu = page.getByRole("menu");
-  await (await shareMenu(page)).getByRole("menuitem", { name: "Make private…" }).click();
-  const confirm = page.getByRole("dialog", { name: "Make private" });
-  await expect(confirm).toContainText("stays under Your builds for you alone");
-  await confirm.getByRole("button", { name: "Make private" }).click();
-  await shareMenu(page);
-  await expect(menu.getByRole("menuitem", { name: "Publish to the library…" })).toBeVisible();
-  await page.keyboard.press("Escape");
+  const visibility = page.getByRole("switch", { name: "Public", exact: true });
+  await expect(visibility).toBeChecked();
+  await visibility.click();
+  await expect(visibility).not.toBeChecked();
   expect(calls.find((c) => c.method === "PATCH")).toMatchObject({
     body: { id: "import-1", private: true },
     auth: `Bearer ${ACCOUNT.pass}`,
@@ -119,8 +116,8 @@ test("an imported build goes private and stays under the user's builds, goes pub
   await expect(page.locator(".viewer")).toHaveAttribute("data-revision", build.revision);
   expect(calls.find((c) => c.search.includes("file=build.json.gz"))?.auth).toBe(`Bearer ${ACCOUNT.pass}`);
 
-  await (await shareMenu(page)).getByRole("menuitem", { name: "Publish to the library…" }).click();
-  await page.getByRole("dialog", { name: "Publish" }).getByRole("button", { name: "Publish" }).click();
+  await visibility.click();
+  await expect(visibility).toBeChecked();
   await shareMenu(page);
   await expect(menu).toContainText("In the public library");
   await expect(menu.getByRole("menuitem", { name: "Copy link" })).toBeEnabled();
@@ -141,4 +138,43 @@ test("an imported build goes private and stays under the user's builds, goes pub
     { body: { id: "import-1" }, auth: `Bearer ${ACCOUNT.pass}` },
   ]);
   await expect(mine).toHaveCount(0);
+});
+
+test("visibility stays public after a failed save, prevents duplicate clicks, and retries", async ({
+  page,
+}, testInfo) => {
+  const build = { ...model(), id: "import-1", name: "Granite house" };
+  await site(page);
+  await library(page, build);
+  let requests = 0;
+  let finish: (() => Promise<void>) | undefined;
+  await page.route("**/api/builds*", async (route) => {
+    if (route.request().method() !== "PATCH") return route.fallback();
+    requests++;
+    if (requests > 1) return route.fallback();
+    await new Promise<void>((resolve) => {
+      finish = async () => {
+        await route.fulfill({ status: 503, json: { error: "Storage unavailable" } });
+        resolve();
+      };
+    });
+  });
+  await page.goto("/?public=import-1");
+  const visibility = page.getByRole("switch", { name: "Public", exact: true });
+  await expect(visibility).toBeChecked();
+  await visibility.click();
+  await expect(visibility).toBeDisabled();
+  await expect(visibility).toBeChecked();
+  expect(requests).toBe(1);
+  await finish!();
+  await expect(page.getByRole("alert")).toContainText("Storage unavailable");
+  await expect(visibility).toBeEnabled();
+  await expect(visibility).toBeChecked();
+  await visibility.click();
+  await expect(visibility).not.toBeChecked();
+  await expect(page.locator(".visibility-error")).toHaveCount(0);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(visibility).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath("public-toggle-phone.png") });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });

@@ -11,7 +11,7 @@ export const External = ({ href, children }: { href: string; children: string })
   </a>
 );
 
-const REPO = "https://github.com/hcompai/holoblocks";
+export const REPO = "https://github.com/hcompai/holoblocks";
 
 const COLUMNS: { title: string; links: [string, string][] }[] = [
   {

@@ -84,6 +84,8 @@ const realFetch = globalThis.fetch;
 let agentCalls: string[] = [];
 /** The fork the session says it was started on. */
 let group: string | null = FORK;
+/** Sessions by id, with their status and group; others answer as `own-run`. */
+let sessions: Record<string, { status: string; group?: string }> = {};
 
 test.beforeAll(async () => {
   await blob.start();
@@ -93,9 +95,13 @@ test.beforeAll(async () => {
     if (url.hostname !== "agp.eu.hcompany.ai") throw new Error(`Unexpected test request: ${url.origin}`);
     agentCalls.push(`${init?.method ?? "GET"} ${url.pathname}`);
     const key = new Headers(input instanceof Request ? input.headers : init?.headers).get("authorization");
-    const item = { id: RUN, agent: "blockyard", status: "idle", created_at: "2026-01-01T00:00:00Z" };
+    const asked = url.pathname.match(/^\/api\/v2\/sessions\/([^/]+)$/)?.[1];
+    const known = asked ? sessions[asked] : undefined;
+    const id = known ? asked! : RUN;
+    const item = { id, agent: "blockyard", status: known?.status ?? "idle", created_at: "2026-01-01T00:00:00Z" };
     if (url.pathname === "/api/v2/sessions") {
-      const items = key === `Bearer ${keyOf(OWNER)}` ? [item] : [];
+      const own = key === `Bearer ${keyOf(OWNER)}`;
+      const items = own ? [item, ...Object.keys(sessions).map((id) => ({ ...item, id }))] : [];
       return Response.json({ items, total: items.length, page: 1 });
     }
     if (url.pathname.endsWith("/changes"))
@@ -105,8 +111,8 @@ test.beforeAll(async () => {
     if (url.pathname === "/model") return new Response(gzipSync(JSON.stringify(model())));
     return Response.json({
       ...item,
-      request: { agent: "blockyard", group_id: group, messages: [] },
-      status: { status: "idle" },
+      request: { agent: "blockyard", group_id: known?.group ?? group, messages: [] },
+      status: { status: item.status },
     });
   };
 });
@@ -115,6 +121,7 @@ test.beforeEach(() => {
   blob.privateObjects.clear();
   agentCalls = [];
   group = FORK;
+  sessions = {};
 });
 test.afterAll(async () => {
   globalThis.fetch = realFetch;
@@ -160,6 +167,36 @@ test("a fork continues in one session only: its owner's, started on it", async (
   expect((await link(OWNER)).status).toBe(204);
   expect(await json(await forks(call(OWNER, "GET", `/api/forks?id=${FORK}`)))).toMatchObject({ sessionId: RUN });
   await expect(linkFork(OWNER.id, FORK, "another-run")).rejects.toMatchObject({ status: 409 });
+});
+
+test("a build carries on under its session id: only its owner may, and its link moves on once each run ends", async () => {
+  const carried = gzipped({ id: RUN, seed: seed() });
+  expect((await saveFork(call(OTHER, "POST", "/api/forks", carried))).status).toBe(403);
+  expect(blob.privateObjects.size).toBe(0);
+  expect((await saveFork(call(OWNER, "POST", "/api/forks", carried))).status).toBe(201);
+  const link = (sessionId: string) => linkSession(call(OWNER, "PATCH", "/api/forks", { id: RUN, sessionId }));
+  const linked = async () => {
+    const { sessionId, runs } = await json(await forks(call(OWNER, "GET", `/api/forks?id=${RUN}`)));
+    return { sessionId, runs };
+  };
+
+  sessions["run-2"] = { status: "running", group: `someone-else+${RUN}` };
+  expect((await link("run-2")).status).toBe(400);
+  sessions["run-2"] = { status: "running", group: `${RUN}+${RUN}` };
+  sessions[RUN] = { status: "awaiting_tool_results" };
+  expect((await link("run-2")).status).toBe(409);
+  sessions[RUN] = { status: "completed" };
+  expect((await link("run-2")).status).toBe(204);
+  expect(await linked()).toEqual({ sessionId: "run-2", runs: [] });
+
+  sessions["run-3"] = { status: "running", group: `${RUN}+${RUN}` };
+  expect((await link("run-3")).status).toBe(400);
+  sessions["run-3"] = { status: "running", group: `${RUN}+run-2` };
+  expect((await link("run-3")).status).toBe(409);
+  sessions["run-2"] = { status: "completed", group: `${RUN}+${RUN}` };
+  expect((await link("run-3")).status).toBe(204);
+  expect(await linked()).toEqual({ sessionId: "run-3", runs: ["run-2"] });
+  expect((await link("run-3")).status).toBe(204);
 });
 
 test("two sessions racing to continue a fork: one wins, the other is refused", async () => {

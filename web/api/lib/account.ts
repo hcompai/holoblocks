@@ -32,6 +32,9 @@ function seal(payload: string): Buffer {
 
 const digest = (key: string) => createHash("sha256").update(key).digest("base64url");
 
+/** A user's id as a path segment nobody can read back. */
+export const privateScope = (user: string) => seal(`blockyard-user:${user}`).toString("hex");
+
 /** A pass naming the user to this API until `expires` (seconds), good only beside their Agents API `key`. */
 export function pass(user: User, expires: number, key: string): string {
   const payload = Buffer.from(JSON.stringify({ ...user, expires, key: digest(key) })).toString("base64url");

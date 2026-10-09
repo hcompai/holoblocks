@@ -1,5 +1,6 @@
 import { del, list, type ListBlobResultBlob, put } from "@vercel/blob";
 import { gunzipSync, gzipSync } from "node:zlib";
+import { clearHearts } from "./hearts";
 import { Refusal } from "./http";
 import {
   privateConfigured,
@@ -304,6 +305,7 @@ export async function unlist(id: string, owner?: string) {
   if (owner) await drop(`${shelf(owner)}${id}/`);
   if (owner && privateConfigured()) await removePrivate(owner, id);
   await drop(folder(id));
+  await clearHearts(id);
 }
 
 /** Hide one of `owner`'s session builds from them for good. */

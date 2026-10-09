@@ -3,9 +3,9 @@ import {
   CaretLeftIcon,
   ClockCounterClockwiseIcon,
   FilmStripIcon,
+  GithubLogoIcon,
   GitForkIcon,
   PlusIcon,
-  SignInIcon,
 } from "@phosphor-icons/react";
 import { type CSSProperties, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { type Account, signInError } from "./account";
@@ -24,12 +24,14 @@ import { HistoryPanel } from "./HistoryPanel";
 import { design, useHistory, type Version } from "./history";
 import { HomeShelves } from "./HomeShelves";
 import { ImportBuild } from "./ImportBuild";
-import { SiteFooter } from "./Legal";
+import { REPO, SiteFooter } from "./Legal";
 import {
   card,
   library,
   LibraryError,
+  markPublished,
   publish,
+  publishedBefore,
   remember,
   remove,
   saveFork,
@@ -41,13 +43,15 @@ import {
 import { type Build, type BuildSummary, EMPTY_MODEL, pack, PALETTE, type Source, stepCount, unpack } from "./model";
 import type { ProjectActions } from "./ProjectMenu";
 import { ProjectTitle } from "./ProjectTitle";
+import { FinishedCard } from "./FinishedCard";
+import { useHearts } from "./hearts";
 import { RecoveryPanel } from "./RecoveryPanel";
 import type { BlockScene } from "./scene";
 import { selectedArea } from "./selectedArea";
-import { SESSION_DELETE_NOTE, ShareMenu } from "./ShareMenu";
+import { SESSION_DELETE_NOTE, ShareMenu, type Publishing } from "./ShareMenu";
 import { SignInDialog } from "./SignInDialog";
 import { label } from "./suggestions";
-import { ThemeToggle } from "./ThemeToggle";
+import { VisibilityToggle } from "./VisibilityToggle";
 import { Timeline } from "./Timeline";
 import { type BuildRef, useBuild } from "./useBuild";
 import { useProjectNames } from "./useProjectNames";
@@ -56,7 +60,6 @@ import { useSheet } from "./useSheet";
 import { usePhone } from "./usePhone";
 import { useViewport } from "./useViewport";
 import { type Framing, type Mode, RenderFailed, ViewControls, Viewer } from "./Viewer";
-import { extent } from "./voxels";
 
 const TITLE = document.title;
 const NEW_BUILD = "New build";
@@ -106,6 +109,7 @@ export default function App({ account }: { account: Account | null }) {
   const { names, rename } = useProjectNames(account?.user.id ?? null);
   const [signingIn, setSigningIn] = useState(() => !account && signInError !== null);
   const askSignIn = () => setSigningIn(true);
+  const { hearts, toggle: heartBuild } = useHearts(account?.user.id ?? null, askSignIn);
   /** What the user just asked for, shown as a starting build where they asked it, until its session answers. */
   const [draft, setDraft] = useState<{ at: BuildRef | null; build: Build; since: number } | null>(null);
   const drafted = draft && same(draft.at, ref) && read.build?.id !== draft.build.id ? draft.build : null;
@@ -178,10 +182,6 @@ export default function App({ account }: { account: Account | null }) {
   const chat = useRef<ChatHandle>(null);
   const last = (build?.steps.length ?? 0) - 1;
   const built = !!build?.boxes.length;
-  const size = useMemo(
-    () => (build?.boxes.length ? extent(build, PALETTE) : null),
-    [build?.boxes, build?.width, build?.height, build?.depth],
-  );
 
   const latest = useRef(0);
   const refreshBuilds = useCallback(() => {
@@ -205,6 +205,19 @@ export default function App({ account }: { account: Account | null }) {
 
   const home = !ref && !drafted;
   useEffect(() => void refreshBuilds(), [refreshBuilds, home]);
+  const hasPublic = !!builds?.some((b) => b.source === "public" && b.owner === account?.user.id && !b.private);
+  useEffect(() => {
+    if (hasPublic) markPublished();
+  }, [hasPublic]);
+  /** The build this tab watched Holo finish, celebrated over the model until dismissed. */
+  const [finished, setFinished] = useState<string | null>(null);
+  const watched = useRef<{ id: string; building: boolean } | null>(null);
+  useEffect(() => {
+    const previous = watched.current;
+    watched.current = live ? { id: live.id, building: live.status === "building" } : null;
+    if (previous?.building && live?.id === previous.id && live.status === "done" && live.boxes.length)
+      setFinished(live.id);
+  }, [live?.id, live?.status]);
   useLayoutEffect(() => {
     const field = document.activeElement;
     if (home && viewport && field instanceof HTMLTextAreaElement) field.scrollIntoView({ block: "nearest" });
@@ -298,6 +311,12 @@ export default function App({ account }: { account: Account | null }) {
     if (url.href !== window.location.href) window.history.pushState(null, "", url);
   };
 
+  // A build carried on past its session lists as a fork under its own id: its old link follows it there.
+  useEffect(() => {
+    if (ref?.source === "session" && builds?.some((b) => b.source === "fork" && b.id === ref.id))
+      open({ id: ref.id, source: "fork" });
+  });
+
   useEffect(() => {
     const sync = () => show(urlBuild(), urlVersion());
     window.addEventListener("popstate", sync);
@@ -364,6 +383,19 @@ export default function App({ account }: { account: Account | null }) {
       setDraft((current) => (current?.build === build ? null : current));
       throw e;
     }
+  };
+
+  /** Carry the open build on past its ended session: a fresh run seeded with the model as it stands, under the same id. */
+  const carryOn = async (text: string, images: string[], attached: Record<string, Blob> = {}) => {
+    if (!live || !ref || (ref.source !== "session" && ref.source !== "fork")) return;
+    const origin = { ...ref, name: live.name, version: null, revision: live.revision };
+    const seed = forkSeed({ ...live, ...pack(live.boxes) }, origin, live.name);
+    if (ref.source === "session") await saveFork(ref.id, seed);
+    const id = await startFork(ref.id, seed, text, images, attached, runId ?? undefined);
+    started.current.add(id);
+    if (ref.source === "fork") attachSession(id);
+    else if (same(ref, opened.current)) open({ id: ref.id, source: "fork" });
+    refreshBuilds();
   };
 
   /** Open a listed build: the user's public builds as their session, when they have one. */
@@ -542,6 +574,19 @@ export default function App({ account }: { account: Account | null }) {
   const opening = `Opening ${heading?.name ?? "the build"}`;
   /** The open build, once it is more than a request on its way. */
   const actionable = drafted ? null : build;
+  const publishing: Publishing | null =
+    actionable && manageable && account
+      ? {
+          published: imported ? !summary?.private : ref?.source === "public" || !!listed,
+          imported,
+          blocked:
+            actionable.status === "building" ? "Publish once Holo answers" : !built ? "Nothing is built yet" : null,
+          author: account.user.name,
+          first: !hasPublic && !publishedBefore(),
+          onPublish: imported ? republish : publishBuild,
+          onUnpublish: unpublishBuild,
+        }
+      : null;
   const loading = error ? null : !build ? buildId && opening : !built ? null : counts ? null : opening;
   /** On a phone, the chat is a bottom sheet over the model, and holds the code and blocks too. */
   const sheeted = phone && !home;
@@ -596,45 +641,35 @@ export default function App({ account }: { account: Account | null }) {
           </span>
         )}
         <span className="spacer" />
+        {home && (
+          <a className="button github-star" href={REPO} target="_blank" rel="noopener noreferrer">
+            <GithubLogoIcon size={16} /> Star
+          </a>
+        )}
         {actionable && !error && actionable.status === "done" && built && !loading && (
-          <button className="primary" onClick={() => setFilmBuild(actionable)}>
+          <button onClick={() => setFilmBuild(actionable)} title="Share a GIF">
             <FilmStripIcon size={16} />
-            <span className="button-label">Share a GIF</span>
+            <span className="button-label">GIF</span>
           </button>
+        )}
+        {publishing && !error && (
+          <VisibilityToggle key={`${ref?.source}:${ref?.id}`} publishing={publishing} name={actionable!.name} />
         )}
         {actionable && !error && (
           <ShareMenu
             build={actionable}
             link={!previewing && shared ? linkTo(shared) : null}
-            publishing={
-              manageable && account
-                ? {
-                    published: imported ? !summary?.private : ref?.source === "public" || !!listed,
-                    imported,
-                    blocked:
-                      actionable.status === "building"
-                        ? "Publish once Holo answers"
-                        : !built
-                          ? "Nothing is built yet"
-                          : null,
-                    author: account.user.name,
-                    onPublish: imported ? republish : publishBuild,
-                    onUnpublish: unpublishBuild,
-                  }
-                : null
-            }
+            publishing={publishing}
             onDelete={manageable ? deleteBuild : null}
             deleteNote={ref && isSession(ref.id) ? SESSION_DELETE_NOTE : undefined}
             image={() => scene.current?.image() ?? Promise.resolve(null)}
             onGif={() => setFilmBuild(actionable)}
           />
         )}
-        {!sheeted && <ThemeToggle />}
         {account ? (
           !sheeted && <AccountMenu account={account} building={running.length > 0} onRenamed={refreshBuilds} />
         ) : (
           <button className="sign-in-button" onClick={askSignIn}>
-            <SignInIcon size={16} weight="bold" />
             <span className="button-label">Sign in</span>
           </button>
         )}
@@ -680,7 +715,7 @@ export default function App({ account }: { account: Account | null }) {
             {ref && (
               <button className="quiet" onClick={() => open(null)}>
                 <PlusIcon size={14} weight="bold" />
-                New build
+                New
               </button>
             )}
           </div>
@@ -740,7 +775,9 @@ export default function App({ account }: { account: Account | null }) {
               if (runId) await stop(runId);
             }}
             onRemix={async (text, images, attached) => {
-              if (build && !previewing) await start(text, images, build, attached);
+              if (!build || previewing) return;
+              if (owned && ref?.source !== "public") await carryOn(text, images, attached);
+              else await start(text, images, build, attached);
             }}
             onFork={beginFork}
             onSignIn={account ? undefined : askSignIn}
@@ -759,6 +796,8 @@ export default function App({ account }: { account: Account | null }) {
               onRetry={refreshBuilds}
               onOpen={openListed}
               manage={manage}
+              hearts={hearts}
+              onHeart={heartBuild}
               mineActions={
                 account && (
                   <ImportBuild
@@ -819,10 +858,14 @@ export default function App({ account }: { account: Account | null }) {
                 framing={framing}
                 spin={spin}
                 followCamera={followCamera && mode === "view"}
-                onFollowCamera={(follow) => {
-                  setFollowCamera(follow);
-                  if (follow) setSpin(false);
-                }}
+                onFollowCamera={
+                  live?.status === "building" || playing
+                    ? (follow) => {
+                        setFollowCamera(follow);
+                        if (follow) setSpin(false);
+                      }
+                    : undefined
+                }
                 mode={mode}
                 canEdit={!previewing && edits.editable && built}
                 editHint={
@@ -835,7 +878,6 @@ export default function App({ account }: { account: Account | null }) {
                         : undefined
                 }
                 built={built}
-                size={size}
                 onFrame={(next) => {
                   if (mode === "walk") setMode("view");
                   setFollowCamera(false);
@@ -865,6 +907,14 @@ export default function App({ account }: { account: Account | null }) {
           <div className="stage">
             <div className={center === "model" || sheeted ? "pane" : "pane hidden"}>
               <Viewer
+                onAnnotate={
+                  !previewing && !closed && owned
+                    ? async (instruction) => {
+                        if (!chat.current) throw new Error("Chat is not ready. Try again.");
+                        await chat.current.annotate(instruction);
+                      }
+                    : undefined
+                }
                 build={build}
                 step={visibleStep}
                 framing={framing}
@@ -903,6 +953,15 @@ export default function App({ account }: { account: Account | null }) {
               )}
             </div>
             {center !== "model" && !sheeted && <div className="pane">{panel}</div>}
+            {finished && finished === live?.id && publishing && !error && (
+              <FinishedCard
+                build={live}
+                blocks={counts ? blockCount : null}
+                publishing={publishing}
+                onGif={() => setFilmBuild(live)}
+                onClose={() => setFinished(null)}
+              />
+            )}
             {error && (
               <div className="pane notice" role="alert">
                 <b>{error}</b>

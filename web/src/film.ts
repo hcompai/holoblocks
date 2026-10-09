@@ -11,21 +11,19 @@ import {
   type FilmStep,
   type FilmStepBoxes,
 } from "./filmPlan";
-import { HOLO } from "./holo";
 import { BlockScene, type Staged } from "./scene";
 import { parseState } from "./voxels";
 
 const FONT = '"Plus Jakarta Sans Variable", system-ui, sans-serif';
 const INK = "#1c1c26";
+const SITE = "blocks.hcompany.ai";
 const MUTED = "#5c5c6a";
-const LOGO = "/logo.png";
 const FOV = 30;
 /** Past the sky dome, from anywhere a shot is taken. */
 const FAR = 8000;
 /** Share of the frame's height kept clear of the model for the caption. */
 const CAPTION = 0.15;
 const NAME_PX = 46;
-const LOGO_PX = 64;
 const MARGIN = 1.08;
 const HERO_ANGLE = 40;
 const ORBIT_DEGREES = 55;
@@ -146,7 +144,6 @@ export class FilmRenderer {
   private scene: BlockScene;
   private ctx: CanvasRenderingContext2D;
   private camera = new THREE.PerspectiveCamera(FOV, 1, 0.1, FAR);
-  private logo = new Image();
   private steps: FilmStepBoxes[];
   /** Each step's block bounds, in step order. */
   private boxes: THREE.Box3[];
@@ -196,13 +193,11 @@ export class FilmRenderer {
     for (const box of this.boxes) this.final.add(box);
   }
 
-  /** Mesh the finished build and load the overlay's logo and fonts; rejects when the build cannot be meshed. */
+  /** Mesh the finished build and load the overlay's fonts; rejects when the build cannot be meshed. */
   async prepare() {
     if (this.final.box.isEmpty()) throw new Error("Nothing to film: the build has no blocks.");
-    this.logo.src = LOGO;
     const [final] = await Promise.all([
       this.stagedStep(this.steps.length - 1),
-      this.logo.decode(),
       document.fonts.load(`700 ${NAME_PX}px ${FONT}`),
       document.fonts.load(`600 26px ${FONT}`),
       document.fonts.load(`500 26px ${FONT}`),
@@ -422,7 +417,7 @@ export class FilmRenderer {
     });
   }
 
-  /** A vignette, the logo and Holo credit when branded, the build's name over the current step, and how many blocks are in. */
+  /** A vignette, the H mark when branded, then the build's name over how many blocks are in and the current step. */
   private overlay(film: Film, time: number, shot: HTMLCanvasElement, done: number) {
     const { width, height, branded } = film.options;
     const { plan, captions } = film;
@@ -449,36 +444,28 @@ export class FilmRenderer {
     vignette.addColorStop(1, "rgba(20, 20, 40, 0.1)");
     ctx.fillStyle = vignette;
     ctx.fillRect(0, 0, width, height);
-    if (branded) {
-      const corner = margin * 0.75;
-      const logo = LOGO_PX * unit;
-      const font = Math.max(12, 26 * unit);
-      const textX = corner + logo + Math.max(8, 16 * unit);
-      const middle = corner + logo / 2;
-      ctx.drawImage(this.logo, corner, corner, logo, logo);
-      ctx.fillStyle = INK;
-      ctx.font = `600 ${font}px ${FONT}`;
-      this.text(`Powered by ${HOLO.name}`, textX, middle - font * 0.15, width - margin - textX);
-      ctx.font = `500 ${font * 0.9}px ${FONT}`;
-      this.text("from H Company", textX, middle + font * 0.95, width - margin - textX);
-    }
+    const top = margin * 0.75;
+    const markPx = Math.max(24, 48 * unit);
+    if (branded) this.mark(top, top, markPx);
+    ctx.fillStyle = MUTED;
+    ctx.font = `600 ${26 * unit}px ${FONT}`;
+    ctx.textAlign = "right";
+    ctx.fillText(SITE, width - top, top + markPx / 2 + 9 * unit);
+    ctx.textAlign = "left";
 
-    const total = this.blocks;
     const base = height - margin;
+    const room = width - margin * 2;
+    ctx.font = `700 ${NAME_PX * unit}px ${FONT}`;
+    ctx.fillStyle = INK;
+    this.text(this.build.name, margin, base - 48 * unit, room);
+    ctx.font = `600 ${26 * unit}px ${FONT}`;
+    let x = margin + this.digits(done.toLocaleString("en-US"), margin, base);
     ctx.font = `500 ${26 * unit}px ${FONT}`;
     ctx.fillStyle = MUTED;
-    const unitLabel = total === 1 ? " block" : " blocks";
-    const suffix = ctx.measureText(unitLabel).width;
-    ctx.textAlign = "right";
-    ctx.fillText(unitLabel, width - margin, base);
-    ctx.fillStyle = INK;
-    ctx.font = `600 ${26 * unit}px ${FONT}`;
-    const counter = this.digits(done.toLocaleString("en-US"), width - margin - suffix, base) + suffix;
-    const room = width - margin * 3 - counter;
-
     ctx.textAlign = "left";
-    ctx.font = `700 ${NAME_PX * unit}px ${FONT}`;
-    this.text(this.build.name, margin, base - 48 * unit, room);
+    const unitLabel = this.blocks === 1 ? " block" : " blocks";
+    ctx.fillText(unitLabel, x, base);
+    x += ctx.measureText(unitLabel).width;
     const assembled = plan.steps[plan.steps.length - 1].end;
     if (time < plan.steps[0].start || time >= assembled + FADE_S) return;
     let step = captions[0];
@@ -486,25 +473,35 @@ export class FilmRenderer {
     const fadeIn = (time - step.start) / FADE_S;
     const fadeOut = (assembled + FADE_S - time) / FADE_S;
     ctx.globalAlpha = THREE.MathUtils.clamp(Math.min(fadeIn, fadeOut), 0, 1);
-    ctx.font = `500 ${26 * unit}px ${FONT}`;
-    ctx.fillStyle = MUTED;
-    this.text(step.title, margin, base, room);
+    this.text(` · ${step.title}`, x, base, width - margin - x);
     ctx.globalAlpha = 1;
   }
 
-  /** Right-aligned at `right` with every digit in the same width, so a changing count does not jitter. */
-  private digits(value: string, right: number, y: number): number {
+  /** The H Company mark, a disc and an H, `size` tall with its top left at (x, y). */
+  private mark(x: number, y: number, size: number) {
+    const { ctx } = this;
+    const s = size / 600;
+    ctx.fillStyle = INK;
+    ctx.beginPath();
+    ctx.arc(x + 300 * s, y + 300 * s, 300 * s, 0, 2 * Math.PI);
+    ctx.fill();
+    ctx.fillRect(x + 838 * s, y + 195 * s, 54 * s, 220 * s);
+    ctx.fillRect(x + 981 * s, y + 195 * s, 54 * s, 220 * s);
+    ctx.fillRect(x + 838 * s, y + 282 * s, 197 * s, 45 * s);
+  }
+
+  /** Left-aligned at `left` with every digit in the same width, so a changing count does not jitter; returns its width. */
+  private digits(value: string, left: number, y: number): number {
     const { ctx } = this;
     const cell = ctx.measureText("0").width;
     const widths = [...value].map((c) => (c >= "0" && c <= "9" ? cell : ctx.measureText(c).width));
-    const width = widths.reduce((a, b) => a + b, 0);
     ctx.textAlign = "center";
-    let x = right - width;
+    let x = left;
     [...value].forEach((c, i) => {
       ctx.fillText(c, x + widths[i] / 2, y);
       x += widths[i];
     });
-    return width;
+    return x - left;
   }
 
   private text(value: string, x: number, y: number, width: number) {
