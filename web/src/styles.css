@@ -48,7 +48,8 @@ body {
   background: var(--background-page);
 }
 
-button {
+button,
+.github-star {
   font: inherit;
   color: inherit;
   cursor: pointer;
@@ -4039,4 +4040,10 @@ main {
   .finished-card {
     animation: none;
   }
+}
+
+.github-star {
+  text-decoration: none;
+  flex-shrink: 0;
+  white-space: nowrap;
 }

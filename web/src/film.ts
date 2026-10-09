@@ -16,6 +16,7 @@ import { parseState } from "./voxels";
 
 const FONT = '"Plus Jakarta Sans Variable", system-ui, sans-serif';
 const INK = "#1c1c26";
+const SITE = "blocks.hcompany.ai";
 const MUTED = "#5c5c6a";
 const FOV = 30;
 /** Past the sky dome, from anywhere a shot is taken. */
@@ -443,7 +444,14 @@ export class FilmRenderer {
     vignette.addColorStop(1, "rgba(20, 20, 40, 0.1)");
     ctx.fillStyle = vignette;
     ctx.fillRect(0, 0, width, height);
-    if (branded) this.mark(margin * 0.75, margin * 0.75, Math.max(24, 48 * unit));
+    const top = margin * 0.75;
+    const markPx = Math.max(24, 48 * unit);
+    if (branded) this.mark(top, top, markPx);
+    ctx.fillStyle = MUTED;
+    ctx.font = `600 ${26 * unit}px ${FONT}`;
+    ctx.textAlign = "right";
+    ctx.fillText(SITE, width - top, top + markPx / 2 + 9 * unit);
+    ctx.textAlign = "left";
 
     const base = height - margin;
     const room = width - margin * 2;

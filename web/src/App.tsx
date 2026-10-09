@@ -1,5 +1,12 @@
 import { replayDelay } from "./buildTiming";
-import { CaretLeftIcon, ClockCounterClockwiseIcon, FilmStripIcon, GitForkIcon, PlusIcon } from "@phosphor-icons/react";
+import {
+  CaretLeftIcon,
+  ClockCounterClockwiseIcon,
+  FilmStripIcon,
+  GithubLogoIcon,
+  GitForkIcon,
+  PlusIcon,
+} from "@phosphor-icons/react";
 import { type CSSProperties, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { type Account, signInError } from "./account";
 import { AccountMenu } from "./AccountMenu";
@@ -17,7 +24,7 @@ import { HistoryPanel } from "./HistoryPanel";
 import { design, useHistory, type Version } from "./history";
 import { HomeShelves } from "./HomeShelves";
 import { ImportBuild } from "./ImportBuild";
-import { SiteFooter } from "./Legal";
+import { REPO, SiteFooter } from "./Legal";
 import {
   card,
   library,
@@ -634,6 +641,11 @@ export default function App({ account }: { account: Account | null }) {
           </span>
         )}
         <span className="spacer" />
+        {home && (
+          <a className="button github-star" href={REPO} target="_blank" rel="noopener noreferrer">
+            <GithubLogoIcon size={16} /> Star
+          </a>
+        )}
         {actionable && !error && actionable.status === "done" && built && !loading && (
           <button onClick={() => setFilmBuild(actionable)} title="Share a GIF">
             <FilmStripIcon size={16} />
