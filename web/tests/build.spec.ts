@@ -345,6 +345,63 @@ test("Holo keeps getting its renders while the user browses other builds", async
   expect(image).toMatch(/^data:image\/(png|jpeg);base64,/);
 });
 
+test("a build running in the background outlives a failed first poll: Holo still gets its render", async ({ page }) => {
+  await site(page);
+  const agp = await platform(page);
+  const hut = model();
+  agp.session("away");
+  agp.share("away", hut);
+  agp.look("away", "while-away");
+  agp.offline = true;
+  await page.goto("/");
+  await expect.poll(() => agp.requests.some((r) => r.path.endsWith("/away/changes"))).toBe(true);
+  agp.offline = false;
+  await expect.poll(() => agp.posted("/tool_results")).toHaveLength(1);
+  expect(agp.posted("/tool_results")[0].result[0]).toMatch(`Revision ${hut.revision.slice(0, 8)}`);
+});
+
+test("Holo's last words show even when the session ends between two polls", async ({ page }) => {
+  await site(page);
+  const agp = await platform(page);
+  const hut = model();
+  agp.session("live");
+  agp.share("live", hut);
+  await page.goto("/?build=live");
+  await shown(page, hut.revision);
+  let ended = false;
+  await page.route("**/sessions/live/status", (route) => {
+    if (!ended) {
+      ended = true;
+      agp.answer("live", "The hut is done.");
+      agp.sessions.get("live")!.status = "completed";
+    }
+    return route.fallback();
+  });
+  await expect(page.locator(".msg").filter({ hasText: "The hut is done." })).toBeVisible();
+});
+
+test("a model that fails to load leaves the chat readable, and Holo hears why", async ({ page }) => {
+  await site(page);
+  const agp = await platform(page);
+  agp.session("live");
+  agp.say("live", "A tower");
+  agp.share("live", model());
+  agp.files.clear();
+  agp.look("live", "lost");
+  await page.goto("/?build=live");
+  await expect(page.locator(".msg.user")).toHaveText("A tower");
+  await expect(page.getByRole("status").filter({ hasText: "Reconnecting…" })).toHaveAttribute(
+    "title",
+    "Couldn't load the latest model.",
+  );
+  await expect.poll(() => agp.posted("/tool_results")).toHaveLength(1);
+  expect(agp.posted("/tool_results")[0]).toMatchObject({
+    kind: "error_event",
+    tool_req: { id: "lost" },
+    error: expect.stringContaining("could not be loaded"),
+  });
+});
+
 test("a lost connection says so until the platform answers again", async ({ page }) => {
   await site(page);
   const agp = await platform(page);
@@ -369,6 +426,28 @@ test("an idea starts in one click and shows at once under its short label", asyn
   await expect(page.locator(".aside-title")).toHaveText("A hilltop castle");
   await expect(page).toHaveURL(/\?build=new-build$/);
   expect(agp.posted("/api/v2/sessions")[0].messages[0].message).toMatch(/^A medieval castle crowning a rocky hill/);
+});
+
+test("Back leaves a build whose link moved on to its carried-on fork", async ({ page }) => {
+  await site(page);
+  const agp = await platform(page);
+  agp.session("ended");
+  agp.share("ended", model());
+  agp.answer("ended", "Built.");
+  agp.sessions.get("ended")!.status = "completed";
+  await page.goto("/");
+  await page.goto("/?build=ended");
+  await shown(page, model().revision);
+  await page.getByPlaceholder("Ask for a change").fill("Add a chimney");
+  await page.getByRole("button", { name: "Send", exact: true }).click();
+  await expect(page).toHaveURL(/\?fork=ended$/);
+  await page.goBack();
+  await expect(page).toHaveURL(/\/$/);
+
+  await page.goto("/?build=ended");
+  await expect(page).toHaveURL(/\?fork=ended$/);
+  await page.goBack();
+  await expect(page).toHaveURL(/\/$/);
 });
 
 test("a change to my ended build carries it on under the same id: one card, one link, a fresh run behind it", async ({

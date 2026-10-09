@@ -304,27 +304,27 @@ export default function App({ account }: { account: Account | null }) {
     forkAttempt.current = null;
   }, []);
 
-  /** Show this build at its latest or at `version`, or home for none, and put it in the URL. */
-  const open = (next: BuildRef | null, version: number | null = null) => {
+  /** Show this build at its latest or at `version`, or home for none, and put it in the URL; `replace` when the shown build only moves to another link. */
+  const open = (next: BuildRef | null, version: number | null = null, replace = false) => {
     show(next, version);
     const url = new URL(window.location.href);
     for (const param of [...Object.values(PARAMS), VERSION]) url.searchParams.delete(param);
     if (next) url.searchParams.set(PARAMS[next.source], next.id);
     if (next && version !== null) url.searchParams.set(VERSION, String(version));
-    if (url.href !== window.location.href) window.history.pushState(null, "", url);
+    if (url.href !== window.location.href) window.history[replace ? "replaceState" : "pushState"](null, "", url);
   };
 
   // A build carried on past its session lists as a fork under its own id: its old link follows it there.
   useEffect(() => {
     if (ref?.source === "session" && builds?.some((b) => b.source === "fork" && b.id === ref.id))
-      open({ id: ref.id, source: "fork" });
+      open({ id: ref.id, source: "fork" }, null, true);
   });
 
   // Someone else's build or fork, once published, opens from its owner's link as the public build.
   useEffect(() => {
     if ((ref?.source !== "session" && ref?.source !== "fork") || !listed || buildsFailed.includes("mine")) return;
     if (!builds?.some((b) => (b.source === "session" || b.source === "fork") && b.id === ref.id))
-      open({ id: ref.id, source: "public" });
+      open({ id: ref.id, source: "public" }, null, true);
   });
 
   useEffect(() => {
@@ -405,7 +405,7 @@ export default function App({ account }: { account: Account | null }) {
     const id = await startFork(ref.id, seed, text, images, attached, runId ?? undefined);
     started.current.add(id);
     if (ref.source === "fork") attachSession(id);
-    else if (same(ref, opened.current)) open({ id: ref.id, source: "fork" });
+    else if (same(ref, opened.current)) open({ id: ref.id, source: "fork" }, null, true);
     refreshBuilds();
   };
 

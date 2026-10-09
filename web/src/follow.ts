@@ -23,6 +23,7 @@ import { H } from "./hosts";
 const WAIT_S = 20;
 const RETRY_MS = 3000;
 const RENDER_TRIES = 3;
+const LOAD_TRIES = 3;
 
 /** A session as the Agents API last told it. */
 export interface Followed {
@@ -31,6 +32,7 @@ export interface Followed {
   build: Build | null;
   /** What the builder is doing, while it builds. */
   activity: Activity | null;
+  /** Why the build cannot be read at all; its follower has stopped. */
   error: string | null;
   /** A shown model can remain available, but must not be presented as confirmed live. */
   syncError: string | null;
@@ -98,6 +100,8 @@ function follow(id: string, signal: AbortSignal, notify: Listener, displayed: ()
   let seedChecked = !!seed;
   let model: Shown = unpack(seed?.model ?? EMPTY_MODEL);
   let loaded = 0;
+  /** The latest shared model while it fails to load: how many times, and why. */
+  let unloaded: { shared: number; tries: number; reason: string } | null = null;
   const seen = new Set<string>();
   const pictures = new Map<string, string | null>();
 
@@ -193,11 +197,16 @@ function follow(id: string, signal: AbortSignal, notify: Listener, displayed: ()
           : null,
     });
     if (transcript.state !== "awaiting_tool_results") return;
-    const look = transcript.looks.find((l) => l.shared <= loaded);
+    const lost = unloaded && unloaded.tries >= LOAD_TRIES ? unloaded : null;
+    const look = transcript.looks.find((l) => l.shared <= loaded || lost);
     const call = look?.call;
     if (!look || !call?.id || seen.has(call.id)) return;
     seen.add(call.id);
-    see(call, look.shared).catch((e) => {
+    const answered =
+      look.shared <= loaded
+        ? see(call, look.shared)
+        : fail(id, call, `The model you shared could not be loaded (${lost!.reason}). Share it again, then look.`);
+    answered.catch((e) => {
       if (status(e) !== 409) seen.delete(call.id!);
     });
   };
@@ -219,40 +228,57 @@ function follow(id: string, signal: AbortSignal, notify: Listener, displayed: ()
     }
     const latest = transcript.model;
     if (!latest || latest.shared === loaded) return;
-    const next = unpack(await readJson<Model>(await download(latest.url, signal)));
-    model = next.revision === model.revision ? { ...next, boxes: model.boxes } : next;
-    loaded = latest.shared;
-    remember(id, { steps: model.steps.length, ...(named(model) && { name: seed?.model.name ?? model.name }) });
+    try {
+      const next = unpack(await readJson<Model>(await download(latest.url, signal)));
+      model = next.revision === model.revision ? { ...next, boxes: model.boxes } : next;
+      loaded = latest.shared;
+      unloaded = null;
+      remember(id, { steps: model.steps.length, ...(named(model) && { name: seed?.model.name ?? model.name }) });
+    } catch (e) {
+      if (signal.aborted) throw e;
+      console.error("Could not load the latest model", e);
+      const tries = unloaded?.shared === latest.shared ? unloaded.tries + 1 : 1;
+      unloaded = { shared: latest.shared, tries, reason: e instanceof Error ? e.message : String(e) };
+    }
   };
 
   const poll = async () => {
     while (!signal.aborted) {
       try {
-        const changes = await client.sessions.getSessionChanges(
-          { id, fromIndex: transcript.events, includeEvents: true, waitForSeconds: WAIT_S },
-          { abortSignal: signal, timeoutInSeconds: WAIT_S + 20, maxRetries: 0 },
-        );
+        const changed = (waitForSeconds: number) =>
+          client.sessions.getSessionChanges(
+            { id, fromIndex: transcript.events, includeEvents: true, waitForSeconds },
+            { abortSignal: signal, timeoutInSeconds: waitForSeconds + 20, maxRetries: 0 },
+          );
+        let changes = await changed(WAIT_S);
+        if (!changes) {
+          const current = await client.sessions.getSessionStatus({ id }, { abortSignal: signal });
+          // Events can land between the long poll and the status: the status never outruns the transcript.
+          if (current.status !== session) changes = await changed(0);
+          if (!changes) {
+            session = current.status;
+            failure = current.error ?? null;
+          }
+        }
         if (changes) {
           transcript = read(transcript, changes.newEvents ?? []);
           session = changes.status;
           failure = changes.error ?? null;
-        } else {
-          const current = await client.sessions.getSessionStatus({ id }, { abortSignal: signal });
-          session = current.status;
-          failure = current.error ?? null;
         }
         await loadModel();
         fetchPictures();
         publish();
-        set({ error: null, syncError: null });
-        if (!changes && isTerminalSessionStatus(session)) return;
+        set({ error: null, syncError: unloaded && "Couldn't load the latest model." });
+        if (!changes && isTerminalSessionStatus(session)) {
+          if (!unloaded || unloaded.tries >= LOAD_TRIES) return;
+          await sleep(RETRY_MS);
+        }
       } catch (e) {
         if (signal.aborted) return;
         console.error(e);
         const code = status(e);
         if (code === 403 || code === 404) return set({ error: "Couldn't load this build" });
-        if (!transcript.events) set({ error: "Couldn't load this build" });
-        else set({ syncError: "Connection lost: the latest model cannot be confirmed. Reconnecting…" });
+        set({ syncError: "Connection lost: the latest model cannot be confirmed. Reconnecting…" });
         await sleep(RETRY_MS);
       }
     }
