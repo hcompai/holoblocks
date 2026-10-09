@@ -5,7 +5,7 @@ import { EMPTY_MODEL, type Model, type Shared } from "../../src/model";
 import { AGENT, EMPTY_TRANSCRIPT, read, readJson, status, type Transcript } from "../../src/session";
 import { applyEdits, type Edit, validEdits } from "../../src/voxelEdits";
 import { readSeed } from "../../src/forkModel";
-import { readFork } from "./forks";
+import { isFork, readFork } from "./forks";
 import { Refusal } from "./http";
 import { imported } from "./imported";
 
@@ -84,9 +84,11 @@ function withEdits(model: Model, edited: Edited | null): Model {
 
 /** The caller's finished build as the public sees it: its latest model with any hand edits, and no chat. */
 export async function snapshot(id: string, key: string, edited: unknown, owner?: string): Promise<Shared> {
-  if (!id.startsWith("fork-")) return sessionSnapshot(id, key, edited);
   const fork = owner ? await readFork(owner, id) : null;
-  if (!fork) throw new Refusal(404, "No such build.");
+  if (!fork) {
+    if (isFork(id)) throw new Refusal(404, "No such build.");
+    return sessionSnapshot(id, key, edited);
+  }
   if (fork.sessionId) return sessionSnapshot(fork.sessionId, key, edited, fork.seed.model);
   return { ...withEdits(fork.seed.model, checked(edited)), status: "done", messages: [] };
 }

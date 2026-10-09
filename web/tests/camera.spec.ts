@@ -231,7 +231,7 @@ test("replay approaches the hidden addition before placing it, then shows the wo
   await page.goto("/?showcase=hidden-addition");
   const viewer = page.locator(".viewer");
   await expect(viewer).toHaveAttribute("data-revision", build.revision);
-  await page.getByRole("button", { name: "0.5×", exact: true }).click();
+  for (let i = 0; i < 3; i++) await page.getByTitle("Playback speed", { exact: true }).click();
   await page.getByRole("slider", { name: "Step", exact: true }).press("ArrowLeft");
   await expect(page.locator(".scrub-label span")).toHaveText("3,184 blocks · 2/3 steps");
   await page.getByRole("button", { name: "Last step", exact: true }).click();
@@ -252,10 +252,10 @@ test("live camera pauses with placement, and dragging, zooming and explicit view
   agp.session("camera");
   await page.goto("/?build=camera");
   agp.share("camera", { ...model(), boxes: [0, 0, 0, 15, 0, 15, 0, 0, 5, 1, 5, 10, 15, 10, 1, 1] });
-  const follow = page.getByRole("button", { name: "Follow build", exact: true });
+  const follow = page.getByRole("button", { name: "Follow", exact: true });
   await expect(follow).toHaveAttribute("aria-pressed", "true");
   await page.getByRole("button", { name: "Pause block placement", exact: true }).click();
-  await page.getByRole("button", { name: "0.5×", exact: true }).click();
+  for (let i = 0; i < 3; i++) await page.getByTitle("Playback speed", { exact: true }).click();
   const canvas = page.locator(".viewer-canvas canvas");
   await page.waitForTimeout(250); // allow a pending render to finish
   const paused = await canvas.screenshot();

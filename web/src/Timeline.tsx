@@ -2,7 +2,7 @@ import { PauseIcon, PlayIcon, SkipBackIcon, SkipForwardIcon } from "@phosphor-ic
 import { type CSSProperties, useEffect } from "react";
 import type { Build } from "./model";
 
-export const SPEEDS = [0.5, 1, 2, 4];
+const SPEEDS = [1, 2, 3, 0.5];
 
 interface Props {
   build: Build | null;
@@ -68,13 +68,6 @@ export function Timeline({ build, step, playing, speed, onStep, onPlay, onSpeed,
       <button className="icon" disabled={current >= last} onClick={() => onStep(last)} title="Last step">
         <SkipForwardIcon size={16} weight="fill" />
       </button>
-      <div className="speeds">
-        {SPEEDS.map((s) => (
-          <button key={s} className={s === speed ? "active" : ""} aria-pressed={s === speed} onClick={() => onSpeed(s)}>
-            {s}×
-          </button>
-        ))}
-      </div>
       {onLive && (
         <button className="timeline-live" onClick={onLive}>
           Live
@@ -101,6 +94,14 @@ export function Timeline({ build, step, playing, speed, onStep, onPlay, onSpeed,
           style={{ "--fill": `${steps.length ? ((current + 1) / steps.length) * 100 : 0}%` } as CSSProperties}
         />
       </div>
+      <button
+        className="quiet speed"
+        onClick={() => onSpeed(SPEEDS[(SPEEDS.indexOf(speed) + 1) % SPEEDS.length])}
+        title="Playback speed"
+        aria-label={`Playback speed: ${speed}×`}
+      >
+        {speed}×
+      </button>
     </div>
   );
 }

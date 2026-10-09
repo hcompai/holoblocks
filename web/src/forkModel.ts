@@ -61,6 +61,8 @@ export interface SavedFork {
   /** In seconds. */
   created: number;
   sessionId: string | null;
+  /** Ended sessions it carried on from, oldest first. */
+  runs?: string[];
   seed: ForkSeed;
 }
 

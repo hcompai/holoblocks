@@ -214,7 +214,6 @@ test("home shows my builds by the names Holo gave them; showcases under Public b
   const mine = page.getByRole("region", { name: "Your builds" }).locator(".gallery-card");
   await expect(mine).toHaveCount(1);
   await expect(mine).toContainText("Hollowbough");
-  await expect(mine).toContainText("7 steps");
   const everyone = page.getByRole("region", { name: "Public builds" }).locator(".gallery-card");
   await expect(everyone).toHaveCount(1);
   await everyone.click();
@@ -372,8 +371,10 @@ test("an idea starts in one click and shows at once under its short label", asyn
   expect(agp.posted("/api/v2/sessions")[0].messages[0].message).toMatch(/^A medieval castle crowning a rocky hill/);
 });
 
-test("a build whose session ended takes a change as a copy, under the same name", async ({ page }) => {
-  await site(page);
+test("a change to my ended build carries it on under the same id: one card, one link, a fresh run behind it", async ({
+  page,
+}) => {
+  const { forks } = await site(page);
   const agp = await platform(page);
   agp.session("ended");
   agp.say("ended", "A little hut");
@@ -385,9 +386,13 @@ test("a build whose session ended takes a change as a copy, under the same name"
   await expect(page.getByRole("region", { name: "Build recovery" })).toHaveCount(0);
   await page.getByPlaceholder("Ask for a change").fill("Add a chimney");
   await page.getByRole("button", { name: "Send", exact: true }).click();
-  await expect(page).toHaveURL(/\?build=new-build$/);
+  await expect(page).toHaveURL(/\?fork=ended$/);
   await expect(page.locator(".aside-title")).toHaveText("Little Hut");
-  const [first] = agp.posted("/api/v2/sessions")[0].messages;
+  await expect.poll(() => forks.get("ended")?.sessionId).toBe("new-build");
+
+  const [post] = agp.posted("/api/v2/sessions");
+  expect(post.group_id).toBe("ended+ended");
+  const [first] = post.messages;
   expect(first.message).toBe("Add a chimney");
   expect(first.files.map((f: { name: string }) => f.name)).toEqual([
     "blockyard.tgz",
@@ -397,10 +402,18 @@ test("a build whose session ended takes a change as a copy, under the same name"
   const seed = JSON.parse(gunzipSync(Buffer.from(first.files[1].source, "base64")).toString());
   expect(seed.model.name).toBe("Little Hut");
   expect(seed.origin).toMatchObject({ id: "ended", source: "session", name: "Little Hut" });
-  agp.share("new-build", { ...model(), name: EMPTY_MODEL.name });
+
+  agp.share("new-build", { ...model("f00d"), name: EMPTY_MODEL.name });
   agp.answer("new-build", "Added.");
-  await page.evaluate(() => localStorage.removeItem("blockyard.library"));
-  await page.reload();
-  await shown(page, model().revision);
+  await shown(page, "f00d");
   await expect(page.locator(".aside-title")).toHaveText("Little Hut");
+
+  await page.evaluate(() => localStorage.removeItem("blockyard.library"));
+  await page.goto("/?build=ended");
+  await expect(page).toHaveURL(/\?fork=ended$/);
+  await shown(page, "f00d");
+  await page.getByRole("button", { name: "HoloBlocks", exact: true }).click();
+  const yours = page.getByRole("region", { name: "Your builds" }).locator(".gallery-card");
+  await expect(yours).toHaveCount(1);
+  await expect(yours).toContainText("Little Hut");
 });

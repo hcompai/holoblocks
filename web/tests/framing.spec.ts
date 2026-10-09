@@ -18,7 +18,7 @@ test("a live model stays framed when Reduce Motion skips the follow camera", asy
     await page.setViewportSize(viewport);
     await page.goto("/?build=framing");
     await expect(page.locator(".viewer")).toHaveAttribute("data-revision", slab.revision);
-    await expect(page.getByRole("button", { name: "Follow build", exact: true, includeHidden: true })).toHaveAttribute(
+    await expect(page.getByRole("button", { name: "Follow", exact: true, includeHidden: true })).toHaveAttribute(
       "aria-pressed",
       "true",
     );

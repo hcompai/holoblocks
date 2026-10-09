@@ -5,7 +5,8 @@ import { unpack } from "./model";
 import { script } from "./remix";
 import { FORK_FILE } from "./session";
 
-const FORK_ID = /^fork-[a-f0-9-]{36}$/;
+/** A fork of its own, or a build carried on under its session id. */
+const FORK_ID = /^[\w-]{1,100}$/;
 const UNCONFIRMED = "The fork may have started: send again to check.";
 
 const seeds = new Map<string, ForkSeed>();
@@ -83,21 +84,26 @@ export function forkOperation(group = `fork-${crypto.randomUUID()}`) {
 
 const starts = new Map<string, ReturnType<typeof forkOperation>>();
 
-/** Start Holo on fork `id` with its first message, and bind the fork to that session. */
+/**
+ * Start Holo on fork `id` with its first message, and bind the fork to that session. Carrying a build on from its
+ * ended session `after` starts a run in a group of its own, so the ended one is never mistaken for it.
+ */
 export async function startFork(
   id: string,
   seed: ForkSeed,
   text: string,
   photos: string[],
   attached: Record<string, Blob> = {},
+  after?: string,
 ): Promise<string> {
   if (!FORK_ID.test(id)) throw new Error("No such fork.");
-  let start = starts.get(id);
-  if (!start) starts.set(id, (start = forkOperation(id)));
+  const group = after ? `${id}+${after}` : id;
+  let start = starts.get(group);
+  if (!start) starts.set(group, (start = forkOperation(group)));
   const begin = async () => {
     const session = await start(seed, text, photos, attached);
     await linkFork(id, session);
     return session;
   };
-  return navigator.locks ? navigator.locks.request(`blockyard-fork-${id}`, begin) : begin();
+  return navigator.locks ? navigator.locks.request(`blockyard-fork-${group}`, begin) : begin();
 }

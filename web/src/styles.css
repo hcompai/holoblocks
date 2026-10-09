@@ -12,6 +12,7 @@
   --text-tertiary: light-dark(#7a7a8a, #7c7c7c);
   --text-on-primary: light-dark(#ffffff, #121212);
   --text-error: light-dark(#c0404a, #ef7078);
+  --text-heart: light-dark(#e0245e, #f0608a);
   --stroke-default: light-dark(#ebebf1, #242424);
   --stroke-strong: light-dark(#d8d8e2, #343434);
   --stroke-focus: light-dark(#adadbc, #555555);
@@ -265,6 +266,11 @@ header {
   background: none;
 }
 
+.menu > button > .menu-check {
+  margin-left: auto;
+  color: inherit;
+}
+
 .menu > button.danger,
 .menu > button.danger svg {
   color: var(--text-error);
@@ -436,6 +442,7 @@ aside > .aside-head + * {
 
 .app.home .aside-body {
   flex: none;
+  min-height: 100vh;
   gap: 32px;
   width: min(1600px, 100%);
   margin: 0 auto;
@@ -1131,7 +1138,6 @@ aside > .aside-head + * {
 }
 
 .skeleton .gallery-caption {
-  flex: 1;
   gap: 8px;
 }
 
@@ -1192,27 +1198,6 @@ main {
 
 .edit-availability {
   margin: 0;
-}
-
-.model-size {
-  display: flex;
-  gap: 12px;
-  margin: 0;
-  font-variant-numeric: tabular-nums;
-}
-
-.model-size > div {
-  display: flex;
-  gap: 4px;
-}
-
-.model-size dt {
-  color: var(--text-tertiary);
-}
-
-.model-size dd {
-  margin: 0;
-  white-space: nowrap;
 }
 
 .view-toggle {
@@ -2177,7 +2162,8 @@ main {
   box-shadow: var(--elevation-1);
 }
 
-.gallery-card:hover {
+.gallery-card:hover,
+.tile-frame:hover > .gallery-card {
   border-color: var(--stroke-strong);
 }
 
@@ -2204,11 +2190,108 @@ main {
   font-weight: 700;
 }
 
+.gallery-card {
+  position: relative;
+}
+
+.tile-frame {
+  position: relative;
+  display: grid;
+}
+
+/* The caption rests on the bottom of the thumbnail, on a veil of the card's colour that blurs away into the picture. */
 .gallery-caption {
+  position: absolute;
+  inset: auto 0 0 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  padding: 10px 12px;
+  gap: 1px;
+  padding: 26px 12px 10px;
+  color: var(--text-default);
+  background: linear-gradient(
+    to top,
+    color-mix(in srgb, var(--background-card) 78%, transparent) 0%,
+    color-mix(in srgb, var(--background-card) 45%, transparent) 50%,
+    transparent 100%
+  );
+  pointer-events: none;
+}
+
+.gallery-caption > b {
+  font-weight: 600;
+}
+
+.gallery-caption > span {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+/* A glass pill in the top corner: shown on hover, and always once the user's heart is in it. */
+.tile-heart {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--text-default) 8%, transparent);
+  background: color-mix(in srgb, var(--background-card) 82%, transparent);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  box-shadow: var(--elevation-1);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  opacity: 0;
+  transition:
+    opacity 0.15s,
+    color 0.15s,
+    transform 0.15s;
+}
+
+.tile-owned .tile-heart {
+  right: 44px;
+}
+
+.tile-frame:hover .tile-heart,
+.tile-frame:focus-within .tile-heart,
+.tile-heart[aria-pressed="true"] {
+  opacity: 1;
+}
+
+.tile-heart:hover {
+  color: var(--text-heart);
+  transform: scale(1.06);
+}
+
+.tile-heart[aria-pressed="true"] {
+  color: var(--text-heart);
+}
+
+.tile-heart[aria-pressed="true"] > svg {
+  animation: heart-pop 0.3s ease-out;
+}
+
+@keyframes heart-pop {
+  0% {
+    transform: scale(0.6);
+  }
+  60% {
+    transform: scale(1.3);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@media (hover: none) {
+  .tile-heart {
+    opacity: 1;
+  }
 }
 
 .timeline {
@@ -2239,28 +2322,13 @@ main {
   color: var(--text-on-primary);
 }
 
-.speeds {
-  display: flex;
-  gap: 2px;
-  background: var(--background-muted);
-  border-radius: var(--radius-button);
-  padding: 2px;
-}
-
-.speeds button {
-  border: none;
-  background: transparent;
-  border-radius: var(--radius-medium);
+.timeline .speed {
+  flex: none;
+  min-width: 44px;
+  justify-content: center;
   font-size: 12px;
-  line-height: 16px;
-  padding: 3px 8px;
-  color: var(--text-secondary);
-}
-
-.speeds button.active {
-  background: var(--background-card);
-  color: var(--text-default);
-  box-shadow: var(--elevation-1);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
 
 .timeline-live {
@@ -2506,27 +2574,36 @@ main {
 
 .film-controls,
 .film-controls label,
-.film-generation,
-.film-options[open] {
+.film-choice,
+.film-generation {
   display: flex;
   flex-direction: column;
   gap: 12px;
   min-width: 0;
 }
 
-.film-options summary {
-  cursor: pointer;
-  font-weight: 600;
-  color: var(--text-secondary);
-}
-
-.film-controls label {
+.film-controls label,
+.film-choice {
   gap: 5px;
   font-size: 12px;
   font-weight: 600;
 }
 
-.film-controls select,
+.film-choice > span {
+  color: var(--text-secondary);
+}
+
+.film-tabs {
+  align-self: stretch;
+}
+
+.film-tabs button {
+  flex: 1;
+  padding: 5px 8px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
 .film-caption textarea {
   width: 100%;
   font: inherit;
@@ -3189,25 +3266,6 @@ main {
     gap: 8px;
   }
 
-  .app:not(.home) .model-size {
-    flex-direction: column;
-    gap: 2px;
-    padding: 5px 10px;
-    border: 0.5px solid var(--glass-stroke);
-    border-radius: 12px;
-    background: var(--glass);
-    -webkit-backdrop-filter: var(--glass-blur);
-    backdrop-filter: var(--glass-blur);
-  }
-
-  .app:not(.home) .model-size > div {
-    justify-content: space-between;
-  }
-
-  .app:not(.home):not(:has(.view-tabs.open)) .model-size {
-    display: none;
-  }
-
   .app:not(.home) .edit-availability {
     max-width: 160px;
     padding: 5px 10px;
@@ -3313,15 +3371,10 @@ main {
     line-height: 15px;
   }
 
-  .app:not(.home) .timeline .speeds,
+  .app:not(.home) .timeline .speed,
   .app:not(.home) .timeline-live {
     order: 1;
     border-radius: 12px;
-  }
-
-  .app:not(.home) .timeline .speeds button {
-    padding: 4px 6px;
-    border-radius: 10px;
   }
 
   .app:not(.home) .placement-hud {
@@ -3723,11 +3776,6 @@ main {
 }
 
 /* The owner's menu on their cards: rename, publish or make private, delete. */
-.tile-owned {
-  position: relative;
-  display: grid;
-}
-
 .project-menu {
   position: absolute;
   top: 8px;
@@ -3819,51 +3867,178 @@ main {
   }
 }
 
+/* Who can open the build: a switch whose knob carries the lock or the globe. */
 .visibility-control {
   position: relative;
   flex-shrink: 0;
 }
 .visibility-control > button {
-  display: flex;
-  align-items: center;
   gap: 8px;
+  padding-left: 6px;
+  border-radius: 999px;
+}
+.visibility-control > button[aria-checked="true"] {
+  border-color: color-mix(in srgb, var(--text-accent) 45%, var(--stroke-default));
+  background: color-mix(in srgb, var(--text-accent) 10%, var(--background-card));
+}
+.visibility-control > button[aria-checked="true"]:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--text-accent) 18%, var(--background-card));
 }
 .visibility-track {
   display: inline-flex;
   align-items: center;
-  width: 28px;
-  height: 16px;
+  width: 34px;
+  height: 20px;
   padding: 2px;
   border-radius: 999px;
   background: var(--text-tertiary);
+  transition: background-color 0.2s;
 }
-.visibility-track > span {
-  width: 12px;
-  height: 12px;
+.visibility-knob {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
   border-radius: 50%;
   background: white;
-  transition: transform 150ms ease;
+  color: var(--text-tertiary);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  transition:
+    transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1.2),
+    color 0.2s;
 }
-[aria-checked="true"] .visibility-track {
-  background: var(--accent);
+[aria-checked="true"] > .visibility-track {
+  background: var(--text-accent);
 }
-[aria-checked="true"] .visibility-track > span {
-  transform: translateX(12px);
+[aria-checked="true"] > .visibility-track > .visibility-knob {
+  transform: translateX(14px);
+  color: var(--text-accent);
+}
+.visibility-label {
+  min-width: 3.2em;
+  text-align: left;
 }
 .visibility-error {
   position: absolute;
   right: 0;
-  top: 100%;
+  top: calc(100% + 6px);
   z-index: 50;
   width: 240px;
+  margin: 0;
   padding: 12px;
-  background: var(--background-viewer);
+  font-size: 12px;
+  color: var(--text-error);
+  background: var(--background-card);
   border: 1px solid var(--stroke-default);
-  border-radius: 12px;
+  border-radius: var(--radius-large);
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.16),
+    var(--elevation-1);
+}
+
+/* Holo finished: a card over the model, the visibility switch first. */
+.finished-card {
+  position: absolute;
+  z-index: 3;
+  top: 12px;
+  inset-inline: 12px;
+  width: fit-content;
+  max-width: calc(100% - 24px);
+  margin-inline: auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 10px 10px 14px;
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--background-card) 85%, transparent);
+  backdrop-filter: blur(20px) saturate(1.8);
+  border: 1px solid color-mix(in srgb, var(--stroke-strong) 70%, transparent);
+  box-shadow:
+    0 12px 32px rgba(0, 0, 0, 0.14),
+    var(--elevation-1);
+  animation: finished-rise 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+@keyframes finished-rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+.finished-icon {
+  flex: none;
+  color: var(--text-accent);
+}
+.finished-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  white-space: nowrap;
+}
+.finished-text > span {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.finished-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-left: 4px;
+  border-left: 1px solid var(--stroke-default);
+}
+@media (max-width: 760px) {
+  .app:not(.home) .finished-card {
+    top: calc(var(--bar) + 4px);
+    inset-inline: 12px 64px;
+    max-width: none;
+    margin-inline: 0;
+    flex-wrap: wrap;
+    row-gap: 8px;
+    padding: 10px 12px 12px;
+    /* Its confirmation is a fixed sheet: blur would trap it in the card, and it must clear the chat sheet. */
+    z-index: 35;
+    backdrop-filter: none;
+    background: var(--background-card);
+  }
+  .finished-card > .icon-button {
+    order: 1;
+    margin-left: auto;
+  }
+  .finished-actions {
+    order: 2;
+    flex-basis: 100%;
+    padding-left: 0;
+    border-left: none;
+  }
+  .finished-actions > button {
+    min-height: 36px;
+  }
+  .finished-actions .button-label,
+  .app:not(.home) > header .visibility-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+  .app:not(.home) > header > .visibility-control > button {
+    height: 40px;
+    padding: 0 3px;
+    border-radius: 999px;
+    border: 0.5px solid var(--glass-stroke);
+    background: var(--glass);
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
+    box-shadow: var(--glass-shadow);
+  }
 }
 @media (prefers-reduced-motion: reduce) {
-  .visibility-track > span {
+  .visibility-knob,
+  .visibility-track {
     transition: none;
+  }
+  .finished-card {
+    animation: none;
   }
 }
 
