@@ -99,9 +99,12 @@ for (const viewer of ["signed out", "a teammate"] as const) {
     const hut = { ...model(), id: "fork-hut", name: "Ada's hut" };
     await site(page, [], viewer === "signed out" ? null : ACCOUNT);
     await library(page, [entry(hut, "Ada Lovelace", "u-ada")], [hut]);
+    await page.goto("/");
     await page.goto("/?fork=fork-hut");
     await expect(page).toHaveURL(/\?public=fork-hut$/);
     await shown(page, hut.revision);
+    await page.goBack();
+    await expect(page).not.toHaveURL(/fork-hut/);
   });
 }
 
