@@ -1,7 +1,7 @@
 import { holder } from "./lib/account";
 import { findFork } from "./lib/forks";
 import { body, Refusal, route } from "./lib/http";
-import { projectNames, saveProjectName } from "./lib/names";
+import { MAX_NAME_CHARS, projectNames, saveProjectName, validName } from "./lib/names";
 import { ownedSession } from "./lib/snapshot";
 import { findOwn, ID, rename } from "./lib/store";
 
@@ -18,9 +18,8 @@ export const PATCH = route(async (request) => {
   const given = await body<{ id?: unknown; name?: unknown }>(request);
   if (typeof given.id !== "string" || !ID.test(given.id)) throw new Refusal(400, "No such build.");
   const id = given.id;
-  const name = typeof given.name === "string" ? given.name.trim() : "";
-  if (!name || name.length > 80 || /[\u0000-\u001f\u007f]/.test(name))
-    throw new Refusal(400, "Use a name of 1 to 80 characters.");
+  const name = validName(given.name);
+  if (!name) throw new Refusal(400, `Use a name of 1 to ${MAX_NAME_CHARS} characters.`);
   if (id.startsWith("fork-")) {
     if (!(await findFork(user.id, id))) throw new Refusal(404, "No such build of yours.");
   } else if (id.startsWith("import-")) {

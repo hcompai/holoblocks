@@ -8,6 +8,14 @@ export interface ProjectName {
   updated: number;
 }
 
+export const MAX_NAME_CHARS = 80;
+
+/** A build's name: trimmed, 1 to 80 characters, no control characters; null if it is none. */
+export function validName(value: unknown): string | null {
+  const name = typeof value === "string" ? value.trim() : "";
+  return name && name.length <= MAX_NAME_CHARS && !/[\u0000-\u001f\u007f]/.test(name) ? name : null;
+}
+
 /** Names can title private builds, so they are `names/<owner>/<id>.json` in the private store. */
 const shelf = (owner: string) => `names/${encodeURIComponent(owner)}/`;
 const path = (owner: string, id: string) => `${shelf(owner)}${id}.json`;

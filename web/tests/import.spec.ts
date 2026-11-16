@@ -27,6 +27,13 @@ test("an import is checked and rebuilt: recomputed revision, its steps and scrip
   expect(build.messages).toEqual([]);
 });
 
+test("an import's name follows the rename rule: at most 80 characters, none of them control characters", () => {
+  const named = (name: string) => imported({ ...exported(), name }).name;
+  expect(named("x".repeat(500))).toBe("x".repeat(80));
+  expect(named("Stone\u0000hut")).toBe("Imported build");
+  expect(named("  Stone hut  ")).toBe("Stone hut");
+});
+
 for (const [why, damage, message] of [
   ["no blocks", (m: any) => ({ ...m, blocks: [] }), /no blocks/],
   ["an unknown block", (m: any) => ({ ...m, blocks: ["stone", "unobtainium"] }), /block 2/],

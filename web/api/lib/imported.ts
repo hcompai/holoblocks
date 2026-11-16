@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { PALETTE, type Shared, type Step } from "../../src/model";
 import { Refusal } from "./http";
+import { MAX_NAME_CHARS, validName } from "./names";
 
 /** What one import may hold; the largest Holo builds are about 60,000 boxes. */
 export const LIMITS = { boxes: 500_000, blocks: 5_000, steps: 2_000, side: 256, text: 20_000 };
@@ -73,7 +74,7 @@ export function imported(input: unknown): Shared {
   const packed = boxes(given!.boxes, size, kinds.length);
   const shape = { width: size[0], height: size[1], depth: size[2], blocks: kinds, boxes: packed };
   return {
-    name: text(given!.name, 120).trim() || "Imported build",
+    name: validName(text(given!.name, MAX_NAME_CHARS)) ?? "Imported build",
     ...shape,
     updated: Date.now() / 1000,
     revision: createHash("sha256").update(JSON.stringify(shape)).digest("hex"),
