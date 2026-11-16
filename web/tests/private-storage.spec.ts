@@ -68,6 +68,13 @@ test.beforeEach(async () => {
   await enter(published, [], [build, thumbnail]);
 });
 
+test("a write never deletes a newer entry of the same build, so concurrent writes keep it listed", async () => {
+  const newer = `library/${id}/${Date.now() + 60_000}.json`;
+  blob.objects.set(newer, Buffer.from(JSON.stringify({ ...published, name: "Renamed meanwhile" })));
+  await enter({ ...published, name: "Older write" }, [], []);
+  expect((await find(id))?.name).toBe("Renamed meanwhile");
+});
+
 test("a private build leaves no public file and opens only for its owner", async () => {
   expect((await patch(true)).status).toBe(204);
   expect([...blob.objects.keys()]).toEqual([]);

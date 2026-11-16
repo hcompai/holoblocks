@@ -154,10 +154,18 @@ export async function forkSession(group: string): Promise<string | null> {
   return [...items].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())[0]?.id ?? null;
 }
 
+/** The caller's own Blockyard sessions, newest first. */
 export async function sessions(): Promise<HaiAgents.SessionSummary[]> {
-  // hai-agents 1.0.13 sends the `agent` list as a JSON string, which matches no session.
-  const page = await client.sessions.listSessions({ size: 100 }, { queryParams: { agent: AGENT } });
-  return page.items;
+  const all: HaiAgents.SessionSummary[] = [];
+  for (let page = 1; ; page++) {
+    // hai-agents 1.0.13 sends the `agent` list as a JSON string, which matches no session.
+    const { items, total } = await client.sessions.listSessions(
+      { owner: "me", page, size: 100 },
+      { queryParams: { agent: AGENT } },
+    );
+    all.push(...items);
+    if (!items.length || all.length >= total) return all;
+  }
 }
 
 /** Platform attachments use the API key; external HTTPS references are fetched anonymously. */

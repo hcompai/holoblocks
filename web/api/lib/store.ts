@@ -63,8 +63,8 @@ async function listed(prefix: string) {
   return blobs;
 }
 
-async function drop(prefix: string, keep?: string) {
-  const urls = (await listed(prefix)).filter((b) => b.pathname !== keep).map((b) => b.url);
+async function drop(prefix: string, before?: string) {
+  const urls = (await listed(prefix)).filter((b) => !before || b.pathname < before).map((b) => b.url);
   if (urls.length) await del(urls);
 }
 
